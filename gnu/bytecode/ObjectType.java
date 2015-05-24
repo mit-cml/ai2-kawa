@@ -42,7 +42,11 @@ public class ObjectType extends Type
     if (t == this)
       return (flags & EXISTING_CLASS) != 0;
     else
-      return t.isExisting();
+      // start Google
+      return ! (t instanceof ObjectType) || ((ObjectType) t).isExisting();
+      // instead of
+      // return t.isExisting();
+      // end Google
   }
 
   public final void setExisting(boolean existing)
@@ -87,7 +91,18 @@ public class ObjectType extends Type
   {
     /* #ifdef JAVA2 */
     /* Specifies optional 'initialize' argument. */
+    // start Google
+    try
+      {
+        return Class.forName(cname, false,  ObjectType.class.getClassLoader());
+      }
+    catch (java.lang.ClassNotFoundException ex)
+      {
     return Class.forName(cname, false, getContextClassLoader());
+      }
+    // instead of
+    // return Class.forName(cname, false, getContextClassLoader());
+    // end Google
     /* #else */
     // return Class.forName(cname);
     /* #endif */
@@ -169,11 +184,17 @@ public class ObjectType extends Type
     return Type.objectType.getMethod(name, arg_types);
   }
 
+  // if Google
   /** @deprecated */
+  // end Google
   public final int getMethods (Filter filter, int searchSupers,
                                Vector result, String context)
   {
-    return getMethods(filter, searchSupers, result);
+    // if Google
+    return Type.objectType.getMethods(filter, searchSupers, result, context);
+    // instead of
+    // return getMethods(filter, searchSupers, result);
+    // end Google
   }
 
   public int getMethods (Filter filter, int searchSupers,

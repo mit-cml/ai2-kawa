@@ -172,6 +172,22 @@ public class ModuleExp extends LambdaExp
   /** Flag to force compilation, even when not required. */
   public static boolean alwaysCompile = compilerAvailable;
 
+  // start Google
+  /** Flag to force no compilation */
+  public static boolean neverCompile = false;
+
+  public static void mustNeverCompile() {
+    alwaysCompile = false;
+    neverCompile = true;
+    compilerAvailable = false;
+  }
+
+  public static void mustAlwaysCompile() {
+    alwaysCompile = true;
+    neverCompile = false;
+  }
+  // end Google
+
   public final static boolean evalModule (Environment env, CallContext ctx,
                                        Compilation comp, URL url,
                                        OutPort msg)
@@ -202,6 +218,20 @@ public class ModuleExp extends LambdaExp
     SourceMessages messages = comp.getMessages();
     ClassLoader savedLoader = null;
     Thread thread = null; // Non-null if we need to restore context ClassLoader.
+
+    // if Google -- NOTE: EVERYTHING FAILS IF THESE ENABLED
+//    alwaysCompile = false;
+//    neverCompile = true;
+//    compilerAvailable = false;
+
+    if (alwaysCompile && neverCompile)
+      {
+        throw new RuntimeException("alwaysCompile and neverCompile are both true!");
+      }
+    if (neverCompile)
+      comp.mustCompile = false;
+    // end Google
+
     try
       {
         comp.process(Compilation.RESOLVED);
@@ -210,8 +240,13 @@ public class ModuleExp extends LambdaExp
         if (msg != null ? messages.checkErrors(msg, 20) : messages.seenErrors())
           return null;
 
+        // if Google
+        // if (! alwaysCompile && ! comp.mustCompile)
+        //  { // optimization - don't generate unneeded Class.
+        // instead of
 	if (! comp.mustCompile)
 	  {
+        // end Google
 	    if (Compilation.debugPrintFinalExpr && msg != null)
 	      {
 		msg.println ("[Evaluating final module \""+mexp.getName()+"\":");
@@ -241,7 +276,7 @@ public class ModuleExp extends LambdaExp
                 mexp.thisVariable = null;
                 if (msg != null ? messages.checkErrors(msg, 20)
                     : messages.seenErrors())
-                  return null;
+                  return false;
                 return clas;
           }
       }
@@ -270,9 +305,9 @@ public class ModuleExp extends LambdaExp
 	  }
 	else
 	  {
-            if (inst instanceof Class)
+            if (inst instanceof Class) {
               inst = ModuleContext.getContext().findInstance((Class) inst);
-
+            }
             if (inst instanceof Runnable)
               {
                 if (inst instanceof ModuleBody)

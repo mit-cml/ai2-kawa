@@ -2441,9 +2441,11 @@ public class Compilation implements SourceLocator
    */
   public void mustCompileHere ()
   {
-    if (! mustCompile && ! ModuleExp.compilerAvailable)
-      error('e', "this expression must be compiled, but compiler is unavailable");
+    if (! mustCompile && ! ModuleExp.compilerAvailable) {
+      error('w', "this expression claimed that it must be compiled, but compiler is unavailable");
+    } else {
     mustCompile = true;
+  }
   }
 
   public ScopeExp currentScope() { return current_scope; }
