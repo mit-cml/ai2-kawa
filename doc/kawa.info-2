@@ -1,0 +1,3128 @@
+This is kawa.info, produced by makeinfo version 4.13 from kawa.texi.
+
+
+File: kawa.info,  Node: Allocating objects,  Next: Field operations,  Prev: Method operations,  Up: Objects Classes and Modules
+
+19.8 Allocating objects
+=======================
+
+The recommended way to create an instance of a type T is to “call” T as
+if it were a function, with the arguments used to initialize the object.
+If `T' is a class and `T' has a matching constructor, then the arguments
+will used for constructor arguments:
+     (java.util.StringTokenizer "this/is/a/test" "/")
+   (You can think of the type T as being coerced to an
+instance-constructor function.)
+
+   If `T' is a container or collection type, then typically the
+arguments will be used to specify the child or component values.  Many
+standard Scheme procedures fit this convention.  For example in Kawa
+`list' and `vector' evaluate to types, rather than procedures as in
+standard Scheme, but because types can be used as constructor functions
+it just works:
+     (list 'a (+ 3 4) 'c) ⇒ (a 7 c)
+     (vector 'a 'b 'c) ⇒ #(a b c)
+   Any class `T' that has a default constructor and an `add' method can
+be initialized this way.  Examples are `java.util' collection classes,
+and `jawa.awt' and `javax.swing' containers.
+     (java.util.ArrayList 11 22 33) ⇒ [11, 22, 333]
+   The above expression is equivalent to:
+     (let ((tmp (java.util.ArrayList)))
+       (tmp:add 11)
+       (tmp:add 22)
+       (tmp:add 33)
+       tmp)
+
+   Allocating Java arrays (*note Creating-new-Java-arrays::) uses a
+similar pattern:
+     (int[] 2 3 5 7 11)
+
+   Sometimes you want to set some named property to an initial value.
+You can do that using a keyword argument.  For example:
+     (javax.swing.JButton text: "Do it!" tool-tip-text: "do it")
+
+   This is equivalent to using "setter methods":
+     (let ((tmp (javax.swing.JButton)))
+       (tmp:setText "Do it!")
+       (tmp:setToolTipText "do it")
+       tmp)
+
+   A keyword argument `key-name'`:' can can translated to either a
+``set'KeyName`:'' or a  ``add'KeyName`:'' method.  The latter makes it
+convenient to add listeners:
+
+     (javax.swing.JButton
+       text: "Do it!"
+       action-listener:
+        (object (java.awt.event.ActionListener)
+          ((actionPerformed e) (do-the-action))))
+   This is equivalent to:
+     (let ((tmp (javax.swing.JButton)))
+       (tmp:setText "Do it!")
+       (tmp:addActionListener
+         (object (java.awt.event.ActionListener)
+           ((actionPerformed e) (do-the-action))))
+       tmp)
+
+   Making use of so-called “SAM-conversion” (*note SAM-conversion::)
+makes it even more convenient:
+     (javax.swing.JButton
+       text: "Do it!"
+       action-listener:
+        (lambda (e) (do-the-action)))
+
+   The general case allows for a mix of constructor arguments, property
+keywords, and child values:
+     class-type constructor-value... property-initializer... child-value...
+     constructor-value `::=' expression
+     property-initializer `::=' keyword expression
+     child-value `::=' expression
+
+   First an object is constructed with the constructor-value arguments
+(if any) passed to the object constructor; then named properties (if
+any) are used to initialize named properties; and then remaining
+arguments are used to add child values.
+
+   There is an ambiguity if there is no property-initializer - we can't
+distinguish between a constructor-value and a child-value.  In that
+case, if there is a matching constructor method, then all of the
+arguments are constructor arguments; otherwise, there must a default
+constructor, and all of the arguments are child-value arguments.
+
+   There is a trick you can you if you need both constructor-value and
+child-value arguments: separate them with an “empty keyword” `||:'.
+This matches a method named `add', which means that the next argument
+effectively a child-value - as do all the remaining arguments. Example:
+     (let ((vec #(1 2 3)))
+       (java.util.ArrayList vec ||: 4 5 6))
+       ⇒ [1, 2, 3, 4, 5, 6]
+
+   The compiler rewrites these allocations expression to generated
+efficient bytecode, assuming that the “function” being applied is a type
+known by the compiler.  Most of the above expressions also work if the
+type is applied at run-time, in which case Kawa has to use slower
+reflection:
+     (define iarr int[])
+     (apply iarr (list 3 4 5)) ⇒ [3 4 5]
+   However `addXxx' methods and SAM-conversion are currently only
+recognized in the case of a class known at compile-time, not at
+run-time.
+
+   Here is a working Swing demo illustrating many of these techniques:
+
+     (define-alias JButton javax.swing.JButton)
+     (define-simple-class HBox (javax.swing.Box)
+       ((*init*) (invoke-special javax.swing.Box (this) '*init* 0)))
+     (define-alias JFrame javax.swing.JFrame)
+     (define-alias Box javax.swing.Box)
+
+     (define value 0)
+
+     (define txt
+       (javax.swing.JLabel
+        text: "0"))
+
+     (define (set-value i)
+       (set! value i)
+       (set! txt:text (number->string i)))
+
+     (define fr
+       (JFrame
+          title: "Hello!"
+          (Box 1#|VERTICAL|# ||:
+           (javax.swing.Box:createGlue)
+           txt
+           (javax.swing.Box:createGlue)
+           (HBox
+            (JButton ;; uses 1-argument constructor
+     	"Decrement" ;; constructor argument
+     	tool-tip-text: "decrement"
+     	action-listener: (lambda (e) (set-value (- value 1))))
+            (javax.swing.Box:createGlue)
+            (JButton ;; uses 0-argument constructor
+     	text: "Increment"
+     	tool-tip-text: "increment"
+     	action-listener: (lambda (e) (set-value (+ value 1))))))))
+     (fr:setSize 200 100)
+     (set! fr:visible #t)
+
+   If you prefer, you can use the older `make' special function:
+
+ -- Procedure: make type args ...
+     Constructs a new object instance of the specified type, which must
+     be either a `java.lang.Class' or a `<gnu.bytecode.ClassType>'.
+     Equivalent to:
+
+          type args ...
+
+   Another (semi-deprecated) function is to use the colon notation with
+the `new' pseudo-function.  The following three are all equivalent:
+     (java.awt.Point:new x: 4 y: 3)
+     (make java.awt.Point: x: 4 y: 3)
+     (java.awt.Point x: 4 y: 3)
+
+
+File: kawa.info,  Node: Field operations,  Next: Mangling,  Prev: Allocating objects,  Up: Objects Classes and Modules
+
+19.9 Accessing fields of Java objects
+=====================================
+
+The recommmended way to access fields uses the namespace-colon syntax
+described in *note Method operations::.  The difference is that instead
+of a method name following the colon there is field name a following the
+colon _and_ a period.
+
+   To access an static field named field-name use this syntax
+     (prefix:.field-name instance)
+   The prefix can be as discussed in *Note Method operations::.  Here
+are 5 equivalent ways:
+     (java.lang.Integer:.MAX_VALUE)
+     (<java.lang.Integer>:.MAX_VALUE)
+     (define-namespace Int32 <java.lang.Integer>)
+     (Int32:.MAX_VALUE)
+     (define-namespace Integer "class:java.lang.Integer")
+     (Integer:.MAX_VALUE)
+     (define-alias j.l.Integer java.lang.Integer)
+     (j.l.Integer:.MAX_VALUE)
+   You can set a static field using this syntax:
+     (set! (prefix:.field-name) new-value)
+
+   The special field name `class' can be used to extract the
+`java.lang.Class' object for a class-type.  For example:
+     (java.util.Vector:.class) ⇒ class java.util.Vector
+
+   To access a instance field named field-name use the following syntax.
+Note the period before the field-name.
+     (*:.field-name instance)
+   This syntax works with `set!' - to set the field use this syntax:
+     (set! (*:.field-name instance) new-value)
+   Here is an example:
+     (define p (list 3 4 5))
+     (*:.cdr p) ⇒ (4 5)
+     (set! (*:.cdr p) (list 6 7))
+     p ⇒ (3 6 7)
+
+   You can specify an explicit class:
+     (prefix:.field-name instance)
+   If prefix is bound to `<class>', then the above is equivalent to:
+     (*:.field-name (as <class> instance))
+
+19.9.1 Using field and static-field methods
+-------------------------------------------
+
+Kawa has both a high-level interface and a low-level interface for
+accessing the fields of Java objects and static fields.  The lower-level
+interfaces are macros that return functions.  These functions can be
+inlined, producing efficient code.  The higher-level functions are less
+verbose and more convenient.
+
+ -- Procedure: field object fieldname
+     Get the instance field with the given fieldname from the given
+     Object.  Returns the value of the field, which must be accessible.
+     This procedure has a `setter', and so can be used as the first
+     operand to `set!'.
+
+     The field name is "mangled" (*note Mangling::) into a valid Java
+     name.  If there is no accessible field whose name is `"fieldname"',
+     we look for a no-argument method whose name is `"getFieldname"' (or
+     `"isFieldname"' for a boolean property).
+
+     If object is a primitive Java array, then fieldname can only be
+     `'length', and the result is the number of elements of the array.
+
+ -- Procedure: static-field class fieldname
+     Get the static field with the given fieldname from the given class.
+     Returns the value of the field, which must be accessible.  This
+     procedure has a `setter', and so can be used as the first operand
+     to `set!'.
+
+     If the fieldname is the special name `class', then it returns the
+     `java.lang.Class' object corresponding to class (which is usually a
+     `gnu.bytecode.ClassType' object).
+
+   Examples:
+     (static-field <java.lang.System> 'err)
+     ;; Copy the car field of b into a.
+     (set! (field a 'car) (field b 'car))
+
+ -- Procedure: slot-ref object fieldname
+     A synonym for `(field object fieldname)'.
+
+ -- Procedure: slot-set! object fieldname value
+     A synonym for `(set! (field object fieldname) value)'.
+
+
+File: kawa.info,  Node: Mangling,  Next: Scheme types in Java,  Prev: Field operations,  Up: Objects Classes and Modules
+
+19.10 Mapping Scheme names to Java names
+========================================
+
+Programs use "names" to refer to various values and procedures.  The
+definition of what is a "name" is different in different programming
+languages.  A name in Scheme (and other Lisp-like languages) can in
+principle contain any character (if using a suitable quoting
+convention), but typically names consist of "words" (one or more
+letters) separated by hyphens, such as `make-temporary-file'.  Digits
+and some special symbols are also used.  Standard Scheme is
+case-insensitive;  this means that the names `loop', `Loop', and `LOOP'
+are all the same name.  Kawa is by default case-sensitive, but we
+recommend that you avoid using upper-case letters as a general rule.
+
+   The Java language and the Java virtual machine uses names for
+classes, variables, fields and methods.  These names can contain upper-
+and lower-case letters, digits, and the special symbols `_' and `$'.
+
+   Given a name in a Scheme program, Kawa needs to map that name into a
+valid Java name.  A typical Scheme name such as `make-temporary-file' is
+not a valid Java name.  The convention for Java names is to use
+"mixed-case" words, such as `makeTemporaryFile'.  So Kawa will translate
+a Scheme-style name into a Java-style name.  The basic rule is simple:
+Hyphens are dropped, and a letter that follows a hyphen is translated to
+its upper-case (actually "title-case") equivalent.  Otherwise, letters
+are translated as is.
+
+   Some special characters are handled specially.  A final `?' is
+replaced by an _initial_ `is', with the following letter converted to
+titlecase.  Thus `number?' is converted to `isNumber' (which fits with
+Java conventions), and `file-exists?' is converted to `isFileExists'
+(which doesn't really).  The pair `->' is translated to `$To$'.  For
+example `list->string' is translated to `list$To$string'.
+
+   Some symbols are mapped to a mnemonic sequence, starting with a
+dollar-sign, followed by a two-character abbreviation.  For example, the
+less-than symbol `<' is mangled as `$Ls'.  See the source code to the
+`mangleName' method in the `gnu.expr.Compilation' class for the full
+list.  Characters that do not have a mnemonic abbreviation are mangled
+as `$' followed by a four-hex-digit unicode value.  For example `Tamil
+vowel sign ai' is mangled as `$0bc8'.
+
+   Note that this mapping may map different Scheme names to the same
+Java name.  For example `string?', `String?', `is-string', `is-String',
+and `isString' are all mapped to the same Java identifier `isString'.
+Code that uses such "Java-clashing" names is _not_ supported.  There is
+very partial support for renaming names in the case of a clash, and
+there may be better support in the future.  However, some of the nice
+features of Kawa depend on being able to map Scheme name to Java names
+naturally, so we urge you to _not_ write code that "mixes" naming
+conventions by using (say) the names `open-file' and `openFile' to name
+two different objects.
+
+   The above mangling is used to generate Java method names.  Each
+top-level definition is also mapped to a Java field.  The name of this
+field is also mangled, but using a mostly reversible mapping:  The
+Scheme function `file-exists?' is mapped to the method name
+`file$Mnexists$Qu'.  Because `$' is used to encode special characters,
+you should avoid using it in names in your source file.
+
+
+File: kawa.info,  Node: Scheme types in Java,  Next: Array operations,  Prev: Mangling,  Up: Objects Classes and Modules
+
+19.11 Scheme types in Java
+==========================
+
+All Scheme values are implemented by sub-classes of `java.lang.Object'.
+
+   Scheme symbols are implemented using `java.lang.String'.  (Don't be
+confused by the fact the Scheme sybols are represented using Java
+Strings, while Scheme strings are represented by `gnu.lists.FString'.
+It is just that the semantics of Java strings match Scheme symbols, but
+do not match mutable Scheme strings.)  Interned symbols are presented as
+interned Strings.  (Note that with JDK 1.1 string literals are
+automatically interned.)
+
+   Scheme integers are implemented by `gnu.math.IntNum'.  Use the make
+static function to create a new IntNum from an int or a long.  Use the
+intValue or longValue methods to get the int or long value of an IntNum.
+
+   A Scheme "flonum" is implemented by `gnu.math.DFloNum'.
+
+   A Scheme pair is implemented by `gnu.lists.Pair'.
+
+   A Scheme vector is implemented by `gnu.lists.FVectror'.
+
+   Scheme characters are implemented using `gnu.text.Char'.
+
+   Scheme strings are implemented using `gnu.lists.FString'.
+
+   Scheme procedures are all sub-classes of `gnu.mapping.Procedure'.
+The "action" of a `Procedure' is invoked by using one of the `apply*'
+methods:  `apply0', `apply1', `apply2', `apply3', `apply4', or `applyN'.
+Various sub-class of `Procedure' provide defaults for the various
+`apply*' methods.  For example, a `Procedure2' is used by 2-argument
+procedures.  The `Procedure2' class provides implementations of all the
+`apply*' methods _except_ `apply2', which must be provided by any class
+that extends `Procedure2'.
+
+
+File: kawa.info,  Node: Array operations,  Next: Loading Java functions into Scheme,  Prev: Scheme types in Java,  Up: Objects Classes and Modules
+
+19.12 Using Java Arrays
+=======================
+
+19.12.1 Creating new Java arrays
+--------------------------------
+
+To allocate a Java array you can use the array type specifier as a
+constructor function.  For example, to allocate an array with room for
+10 elements each of each is a primitive `int':
+     (int[] length: 10)
+
+   You can specify the initial elements instead of the length:
+     (object[] 31 32 33 34)
+   This creates a 4-length array, initialized to the given values.
+
+   Note this is a variation of the generation object-allocation (*note
+Allocating objects::) pattern.  You can explicitly use the `make'
+function, if you prefer:
+     (make object[] 31 32 33 34)
+
+   If you specify a length, you can also specify initial values for
+selected elements.  If you specify an index, in the form of a literal
+integer-valued keyword, then following elements are placed starting at
+that position.
+     (int[] length: 100 10 12 80: 15 16 50: 13 14)
+   This creates an array with 100 elements.  Most of them are
+initialized to the default value of zero, but elements with indexes 0,
+1, 50, 51, 80, 81 are initialized to the values 10, 12, 13, 14, 15, 16,
+respectively.
+
+19.12.2 Accessing Java array elements
+-------------------------------------
+
+You can access the elements of a Java array by treating it as a
+one-argument function, where the argument is the index:
+     (define primes (integer[] 2 3 5 7 11 13))
+     (primes 0) ⇒ 2
+     (primes 5) ⇒ 13
+
+   You can set an element by treating the array as a function with a
+`setter':
+     (set! (primes 0) -2)
+     (set! (primes 3) -7)
+     primes ⇒ [-2 3 5 -7 11 13]
+
+   To get the number of elements of an array, you can treat it as having
+a `length' field:
+     primes:length ⇒ 6
+
+   Here is a longer example.  This is the actual definition of the
+standard `gcd' function.  Note the `args' variable receives all the
+arguments on the form of an `integer' array.  (This uses the Java5
+varargs feature.)
+     (define (gcd #!rest (args ::integer[])) ::integer
+       (let ((n ::int args:length))
+         (if (= n 0)
+     	0
+     	(let ((result ::integer (args 0)))
+     	  (do ((i ::int 1 (+ i 1)))
+     	      ((>= i n) result)
+     	    (set! result (gnu.math.IntNum:gcd result (args i))))))))
+
+   The above example generates good code, thanks to judicious use of
+casts and type specifications.  In general, if Kawa knows that a
+“function” is an array then it will generate efficient bytecode
+instructions for array operations.
+
+19.12.3 Old low-level array macros
+----------------------------------
+
+The deprecated *note Low-level array macros:: are also supported.
+
+
+File: kawa.info,  Node: Loading Java functions into Scheme,  Next: Evaluating Scheme expressions from Java,  Prev: Array operations,  Up: Objects Classes and Modules
+
+19.13 Loading Java functions into Scheme
+========================================
+
+When `kawa -C' compiles (*note Files compilation::) a Scheme module it
+creates a class that implements the `java.lang.Runnable' interface.
+(Usually it is a class that extends the `gnu.expr.ModuleBody'.)  It is
+actually fairly easy to write similar "modules" by hand in Java, which
+is useful when you want to extend Kawa with  new "primitive functions"
+written in Java.  For each function you need to create an object that
+extends `gnu.mapping.Procedure', and then bind it in the global
+environment.  We will look at these two operations.
+
+   There are multiple ways you can create a `Procedure' object.  Below
+is a simple example, using the `Procedure1' class, which is class
+extending `Procedure' that can be useful for one-argument procedure.
+You can use other classes to write procedures.  For example a
+`ProcedureN' takes a variable number of arguments, and you must define
+`applyN(Object[] args)' method instead of `apply1'.  (You may notice
+that some builtin classes extend `CpsProcedure'.  Doing so allows has
+certain advantages, including support for full tail-recursion, but it
+has some costs, and is a bit trickier.)
+
+     import gnu.mapping.*;
+     import gnu.math.*;
+     public class MyFunc extends Procedure1
+     {
+       // An "argument" that is part of each procedure instance.
+       private Object arg0;
+
+       public MyFunc(String name, Object arg0)
+       {
+         super(name);
+         this.arg0 = arg0;
+       }
+
+       public Object apply1 (Object arg1)
+       {
+         // Here you can so whatever you want. In this example,
+         // we return a pair of the argument and arg0.
+         return gnu.lists.Pair.make(arg0, arg1);
+       }
+     }
+
+   You can create a `MyFunc' instance and call it from Java:
+       Procedure myfunc1 = new MyFunc("my-func-1", Boolean.FALSE);
+       Object aresult = myfunc1.apply1(some_object);
+   The name `my-func-1' is used when `myfunc1' is printed or when
+`myfunc1.toString()' is called.  However, the Scheme variable
+`my-func-1' is still not bound.  To define the function to Scheme, we
+can create a "module", which is a class intended to be loaded into the
+top-level environment.  The provides the definitions to be loaded, as
+well as any actions to be performed on loading
+
+     public class MyModule
+     {
+       // Define a function instance.
+       public static final MyFunc myfunc1
+         = new MyFunc("my-func-1", IntNum.make(1));
+     }
+
+   If you use Scheme you can use `require':
+     #|kawa:1|# (require <MyModule>)
+     #|kawa:2|# (my-func-1 0)
+     (1 0)
+
+   Note that `require' magically defines `my-func-1' without you telling
+it to.  For each public final field, the name and value of the field are
+entered in the top-level environment when the class is loaded.  (If
+there are non-static fields, or the class implements `Runnable', then an
+instance of the object is created, if one isn't available.)  If the
+field value is a `Procedure' (or implements `Named'), then the name
+bound to the procedure is used instead of the field name.  That is why
+the variable that gets bound in the Scheme environment is `my-func-1',
+not `myfunc1'.
+
+   Instead of `(require <MyModule>)', you can do `(load "MyModule")' or
+`(load "MyModule.class")'.  If you're not using Scheme, you can use
+Kawa's `-f' option:
+     $ kawa -f MyModule --xquery --
+     #|kawa:1|# my-func-1(3+4)
+     <list>1 7</list>
+
+   If you need to do some more complex calculations when a module is
+loaded, you can put them in a `run' method, and have the module
+implement `Runnable':
+
+     public class MyModule implements Runnable
+     {
+       public void run ()
+       {
+         Interpreter interp = Interpreter.getInterpreter();
+         Object arg = Boolean.TRUE;
+         interp.defineFunction (new MyFunc ("my-func-t", arg));
+         System.err.println("MyModule loaded");
+       }
+     }
+
+   Loading `MyModule' causes `"MyModule loaded"' to be printed, and
+`my-func-t' to be defined.  Using `Interpreter''s `defineFunction'
+method is recommended because it does the righ things even for languages
+like Common Lisp that use separate "namespaces" for variables and
+functions.
+
+   A final trick is that you can have a `Procedure' be its own module:
+
+     import gnu.mapping.*;
+     import gnu.math.*;
+     public class MyFunc2 extends Procedure2
+     {
+       public MyFunc(String name)
+       {
+         super(name);
+       }
+
+       public Object apply2 (Object arg1, arg2)
+       {
+         return gnu.lists.Pair.make(arg1, arg2);
+       }
+
+       public static final MyFunc myfunc1 = new MyFunc("my-func-2);
+     }
+
+
+File: kawa.info,  Node: Evaluating Scheme expressions from Java,  Prev: Loading Java functions into Scheme,  Up: Objects Classes and Modules
+
+19.14 Evaluating Scheme expressions from Java
+=============================================
+
+The following methods are recommended if you need to evaluate a Scheme
+expression from a Java method.  (Some details (such as the `throws'
+lists) may change.)
+
+ -- Static method: void Scheme.registerEnvironment ()
+     Initializes the Scheme environment.  Maybe needed if you try to
+     load a module compiled from a Scheme source file.
+
+ -- Static method: Object Scheme.eval (InPort port, Environment env)
+     Read expressions from port, and evaluate them in the env
+     environment, until end-of-file is reached.  Return the value of the
+     last expression, or `Interpreter.voidObject' if there is no
+     expression.
+
+ -- Static method: Object Scheme.eval (String string, Environment env)
+     Read expressions from string, and evaluate them in the env
+     environment, until the end of the string is reached.  Return the
+     value of the last expression, or `Interpreter.voidObject' if there
+     is no expression.
+
+ -- Static method: Object Scheme.eval (Object sexpr, Environment env)
+     The sexpr is an S-expression (as may be returned by `read').
+     Evaluate it in the env environment, and return the result.
+
+   For the `Environment' in most cases you could use
+`Environment.current()'.  Before you start, you need to initialize the
+global environment, which you can with
+     Environment.setCurrent(new Scheme().getEnvironment());
+
+   Alternatively, rather than setting the global environment, you can
+use this style:
+     Scheme scm = new Scheme();
+     Object x = scm.eval("(+ 3 2)");
+     System.out.println(x);
+
+
+File: kawa.info,  Node: XML tools,  Next: Low-level functions,  Prev: Objects Classes and Modules,  Up: Top
+
+20 Working with XML and HTML
+****************************
+
+Kawa has a number of features for working with XML, HTML, and generated
+web pages.
+
+   In Kawa you don't write XML or HTML directly.  Instead you write
+expressions that evaluate to “node objects” corresponding to elements,
+attributes, and text.  You then write these node objects using either an
+XML or HTML format.
+
+   Many web-page-generating tools require you to work directly with raw
+HTML, as for example:
+     (display "<p>Don't use the <code>&lt;blink&gt;</code> tag.</p>")
+
+   In Kawa you would instead do:
+     (display (html:p "Don't use the " (html:code "<blink>") " tag."))
+
+   The conversion from node objects to XML or HTML is handled by the
+formatter (or serializer).  Some advantages of doing it this way are:
+   • You don't have to worry about quoting special characters.  Missing
+     or incorrect quoting is a common source of bugs and security
+     problems on systems that work directly with text, such as PHP.
+
+   • Some errors such as mismatched element tags are automatically
+     avoided.
+
+   • The generated generated XML can be validated as it is generated, or
+     even using compile-time type-checking.  (Kawa doesn't yet do
+     either.)
+
+   • In application that also reads XML, you can treat XML that is read
+     in and XML that is generated using the same functions.
+
+* Menu:
+
+* Formatting XML::
+* Creating HTML nodes::
+* Creating XML nodes::
+* XML literals::
+* Server-side scripts::  Writing web-server-side Kawa scripts
+* Self-configuring page scripts::
+* Servlets::             Installing Kawa programs as Servlets
+* CGI scripts::          Installing Kawa programs as CGI scripts
+* HTTP requests::        Functions for accessing HTTP requests
+* HTTP response::        Functions for generating HTTP response
+* XML beyond Scheme::    Using non-Scheme languages for XML/HTML
+
+
+File: kawa.info,  Node: Formatting XML,  Next: Creating HTML nodes,  Up: XML tools
+
+20.1 Formatting XML
+===================
+
+The easiest way to generate HTML or XML output is to run Kawa with the
+appropriate *note `--output-format' option: Named output formats.
+
+   The intentation is that these output modes should be compatible with
+XSLT 2.0 and XQuery 1.0 Serialization
+(http://www.w3.org/TR/2006/PR-xslt-xquery-serialization-20061121/).
+(However, that specifies many options, most of which have not yet been
+implemented.
+
+`xml'
+     Values are printed in XML format.  "Groups" or "elements" are
+     written as using xml element syntax.  Plain characters (such as
+     `<') are escaped (such as `&lt;').
+
+`xhtml'
+     Same as `xml', but follows the xhtml compatibility guidelines.
+
+`html'
+     Values are printed in HTML format.  Mostly same as `xml' format,
+     but certain elements without body, are written without a closing
+     tag.   For example `<img>' is written without `</img>', which would
+     be illegal for html, but required for xml.  Plain characters (such
+     as `<') are not escaped inside `<script>' or `<style>' elements.
+
+   To illustrate:
+     $ kawa --output-format html
+     #|kawa:1|# (html:img src:"img.jpg")
+     <img src="img.jpg">
+     $ kawa --output-format xhtml
+     #|kawa:1|# (html:img src:"img.jpg")
+     <img xmlns="http://www.w3.org/1999/xhtml" src="img.jpg" />
+     $ kawa --output-format xml
+     #|kawa:1|# (html:img src:"img.jpg")
+     <img xmlns="http://www.w3.org/1999/xhtml" src="img.jpg"></img>
+   And here is the default `scheme' formatting:
+     $ kawa
+     #|kawa:1|# (html:img src:"img.jpg")
+     ({http://www.w3.org/1999/xhtml}img src: img.jpg )
+
+ -- Procedure: as-xml value
+     Return a value (or multiple values) that when printed will print
+     value in XML syntax.
+
+          (require 'xml)
+          (as-xml (make-element 'p "Some " (make-element 'em "text") "."))
+
+     prints `<p>Some <em>text</em>.</p>'.
+
+ -- Procedure: unescaped-data data
+     Creates a special value which causes `data' to be printed, as is,
+     without normal escaping.  For example, when the output format is
+     XML, then printing `"<?xml?>"' prints as `&lt;?xml?&gt;', but
+     `(unescaped-data "<?xml?>")' prints as  `<?xml?>'.
+
+
+File: kawa.info,  Node: Creating HTML nodes,  Next: Creating XML nodes,  Prev: Formatting XML,  Up: XML tools
+
+20.2 Creating HTML nodes
+========================
+
+The `html' prefix names a special namespace (*note Namespaces::) of
+functions to create HTML element nodes.  For example, `html:em' is a
+constructor that when called creates a element node whose tag is `em'.
+If this element node is formatted as HTML, the result has an `<em>' tag.
+
+ -- Syntax: html:tag attributes ... content ...
+     Creates an element node whose tag is tag.  The parameters are first
+     zero or more attributes, followed by zero of more child values.  An
+     attribute is either an attribute value (possibly created using
+     `make-attribute'), or a pair of arguments: A keyword followed by
+     the attribute value.  Child values are usually either strings (text
+     content), or nested element nodes, but can also be comment or
+     processing-instruction nodes.
+
+          (html:a href: "http://gnu.org/" "the "(html:i "GNU")" homepage")
+
+   The compound identifier `html:tag' is actually a type: When you call
+it as a function you're using Kawa's standard coercion of a type to its
+constructor function.  This means you can do type tests:
+     (define some-node ...)
+     (if (instance? some-node html:blink)
+       (error "blinking not allowed!"))
+
+   Object identity is currently not fully specified.  Specifically, it
+is undefined if a nested (child) element node is copied “by value” or
+“by reference”.  This is related to whether nodes have a parent
+reference.  In the XPath/XQuery data model nodes do have a parent
+reference, and child nodes are conceptually copied.  (In the actual
+implemention copying is commonly avoided.)  Kawa/Scheme currently
+followed the XQuery copying semantics, which may not be the most
+appropriate for Scheme.
+
+
+File: kawa.info,  Node: Creating XML nodes,  Next: XML literals,  Prev: Creating HTML nodes,  Up: XML tools
+
+20.3 Creating XML nodes
+=======================
+
+The XML data model is similar to HTML, with one important addition: XML
+tags may be "qualified names", which are similar to *note compound
+symbols: Namespaces.
+
+   You must do this to use the following types and functions:
+     (require 'xml)
+
+   The following types and functions assume:
+     (require 'xml)
+
+ -- Procedure: make-element tag [attribute ...] child ...
+     Create a representation of a XML element, corresponding to
+
+          <tag attribute...>child...</tag>
+
+     The result is a `TreeList', though if the result context is a
+     consumer the result is instead "written" to the consumer.  Thus
+     nested calls to `make-element' only result in a single `TreeList'.
+     More generally, whether an attribute or child is includded by
+     copying or by reference is (for now) undefined.  The tag should
+     currently be a symbol, though in the future it should be a
+     qualified name.  An attribute is typically a call to
+     `make-attribute', but it can be any attribute-valued expression.
+
+          (make-element 'p
+          	      "The time is now: "
+          	      (make-element 'code (make <java.util.Date>)))
+
+ -- Procedure: element-name element
+     Returns the name (tag) of the element node, as a symbol (QName).
+
+ -- Procedure: make-attribute name value...
+     Create an "attribute", which is a name-value pair.  For now, name
+     should be a symbol.
+
+ -- Procedure: attribute-name element
+     Returns the name of the attribute node, as a symbol (QName).
+
+ -- Type: comment
+     Instances of this type represent comment values, specifically
+     including comments in XML files.  Comment nodes are currently
+     ignored when printing using Scheme formatting, though that may
+     change.
+ -- Constructor: comment comment-text
+     Create a comment object with the specified comment-text.
+
+ -- Type: processing-instruction
+     Instances of this type represent “processing instructions”, such as
+     may appear in XML files.  Processing-instruction nodes are
+     currently ignored when printing using Scheme formatting, though
+     that may change.
+ -- Constructor: processing-instruction target contents
+     Crreate a processing-instruction object with the specified target
+     (a simple symbol) and contents (a string).
+
+
+File: kawa.info,  Node: XML literals,  Next: Server-side scripts,  Prev: Creating XML nodes,  Up: XML tools
+
+20.4 XML literals
+=================
+
+You can write XML literals directly in Scheme code, following a `#'.
+Notice that the outermost element needs to be prefixed by `#', but
+nested elements do (and must not).
+     #<p>The result is <b>final</b>!</p>
+
+   Actually, these are not really literals since they can contain
+enclosed expressions:
+     #<em>The result is &{result}.</em>
+   The value of result is substituted into the output, in a similar way
+to quasi-quotation.  (If you try to quote one of these “XML literals”,
+what you get is unspecified and is subject to change.)
+
+   An xml-literal is usually an element constructor, but there some
+rarely used forms (processing-instructions, comments, and CDATA section)
+we'll cover later.
+
+     xml-literal `::=' `#'xml-constructor
+     xml-constructor `::=' xml-element-constructor
+       | xml-PI-constructor
+       | xml-comment-constructor
+       | xml-CDATA-constructor
+
+20.4.1 Element constructors
+---------------------------
+
+     xml-element-constructor `::='
+         `<'QName xml-attribute*`>'xml-element-datum...`</'QName `>'
+       | `<'xml-name-form xml-attribute*`>'xml-element-datum...`</>'
+       | `<'xml-name-form xml-attribute*`/>'
+     xml-name-form `::=' QName
+       | xml-enclosed-expression
+     xml-enclosed-expression `::='
+         `{'expression`@'
+       | `('expression...`)'
+
+   The first xml-element-constructor variant uses a literal QName, and
+looks like standard non-empty XML element, where the starting QName and
+the ending QName must match exactly:
+
+     #<a href="next.html">Next</a>
+
+   As a convenience, you can leave out the ending tag(s):
+     <para>This is a paragraph in <emphasis>DocBook</> syntax.</>
+
+   You can use an expression to compute the element tag at runtime - in
+that case you _must_ leave out the ending tag:
+     #<p>This is <(if be-bold 'strong 'em)>important</>!</p>
+
+   You can use arbitrary expression inside curly braces, as long as it
+evaluates to a symbol.  You can leave out the curly braces if the
+expression is a simple parenthesised compound expression.  The previous
+example is equivalent to:
+     #<p>This is <{(if be-bold 'strong 'em)}>important</>!</p>
+
+   The third xml-element-constructor variant above is an XML “empty
+element”; it is equivalent to the second variant when there are no
+xml-element-datum items.
+
+   (Note that every well-formed XML element, as defined in the XML
+specifications, is a valid xml-element-constructor, but not vice versa.)
+
+20.4.2 Elements contents (children)
+-----------------------------------
+
+The “contents” (children) of an element are a sequence of character
+(text) data, and nested nodes.  The characters `&', `<', and `>' are
+special, and need to be escaped.
+
+     xml-element-datum `::='
+         any character except `&', or `<'.
+       | xml-constructor
+       | xml-escaped
+     xml-escaped `::='
+         `&'xml-enclosed-expression
+       | `&'xml-entity-name`;'
+       | xml-character-reference
+     xml-character-reference `::='
+         `&#'decimal-digit+`;'
+       | `&#x'hex-digit+`;'
+
+   Here is an example shows both hex and decimal character references:
+     #<p>A&#66;C&#x44;E</p>  ⇒  <p>ABCDE</p>
+
+   Currently, the only supported values for xml-entity-name are the
+builtin XML names `lt', `gt', `amp', `quot', and `apos', which stand for
+the characters `<', `>', `&', `"', and `'', respectively.  The following
+two expressions are equivalent:
+     #<p>&lt; &gt; &amp; &quot; &apos;</p>
+     #<p>&{"< > & \" '"}</p>
+
+20.4.3 Attributes
+-----------------
+
+     xml-attribute `::='
+         xml-name-form`='xml-attribute-value
+     xml-attribute-value `::='
+         `"'quot-attribute-datum*`"'
+       | `''apos-attribute-datum*`''
+     quot-attribute-datum `::='
+         any character except `"', `&', or `<'.
+       | xml-escaped
+     apos-attribute-datum `::='
+         any character except `'', `&', or `<'.
+       | xml-escaped
+
+   If the xml-name-form is either `xmlns' or a compound named with the
+prefix `xmlns', then technically we have a namespace declaration, rather
+than an attribute.
+
+20.4.4 QNames and namespaces
+----------------------------
+
+The names of elements and attributes are "qualified names" (QNames),
+which are represented using compound symbols (*note Namespaces::).  The
+lexical syntax for a QName is either a simple identifier, or a
+(prefix,local-name) pair:
+
+     QName `::=' xml-local-part
+        | xml-prefix`:'xml-local-part
+     xml-local-part `::=' identifier
+     xml-prefix `::=' identifier
+
+   An xml-prefix is an alias for a namespace-uri, and the mapping
+between them is defined by a namespace-declaration.  You can either use
+a `define-namespace' form, or you can use a "namespace declaration
+attribute":
+
+     xml-namespace-declaration-attribute `::='
+         `xmlns:'xml-prefix`='xml-attribute-value
+       | `xmlns='xml-attribute-value
+
+   The former declares xml-prefix as a namespace alias for the
+namespace-uri specified by xml-attribute-value (which must be a
+compile-time constant).  The second declares that xml-attribute-value is
+the default namespace for simple (unprefixed) element tags.  (A default
+namespace declaration is ignored for attribute names.)
+
+     (let ((qn (element-name #<gnu:b xmlns:gnu="http://gnu.org/"/>)))
+       (list (symbol-local-name qn)
+             (symbol-prefix qn)
+             (symbol-namespace-uri qn)))
+     ⇒ ("b" "gnu" "http://gnu.org/")
+
+20.4.5 Other XML types
+----------------------
+
+20.4.5.1 Processing instructions
+................................
+
+An xml-PI-constructor can be used to create an XML "processing
+instruction", which can be used to pass instructions or annotations to
+an XML processor (or tool).  (Alternatively, you can use the
+`processing-instruction' type constructor.)
+
+     xml-PI-constructor `::=' `<?'xml-PI-target xml-PI-content`?>'
+     xml-PI-target `::=' NCname (i.e. a simple (non-compound) identifier)
+     xml-PI-content `::=' any characters, not containing `?>'.
+
+   For example, the DocBook XSLT stylesheets can use the `dbhtml'
+instructions to specify that a specific chapter should be written to a
+named HTML file:
+     #<chapter><?dbhtml filename="intro.html" ?>
+     <title>Introduction</title>
+     ...
+     </chapter>
+
+20.4.5.2 XML comments
+.....................
+
+You can cause XML comments to be emitted in the XML output document.
+Such comments can be useful for humans reading the XML document, but are
+usually ignored by programs.  (Alternatively, you can use the `comment'
+type constructor.)
+
+     xml-comment-constructor `::=' `<!--'xml-comment-content`-->'
+     xml-comment-content `::=' any characters, not containing `--'.
+
+20.4.5.3 CDATA sections
+.......................
+
+A `CDATA' section can be used to avoid excessive use of xml-entity-ref
+such as `&amp;' in element content.
+
+     xml-CDATA-constructor `::=' `<![CDATA['xml-CDATA-content`]]>'
+     xml-CDATA-content `::=' any characters, not containing `]]>'.
+
+   The following are equivalent:
+     #<p>Specal characters <![CDATA[< > & ' "]]> here.</p>
+     #<p>Specal characters &lt; &gt; &amp; &quot; &apos; here.</p>
+
+   Kawa remembers that you used a `CDATA' section in the
+xml-element-constructor and will write it out using a `CDATA'
+constructor.
+
+
+File: kawa.info,  Node: Server-side scripts,  Next: Self-configuring page scripts,  Prev: XML literals,  Up: XML tools
+
+20.5 Web page scripts
+=====================
+
+A Kawa "web page script" is a Kawa program that is invoked by a web
+server because the server received an HTTP request.  The result of
+evaluating the top-level expressions becomes the HTTP response that the
+servlet sends back to the client, usually a browser.
+
+   A web page script may be as simple as:
+     (format "The time is <~s>." (java.util.Date))
+   This returns a response of consisting of a formatted string giving
+the current time.  The string would interpreted as `text/plain' content:
+The angle brackets are regular characters, and not HTML tag markers.
+
+   The script can alternatively evaluate to XML/HTML node values, for
+example those created by *note XML literals:::
+     #<p>Hello, <b>&(request-remote-host)</b>!</p>
+   In this case the response would be `text/html' or similar content:
+The angle brackets should be interpreted by the browser as HTML tag
+markers.  The function `request-remote-host' is available
+(automatically) to web page scripts; it returns the host that made the
+HTTP request, which is then interpolated into the response.
+
+   Following sections will go into more details about how to write web
+page scripts.  You can do so in any supported Kawa language, including
+Scheme, BRL, KRL, or XQuery.
+
+   A web server will use a URL mapping to map a request URL to a
+specific web page script.  This can be done in a number of different
+ways:
+   • The easiest to manage is to use Kawa's mechanism for *note
+     Self-configuring page scripts::.  Ths is especially easy if you the
+     web server built in to JDK 6, since no configuration files are
+     needed.  You can also use a “serlvet engine” like Tomcat or
+     Glassfish.
+
+   • You can explicitly compile the web page script to a servlet, in the
+     same way Java servlets are compiled.  This can then be installed
+     ("deployed") in a servlet-supporting web server, such a Tomcat or
+     Glassfish.  *Note Servlets::.
+
+   • You can run the servlet as a *note CGI script: CGI scripts.
+
+   For details on how to extract information from the request see *note
+HTTP requests::.  For details on how the response is created see *note
+Generating HTTP responses: HTTP response.  If the response is HTML or
+XML, you may want to read *note Creating HTML nodes::, or *note Creating
+XML nodes::, or *note XML literals::.
+
+   Here are some examples, starting with a simple `hello.scm':
+     (response-content-type 'text/html) ; Optional
+     (html:p
+       "The request URL was: " (request-url))
+     (make-element 'p
+       (let ((query (request-query-string)))
+         (if query
+           (values-append "The query string was: " query)
+           "There was no query string.")))
+   This returns two `<p>' (paragraph) elements: One using `make-element'
+and one using the `html:p' constructor.  Or you may prefer to use *note
+XML literals::.
+
+   The same program using KRL:
+     <p>The request URL was: [(request-url)]</p>,
+     <p>[(let ((query (request-query-string)))
+         (if query
+           (begin ]The query string was: [query)
+
+           ]There was no query string.[))]</p>
+
+   You can also use XQuery:
+     <p>The request URL was: {request-url()}</p>
+     <p>{let $query := request-query-string() return
+         if ($query)
+         then ("The query string was: ",$query)
+         else "There was no query string."}</p>
+
+
+File: kawa.info,  Node: Self-configuring page scripts,  Next: Servlets,  Prev: Server-side scripts,  Up: XML tools
+
+20.6 Self-configuring web page scripts
+======================================
+
+Kawa makes it easy to set up a web site without configuration files.
+Instead, the mapping from request URL to web page script matches the
+layout of files in the application directory.
+
+   Many web servers make it easy to execute a script using a script
+processor which is selected depending on the extension of the requested
+URL. That is why you see lots of URLs that end in `.cgi', `.php', or
+`.jsp'. This is bad, because it exposes the server-side implementation
+to the user: Not only are such URLs ugly, but they make it difficult to
+change the server without breaking people's bookmarks and search
+engines. A server will usually provide a mechanism to use prettier URLs,
+but doing so requires extra effort, so many web-masters don't.
+
+   If you want a script to be executed in response to a URL
+`http://host/app/foo/bar' you give the script the name `app/foo/bar', in
+the appropriate server “application” directory (as explained below). You
+get to pick the name `bar'.  Or you can use the name `bar.html', even
+though the file named `bar.html' isn't actually an html file - rather it
+produces html when evaluated. Or better: just use a name without an
+extension at all.  Kawa figures out what kind of script it is based on
+the content of the file, rather than the file name.  Once Kawa has found
+a script, it looks at the first line to see if it can recognize the kind
+(language) of the script. Normally this would be a comment that contains
+the name of a programming language that Kawa knows about.  For example:
+     ;; Hello world page script written in -*- scheme -*- 
+     #<p>Hello, <b>&(request-remote-host)</b>!</p>
+   (Using the funny-looking string `-*- scheme -*-' has the bonus is
+that it recognized by the Emacs text editor.)
+
+   A script named `+default+' is run if there isn't a matching script.
+For example assume the following is a file named `+default'.
+     ;; This is -*- scheme -*-
+     (make-element 'p "servlet-path: " (request-servlet-path))
+   This becomes the default script for HTTP requests that aren't handled
+by a more specific script.  The `request-servlet-path' function returns
+the "servlet path", which is the part of the requested URL that is
+relative to the current web application. Thus a request for
+`http://host:port/app/this/is/a/test' will return:
+     servlet-path: /this/is/a/test
+
+20.6.1 Using the JDK 6 built-in web server
+------------------------------------------
+
+The easiest way to run a Kawa web server is to use the web server built
+in to JDK 6, the standard Java 6 distribution shipped by Sun/Oracle.
+
+     kawa --http-auto-handler context-path appdir --http-start port
+
+   This starts a web server that listens on the given port, using the
+files in directory appdir to handle requests that start with the given
+context-path.
+
+   You can specify multiple `--http-auto-handler' options.
+
+   For example use the files in the current directory to handle all
+requests on the standard port 80 do:
+     kawa --http-auto-handler / . --http-start 80
+
+   There are some examples in the `testsuite/webtest' directory the Kawa
+source distribution.  You can start the server thus:
+     bin/kawa --http-auto-handler / testsuite/webtest/ --http-start 8888
+   and then for example browse to `http://localhost:8888/adder.scm'.
+
+20.6.2 Using a servlet container
+--------------------------------
+
+You can also can use a “servlet container” such as Tomcat or Glassfish
+with self-configuring script.  See *note Servlets:: for information on
+how to install these servers, and the concept of web applications.  Once
+you have these server installed, you create a web application with the
+following in the `appdir/WEB-INF/web.xml' configuration file:
+     <web-app>
+       <display-name>Kawa auto-servlet</display-name>
+       <servlet>
+         <servlet-name>KawaPageServlet</servlet-name>
+         <servlet-class>gnu.kawa.servlet.KawaPageServlet</servlet-class>
+       </servlet>
+       <servlet-mapping>
+         <servlet-name>KawaPageServlet</servlet-name>
+         <url-pattern>/*</url-pattern>
+       </servlet-mapping>
+     </web-app>
+   This creates a web application where all URLs are handled by the
+`gnu.kawa.servlet.KawaPageServlet' servelet class, which is included in
+the Kawa jar file.  The `KawaPageServlet' class handles the searching
+and compiling described in this page.
+
+20.6.3 Finding a matching script
+--------------------------------
+
+When Kawa receives a request for:
+     http://host:port/appname/a/b/anything
+   it will look for a file:
+     appdir/a/b/anything
+
+   If such a file exists, the script will be executed, as described
+below. If not, it will look for a file name `+default+' in the same
+directory. If that desn't exist either, it will look for `+default+' in
+the parent directory, then the grand-parent directory, and so on until
+it gets to the appname web application root directory. So the default
+script is this: `appdir/+default'.
+
+   If that doesn't exist then Kawa returns a 404 "page not found" error.
+
+20.6.4 Determining script language
+----------------------------------
+
+Once Kawa has found a script file corresponding to a request URL, it
+needs to determine if this is a data file or a web page script, and in
+the latter case, what language it is written in.
+
+   Kawa recognizes the following "magic strings" in the first line of a
+script:
+
+`kawa:scheme'
+     The Scheme language.
+
+`kawa:xquery'
+     The XQuery language.
+
+`kawa:language'
+     Some other language known to Kawa.
+
+   Kawa also recognizes Emacs-style "mode specifiers":
+
+`-*- scheme -*-'
+     The Scheme language.
+
+`-*- xquery -*-'
+     The XQuery language (though Emacs doesn't know about XQuery).
+
+`-*- emacs-lisp -*-'
+`-*- elisp -*-'
+     The Emacs Lisp extension language.
+
+`-*- common-lisp -*-'
+`-*- lisp -*-'
+     The Common Lisp language.
+
+   Also, it also recognizes comments in the first two columns of the
+line:
+`;;'
+     A Scheme or Lisp comment - assumed to be in the Scheme language.
+
+`(:'
+     Start of an XQuery comment, so assumed to be in the XQuery
+     language.
+
+   If Kawa doesn't recognize the language of a script (and it isn't
+named +default+) then it assumes the file is a data file. It asks the
+servlet engine to figure out the content type (using the getMimeType
+method of ServletContext), and just copies the file into the response.
+
+20.6.5 Compilation and caching
+------------------------------
+
+Kawa automatically compiles a script into a class. The class is internal
+to the server, and is not written out to disk. (There is an unsupported
+option to write the compiled file to a class file, but there is no
+support to use previously-compiled classes.) The server then creates a
+module instance to handle the actual request, and runs the body (the
+`run' method) of the script class. On subsequence requests for the same
+script, the same class and instance are reused; only the `run' is
+re-executed.
+
+   If the script is changed, then it is re-compiled and a new module
+instance created. This makes it very easy to develop and modify a
+script. (Kawa for performance reasons doesn't check more than once a
+second whether a script has been modified.)
+
+
+File: kawa.info,  Node: Servlets,  Next: CGI scripts,  Prev: Self-configuring page scripts,  Up: XML tools
+
+20.7 Installing web page scripts as Servlets
+============================================
+
+You can compile a Kawa program to a Servlet
+(http://en.wikipedia.org/wiki/Java_Servlet), and run it in a servlet
+engine (a Servlet-aware web server).  One or more servlets are installed
+together as a web application.  This section includes specific
+information for the Tomcat and Glassfish web servers.
+
+20.7.1 Creating a web application
+---------------------------------
+
+A "web application" is a group of data, servlets, and configuration
+files to handle a related set of URLs.  The servlet specification
+(http://jcp.org/aboutJava/communityprocess/final/jsr315/index.html)
+specifies the directory structure of a web application.
+
+   Assume the web application is called `myapp', and lives in a
+directory with the same name.  The application normally handles requests
+for URLs that start with `http://example.com/myapp'.  Most files in the
+application directory are used to handle requests with corresponding
+URL.  For example, a file `myapp/list/help.html' would be the response
+to the request `http://example.com/myapp/list/help.html'.
+
+   The directory `WEB-INF' is special.  It contains configuration files,
+library code, and other server data.
+
+   So to create the `myapp' application, start with:
+     mkdir myapp
+     cd myapp
+     mkdir WEB-INF WEB-INF/lib WEB-INF/classes
+
+   Copy the Kawa jar from the `lib' direcory.  (You can also use a
+“hard” link, but symbolic links may not work, for security systems.)
+     cp kawa-home/kawa-1.11.jar WEB-INF/lib/kawa.jar
+
+   You should also create the file `WEB-INF/web.xml'.  For now, this is
+is just a place-holder:
+     <web-app>
+       <display-name>My Application</display-name>
+     </web-app>
+
+20.7.2 Compiling a web page script to a servlet
+-----------------------------------------------
+
+Assume for simplicity that the source files are in the `WEB-INF/classes'
+directory, and make that the current directory:
+     cd .../myapp/WEB-INF/classes
+
+   Depending on the source language, you compile your script sing the
+`--servlet' switch:
+     kawa --servlet -C hello.scm
+   or:
+     kawa --servlet --krl -C hello.krl
+   or:
+     kawa --servlet --xquery -C hello.xql
+
+   This lets the web-application find the compiled servlets.  Finally,
+you just need to add the new servlet to the `WEB-INF/web.xml' file:
+     <web-app>
+       <display-name>My Application</display-name>
+
+       <servlet>
+         <selvlet-name>MyHello</servlet-name>
+         <selvlet-class>hello</servlet-class>
+       </servlet>
+
+       <servlet-mapping>
+         <selvlet-name>MyHello</servlet-name>
+         <url-pattern>/hello</url-pattern>
+       </servlet-mapping>
+     </web-app>
+
+   The `<servlet>' clause says that the servlet named `MyHello' is
+implemented by the Java class `hello'.  The `<servlet-mapping>' clause
+says that a request URL `/hello' should be handled by the servlet named
+`MyHello'.  The URL is relative to the application context path, so the
+actual URL would be `http://example.com/myapp/hello'.
+
+20.7.3 Installing a servlet under Tomcat
+----------------------------------------
+
+Apache's Tomcat (http://tomcat.apache.org/) is an open-source
+implementation of the servlet specifications.  After you download it
+(http://tomcat.apache.org/download-60.cgi), uncompress it in some
+convenient location, which is commonly referred to as `$CATALINA_HOME'.
+
+   To install your web application, copy/move its directory to be in the
+`$CATALINA_HOME/webapps' directory.  Thus for the example above you
+would have a `$CATALINA_HOME/webapps/myapp' directory.
+
+   To start or stop Tomcat use the scripts in `$CATALINA_HOME/bin'.  For
+example to start Tomcat on a GNU/Linux system run
+`$CATALINA_HOME/bin/startup.sh'.  This will start a web server that
+listens on the default port of 8080, so you can browse the above example
+at `http://localhost:8080/myapp/hello'.
+
+   If you're running Fedora GNU/Linux, you can use the `tomcat6'
+package:
+     # yum install tomcat6
+     # export CATALINA_HOME=/usr/share/tomcat6
+   You can the manage Tomcat like other system services.  You can
+install webapps under `$CATALINA_HOME/webapps'.
+
+20.7.4 Installing a servlet under Glassfish
+-------------------------------------------
+
+Glassfish (https://glassfish.dev.java.net/) from Oracle/Sun is a
+open-source “application server” that implements Java EE 6, including
+the 3.0 servlet specification.  After you download it
+(https://glassfish.dev.java.net/downloads/3.0.1-final.html), uncompress
+it in some convenient location.  This location is called
+as-install-parent in the Quick Start Guide
+(http://docs.sun.com/app/docs/doc/820-7689/aboaa?a=view).  The commands
+you will use is most in `as-install/bin', where as-install is
+`as-install/glassfish'.
+
+   To start the server, do:
+     as-install/bin/startserv
+   or under under Windows:
+     as-install\bin\startserv.bat
+   The default post to listen to is `8080'; you can the port (and lots
+of other properties) using the adminstration console at port `4848'.
+
+   A web application does not need to be any particular location,
+instead you just install it with this command:
+     as-install/bin/adadmin deploy appdir
+   where appdir is the application directory - `myapp' in the example.
+(Use `asadmin.bat' under Windows.)
+
+20.7.5 Servlet-specific script functions
+----------------------------------------
+
+The following functions only work within a servlet container.  To use
+these functions, first do:
+     (require 'servlets)
+
+   You can conditionalize your code to check for servlets, like this:
+
+     (cond-expand
+      (in-servlet
+        (require 'servlets)
+        (format "[servlet-context: ~s]" (current-servlet-context)))
+      (else
+        "[Not in a servlet]"))
+
+ -- Procedure: current-servlet
+     When called from a Kawa servlet handler, returns the actual
+     `javax.servlet.http.HttpServlet' instance.
+
+ -- Procedure: current-servlet-context
+     Returns the context of the currently executing servlet, as an
+     instance of `javax.servlet.ServletContext'.
+
+ -- Procedure: current-servlet-config
+     Returns the `ServletConfig' of the currently executing servlet.
+
+ -- Procedure: get-request
+     Return the current servlet request, as an instance of
+     `javax.servlet.http.HttpServletRequest'.
+
+ -- Procedure: get-response
+     Return the current servlet response, as an instance of
+     `javax.servlet.http.HttpServletResponse'.
+
+ -- Procedure: request-servlet-path
+     Get the servlet path of the current request.  Similar to
+     `request-script-path', but not always the same, depending on
+     configuration, and does _not_ end with a `"/"'.
+
+ -- Procedure: request-path-info
+     Get the path info of the current request.  Corresponds to the CGI
+     variable `PATH_INFO'.
+
+ -- Procedure: servlet-context-realpath [path]
+     Returns the file path of the current servlet's "Web application".
+
+
+File: kawa.info,  Node: CGI scripts,  Next: HTTP requests,  Prev: Servlets,  Up: XML tools
+
+20.8 Installing Kawa programs as CGI scripts
+============================================
+
+The recommended way to have a web-server run a Kawa program as a CGI
+script is to compile the Kawa program to a servlet (as explained in
+*note Server-side scripts::, and then use Kawa's supplied CGI-to-servlet
+bridge.
+
+   First, compile your program to one or more class files as explained
+in *note Server-side scripts::.  For example:
+     kawa --servlet --xquery -C hello.xql
+
+   Then copy the resulting `.class' files to your server's CGI
+directory.  On Red Hat GNU/Linux, you can do the following (as root):
+     cp hello*.class /var/www/cgi-bin/
+
+   Next find the `cgi-servlet' program that Kawa builds and installs.
+If you installed Kawa in the default place, it will be in
+`/usr/local/bin/cgi-servlet'.  (You'll have this if you installed Kawa
+from source, but not if you're just using Kawa `.jar' file.)  Copy this
+program into the same CGI directory:
+     cp /usr/local/bin/cgi-servlet /var/www/cgi-bin/
+
+   You can link instead of copying:
+     ln -s /usr/local/bin/cgi-servlet /var/www/cgi-bin/
+   However, because of security issues this may not work, so it is safer
+to copy the file.  However, if you already have a copy of `cgi-servlet'
+in the CGI-directory, it is safe to make a hard link instead of making
+an extra copy.
+
+   Make sure the files have the correct permissions:
+     chmod a+r /var/www/cgi-bin/hello*.class /var/www/cgi-bin/hello
+     chmod a+x /var/www/cgi-bin/hello
+
+   Now you should be able to run the Kawa program, using the URL
+`http://localhost/cgi-bin/hello'.  It may take a few seconds to get the
+reply, mainly because of the start-up time of the Java VM.  That is why
+servlets are preferred.  Using the CGI interface can still be useful for
+testing or when you can't run servlets.
+
+
+File: kawa.info,  Node: HTTP requests,  Next: HTTP response,  Prev: CGI scripts,  Up: XML tools
+
+20.9 Functions for accessing HTTP requests
+==========================================
+
+The following functions are useful for accessing properties of a HTTP
+request, in a Kawa program that is run either as a servlet or a CGI
+script.  These functions can be used from plain Scheme, from KRL
+(whether in BRL-compatible mode or not), and from XQuery.
+
+   The examples below assume the request
+`http://example.com:8080/myapp/foo/bar?val1=xyz&val2=abc', where `myapp'
+is the application context.  We also assume that this is handled by a
+script `foo/+default+'.
+
+20.9.1 Request URL components
+-----------------------------
+
+ -- Procedure: request-URI
+     Returns the URI of the request, as a value of type `URI'.  This
+     excludes the server specification, but includes the query string.
+     (It is the combination of CGI variables `SCRIPT_NAME', `PATH_INFO',
+     and `QUERY_STRING'.  Using servlets terminology, it is the
+     combination of Context Path, Servlet Path, PathInfo, and Query
+     String.)
+
+          (request-URI) ⇒ "/myapp/foo/bar?val1=xyz&val2=abc"
+
+ -- Procedure: request-path
+     Returns the URI of the request, as a value of type `URI'.  This
+     excludes the server specification and the query string.  Equivalent
+     to `(path-file (request-URI))'.  (It is the combination of CGI
+     variables `SCRIPT_NAME', and `PATH_INFO'.  Same as the
+     concatenation of `(request-context-path)', `(request-script-path)',
+     and `(request-local-path)'.  Using servlets terminology, it is the
+     combination of Context Path, Servlet Path, and PathInfo.)
+
+          (request-path) ⇒ "/myapp/foo/bar"
+
+ -- Procedure: request-uri
+     This function is deprecated, because of possible confusion with
+     `request-URI'.  Use `request-path' instead.
+
+ -- Procedure: request-url
+     Returns the complete URL of the request, except the query string.
+     The result is a `java.lang.StringBuffer'.
+
+          (request-url) ⇒ "http://example.com:8080/myapp/foo/bar"
+
+ -- Procedure: request-context-path
+     Returns the context path, relative to the server root.  This is an
+     initial substring of the `(request-path)'.  Similar to the Context
+     Path of a servlet request, except that it ends with a `"/"'.
+
+          (request-context-path) ⇒ "/myapp/"
+
+ -- Procedure: request-script-path
+     Returns the path of the script, relative to the context.  This is
+     either an empty string, or a string that ends with `"/"', but does
+     not start with one. (The reason for this is to produce URIs that
+     work better with operations like `resolve-uri'.)  This is
+     conceptually similar to `request-servlet-path', though not always
+     the same, and the `"/"' conventions differ.
+
+          (request-script-path) ⇒ "foo/"
+
+ -- Procedure: request-local-path
+     Returns the remainder of the `request-path', relative to the
+     `request-script-path'.
+
+          (request-local-path) ⇒ "bar"
+
+ -- Procedure: request-query-string
+     Returns the query string from an HTTP request.  The query string is
+     the part of the request URL after a question mark.  Returns false
+     if there was no query string.  Corresponds to the CGI variable
+     `QUERY_STRING'.
+
+          (request-query-string) ⇒ "val1=xyz&val2=abc"
+
+20.9.2 Request parameters
+-------------------------
+
+Request parameters are used for data returned from forms, and for other
+uses.  They may be encoded in the query string or in the request body.
+
+ -- Procedure: request-parameter name [default]
+     If there is a parameter with the given name (a string), return the
+     (first) corresponding value, as a string.  Otherwise, return the
+     default value, or `#!null' if there is no default.
+
+          (request-parameter "val1") ⇒ "xyz"
+          (request-parameter "val9" "(missing)") ⇒ "(missing)"
+
+ -- Procedure: request-parameters name
+     If there is are one or more parameter with the given name (a
+     string), return them all (as multiple values).  Otherwise, return
+     no values (i.e. `(values)').
+
+          (request-parameters "val1") ⇒ "xyz"
+          (request-parameters "val9") ⇒ #!void
+
+ -- Procedure: request-parameter-map
+     Request a map of all the parameters.  This is a map from strings to
+     a sequence of strings.  (Specifically, a
+     `java.util.Map<String,java.util.List<String>>'.)
+
+20.9.3 Request headers
+----------------------
+
+The request headers are a set of (keyword, string)-pairs transmitted as
+part of the HTTP request, before the request body.
+
+ -- Procedure: request-header name
+     If there is a header with the given name (a string), return the
+     corresponding value string.  Otherwise, return `#!null'.
+
+          (request-header "accept-language") ⇒ "en-us,en;q=0.5"
+
+ -- Procedure: request-header-map
+     Request a map of all the headers.  This is a map from strings to a
+     sequence of strings.  (Specifically, a
+     `java.util.Map<String,java.util.List<String>>'.)
+
+20.9.4 Request body
+-------------------
+
+ -- Procedure: request-input-port
+     Return a textual input port for reading the request body, as a
+     sequence of characters.
+
+ -- Procedure: request-input-stream
+     Return a binary input stream for reading the request body, as a
+     sequence of bytes.
+
+ -- Procedure: request-body-string
+     Return the entire request body as a string
+
+20.9.5 Request IP addresses and ports
+-------------------------------------
+
+Information about the interface and port on which the request was
+received.
+
+ -- Procedure: request-local-socket-address
+     The local address on which the request was received.  This is the
+     combination of `(request-local-host)' and `(request-local-port)',
+     as an instance of `java.net.InetSocketAddress'.
+ -- Procedure: request-local-host
+     Get the IP address of the interface on which request was received,
+     as an `java.net.InetAddress'.
+ -- Procedure: request-local-IP-address
+     Get the IP address of the interface on which request was received,
+     a string in numeric form:
+
+          (request-local-host) ⇒ "127.0.0.1"
+
+ -- Procedure: request-local-port
+     Get the port this request was received on.
+
+          (request-local-port) ⇒ 8080
+
+   Information about the interface and port of the remote client that
+invoked the request.
+
+ -- Procedure: request-remote-socket-address
+     The address of the remote client (usually a web browser) which
+     invoked the request.  This is the combination of
+     `(request-remove-host)' and `(request-remote-port)', as an instance
+     of `java.net.InetSocketAddress'.
+ -- Procedure: request-remote-host
+     Get the IP address of the remote client which invoked the request,
+     as an `java.net.InetAddress'.
+ -- Procedure: request-remote-IP-address
+     Get the IP address of the remote client which invoked the request,
+     as a string in numeric form.
+
+          (request-remote-host) ⇒ "123.45.6.7"
+
+ -- Procedure: request-remote-port
+     The port used by the remote client.
+
+20.9.6 Miscellaneous request properties
+---------------------------------------
+
+ -- Procedure: request-path-translated
+     Map the request-path to a file name (a string) in the server
+     application directory.  Corresponds to the CGI variable
+     `PATH_TRANSLATED'.
+
+ -- Procedure: request-method
+     Returns the method of the HTTP request, usually `"GET"' or
+     `"POST"'.  Corresponds to the CGI variable `REQUEST_METHOD'.
+
+ -- Procedure: request-scheme
+     Returns the scheme (protocol) of the request.  Usually `"http"', or
+     `"https"'.
+
+
+File: kawa.info,  Node: HTTP response,  Next: XML beyond Scheme,  Prev: HTTP requests,  Up: XML tools
+
+20.10 Generating HTTP responses
+===============================
+
+The result of evaluating the top-level expressions of a web page script
+becomes the HTTP response that the servlet sends back to the browser.
+The result is typically an HTML/XML element code object Kawa will
+automatically format the result as appropriate for the type.  Before the
+main part of the response there may be special "response header values",
+as created by the `response-header' function.  Kawa will use the
+response header values to set various required and optional fields of
+the HTTP response.  Note that `response-header' does not actually do
+anything until it is "printed" to the standard output.  Note also that a
+`"Content-Type"' response value is special since it controls the
+formatting of the following non-response-header values.
+
+ -- Procedure: response-header key value
+     Create the response header `key: value' in the HTTP response.  The
+     result is a "response header value" (of some unspecified type).  It
+     does not directly set or print a response header, but only does so
+     when you actually "print" its value to the response output stream.
+
+ -- Procedure: response-content-type type
+     Species the content-type of the result - for example
+     `"text/plain"'.  Convenience function for `(response-header
+     "Content-Type" type)'.
+
+ -- Procedure: error-response code [message]
+     Creates a response-header with an error code of code and a response
+     message of message.  (For now this is the same as
+     `response-status'.)
+
+     Note this also returns a response-header value, which does not
+     actually do anything unless it is returned as the result of
+     executing a servlet body.
+
+ -- Procedure: response-status code [message]
+     Creates a response-header with an status code of code and a
+     response message of message.  (For now this is the same as
+     `error-response'.)
+
+
+File: kawa.info,  Node: XML beyond Scheme,  Prev: HTTP response,  Up: XML tools
+
+20.11 Using non-Scheme languages for XML/HTML
+=============================================
+
+20.11.1 XQuery language
+-----------------------
+
+Bundled with Kawa is a fairly complete implementation of W3C's new XML
+Query language (http://www.w3c.org/XML/Query).  If you start Kawa with
+the `--xquery' it selects the "XQuery" source language; this also prints
+output using XML syntax.  See the Qexo (Kawa-XQuery) home page
+(http://www.gnu.org/software/qexo/) for examples and more information.
+
+20.11.2 XSL transformations
+---------------------------
+
+There is an experimental implementation of the XSLT (XML Stylesheet
+Language Transformations) language.  Selecting `--xslt' at the Kawa
+command line will parse a source file according to the syntax on an XSLT
+stylesheet.  See the Kawa-XSLT page
+(http://www.gnu.org/software/qexo/xslt.html) for more information.
+
+* Menu:
+
+* KRL::              KRL - The Kawa Report Language for generating XML/HTML
+
+
+File: kawa.info,  Node: KRL,  Up: XML beyond Scheme
+
+20.11.3 KRL - The Kawa Report Language for generating XML/HTML
+--------------------------------------------------------------
+
+KRL (the "Kawa Report Language") is powerful Kawa dialect for embedding
+Scheme code in text files such as HTML or XML templates.  You select the
+KRL language by specifying `--krl' on the Kawa command line.
+
+   KRL is based on on BRL (http://brl.sourceforge.net/), Bruce Lewis's
+"Beautiful Report Language", and uses some of BRL's code, but there are
+some experimental differences, and the implementation core is different.
+You can run KRL in BRL-compatility-mode by specifying `--brl' instead of
+`--krl'.
+
+20.11.4 Differences between KRL and BRL
+---------------------------------------
+
+This section summarizes the known differences between KRL and BRL.
+Unless otherwise specified, KRL in BRL-compatibility mode will act as
+BRL.
+
+   • In BRL a normal Scheme string `"mystring"' is the same as the
+     inverted quote string `]mystring[', and both are instances of the
+     type `<string>'.  In KRL `"mystring"' is a normal Scheme string of
+     type `<string>', but `]mystring[' is special type that suppresses
+     output escaping.  (It is equivalent to `(unescaped-data
+     "mystring")'.)
+
+   • When BRL writes out a string, it does not do any processing to
+     escape special characters like `<'.  However, KRL in its default
+     mode does normally escape characters and strings.  Thus `"<a>"' is
+     written as `&lt;a&gr;'.  You can stop it from doing this by
+     overriding the output format, for example by specifying
+     `--output-format scheme' on the Kawa command line, or by using the
+     `unescaped-data' function.
+
+   • Various Scheme syntax forms, including `lambda', take a `<body>',
+     which is a list of one or more declarations and expressions.  In
+     normal Scheme and in BRL the value of a `<body>' is the value of
+     the last expression.  In KRL the value of a `<body>' is the
+     concatenation of all the values of the expressions, as if using
+     `values-append'.
+
+   • In BRL a word starting with a colon is a keyword.  In KRL a word
+     starting with a colon is an identifier, which by default is bound
+     to the `make-element' function specialized to take the rest of the
+     word as the tag name (first argument).
+
+   • BRL has an extensive utility library.  Most of this has not yet
+     been ported to KRL, even in BRL-compatibility mode.
+
+
+File: kawa.info,  Node: Low-level functions,  Next: FAQs,  Prev: XML tools,  Up: Top
+
+21 Deprecated low-level functions
+*********************************
+
+These sections document older and less convenient ways to call Java
+methods, access Java fields, and use Java arrays.
+
+* Menu:
+
+* Low-level Method invocation::
+* Low-level Field operations::
+* Low-level array macros::
+
+
+File: kawa.info,  Node: Low-level Method invocation,  Next: Low-level Field operations,  Up: Low-level functions
+
+21.1 Low-level Method invocation
+================================
+
+The following lower-level primitives require you to specify the
+parameter and return types explicitly.  You should probably use the
+functions `invoke' and `invoke-static' (*note Method operations::)
+instead.
+
+ -- Syntax: primitive-constructor class (argtype ...)
+     Returns a new anonymous procedure, which when called will create a
+     new object of the specified class, and will then call the
+     constructor matching the specified argument types.
+
+ -- Syntax: primitive-virtual-method class method rtype (argtype ...)
+     Returns a new anonymous procedure, which when called will invoke
+     the instance method whose name is the string method in the class
+     whose name is class.
+
+ -- Syntax: primitive-static-method class method rtype (argtype ...)
+     Returns a new anonymous procedure, which when called will invoke
+     the static method whose name is the string method in the class
+     whose name is class.
+
+ -- Syntax: primitive-interface-method interface method rtype (argtype
+          ...)
+     Returns a new anonymous procedure, which when called will invoke
+     the matching method from the interface whose name is interface.
+
+   The macros return procedure values, just like `lambda'.  If the
+macros are used directly as the procedure of a procedure call, then kawa
+can inline the correct bytecodes to call the specified methods.  (Note
+also that neither macro checks that there really is a method that
+matches the specification.)  Otherwise, the Java reflection facility is
+used.
+
+
+File: kawa.info,  Node: Low-level Field operations,  Next: Low-level array macros,  Prev: Low-level Method invocation,  Up: Low-level functions
+
+21.2 Low-level field operations
+===============================
+
+The following macros evaluate to procedures that can be used to access
+or change the fields of objects or static fields.  The compiler can
+inline each to a single bytecode instruction (not counting type
+conversion).
+
+   These macros are deprecated.  The `fields' and `static-field'
+functions (*note Field operations::) are easier to use, more powerful,
+and just as efficient.  However, the high-level functions currently do
+not provide access to non-public fields.
+
+ -- Syntax: primitive-get-field class fname ftype
+     Use this to access a field named fname having type type in class
+     class.  Evaluates to a new one-argument procedure, whose argument
+     is a reference to an object of the specified class.  Calling that
+     procedure returns the value of the specified field.
+
+ -- Syntax: primitive-set-field class fname ftype
+     Use this to change a field named fname having type type in class
+     class.  Evaluates to a new two-argument procedure, whose first
+     argument is a reference to an object of the specified class, and
+     the second argument is the new value.  Calling that procedure sets
+     the field to the specified value.  (This macro's name does not end
+     in a `!', because it does not actually set the field.  Rather, it
+     returns a function for setting the field.)
+
+ -- Syntax: primitive-get-static class fname ftype
+     Like `primitive-get-field', but used to access static fields.
+     Returns a zero-argument function, which when called returns the
+     value of the static field.
+
+ -- Syntax: primitive-set-static class fname ftype
+     Like `primitive-set-field', but used to modify static fields.
+     Returns a one-argument function, which when called sets the value
+     of the static field to the argument.
+
+
+File: kawa.info,  Node: Low-level array macros,  Prev: Low-level Field operations,  Up: Low-level functions
+
+21.3 Old low-level array macros
+===============================
+
+The following macros evaluate to procedures that can be used to
+manipulate primitive Java array objects.  The compiler can inline each
+to a single bytecode instruction (not counting type conversion).
+
+ -- Syntax: primitive-array-new element-type
+     Evaluates to a one-argument procedure.  Applying the resulting
+     procedure to an integer count allocates a new Java array of the
+     specified length, and whose elements have type element-type.
+
+ -- Syntax: primitive-array-set element-type
+     Evaluates to a three-argument procedure.  The first argument of the
+     resulting procedure must be an array whose elements have type
+     element-type;  the second argument is an index;  and the third
+     argument is a value (coercible to element-type) which replaces the
+     value specified by the index in the given array.
+
+ -- Syntax: primitive-array-get element-type
+     Evaluates to a two-argument procedure.  The first argument of the
+     resulting procedure must be an array whose elements have type
+     element-type;  the second argument is an index.  Applying the
+     procedure returns the element at the specified index.
+
+ -- Syntax: primitive-array-length element-type
+     Evaluates to a one-argument procedure.  The argument of the
+     resulting procedure must be an array whose elements have type
+     element-type.  Applying the procedure returns the length of the
+     array.  (Alternatively, you can use `(field array 'length)'.)
+
+
+File: kawa.info,  Node: FAQs,  Next: Community,  Prev: Low-level functions,  Up: Top
+
+22 Frequently Asked Questions
+*****************************
+
+22.0.0.1 What is the equivalent of Java import?
+...............................................
+
+Kawa's `import' follows R6RS, so it is bit like Java's `import static
+TypeName.*' (static-import-on-demand) declaration.
+
+   Kawa doesn't have a direct equivalent of Java's `import TypeName'
+(single-type-import) declaration, but `define-alias' provides similar
+functionality:
+     (define-alias StrBuf java.lang.StringBuffer)
+   This has the advantage that you can pick an arbitrary name as an
+alias.
+
+   There is no direct equivalent to Java's `import PackageOrTypeName.*'
+(type-import-on-demand) declaration, but you can alias a package:
+     (define-alias jutil java.util)
+     (define mylist :: jutil:List (jutil:ArrayList))
+
+   You can also use `define-namespace' to introduce an abbreviation or
+renaming of a class name, but as a matter of style `define-alias' is
+preferred.
+
+
+File: kawa.info,  Node: Community,  Next: License,  Prev: FAQs,  Up: Top
+
+23 The Kawa Community
+*********************
+
+* Menu:
+
+* Reporting bugs::       Where to report bugs
+* Mailing lists::        Where to discuss changes, etc
+* Support::              Technical support for Kawa
+* Projects::             Projects using Kawa
+
+
+File: kawa.info,  Node: Reporting bugs,  Next: Mailing lists,  Up: Community
+
+23.1 Reporting bugs
+===================
+
+To report a bug or feature request for Kawa (including Qexo or JEmacs),
+it is best to use the bug-submission page
+(http://savannah.gnu.org/bugs/?func=additem&group=kawa).  You can browse
+and comment on existing bug reports using the Kawa Bugzilla page
+(http://savannah.gnu.org/bugs/?group=kawa).
+
+   When a bug report is created or modified, mail is automatically sent
+to the <bug-kawa@gnu.org> list.  You can subscribe, unsubscribe, or
+browse the archives through the `bug-kawa' web interface
+(http://mail.gnu.org/mailman/listinfo/bug-kawa).
+
+
+File: kawa.info,  Node: Mailing lists,  Next: Support,  Prev: Reporting bugs,  Up: Community
+
+23.2 General Kawa email and discussion
+======================================
+
+The general Kawa email list is <kawa@sourceware.org>.  This mailing list
+is used for announcements, questions, patches, and general discussion
+relating to Kawa.  If you wish to subscribe, send a blank message
+request to <kawa-subscribe@sourceware.org>.  To unsubscribe, send a
+blank message to <kawa-unsubscribe@sourceware.org>.  (If your mail is
+forwarded and you're not sure which email address you're subscribed as
+send mail to the address following `mailto:' in the `List-Unsubscribe'
+line in the headers of the messages you get from the list.)
+
+   You can browse the archive of past messages
+(http://sourceware.org/ml/kawa/).
+
+   There are separate mailing lists for Qexo
+(http://mail.gnu.org/mailman/listinfo/qexo-general) and JEmacs
+(http://lists.sourceforge.net/mailman/listinfo/jemacs-info).
+
+
+File: kawa.info,  Node: Support,  Next: Projects,  Prev: Mailing lists,  Up: Community
+
+23.3 Technical Support for Kawa
+===============================
+
+If you have a project that depends on Kawa or one of its component
+packages, you might do well get get paid priority support from Kawa's
+author.
+
+   The base price is $2400 for one year.  This entitles you to basic
+support by email or phone.  Per <per@bothner.com> will answer techical
+questions about Kawa or its implementation, investigate bug reports, and
+suggest work-arounds.  I may (at my discretion) provide fixes and
+enhancements (patches) for simple problems.  Reponse for support
+requests received using the day (California time) will normally be
+within a few hours.
+
+   All support requests must come through a single designated contact
+person.  If Kawa is important to your business, you probably want at
+least two contact people, doubling the price.
+
+   If the support contract is cancelled (by either party), remaining
+time will be prorated and refunded.
+
+   Per is also available for development projects.
+
+
+File: kawa.info,  Node: Projects,  Prev: Support,  Up: Community
+
+23.4 Projects using Kawa
+========================
+
+Google's App Inventor for Android (http://appinventor.googlelabs.com/)
+uses Kawa to translate its visual blocks language.
+
+   Merced Systems, Inc. (http://www.mercedsystems.com/) uses Kawa
+extensively in their contact center performance management product
+Merced Peformance Suite.  Kawa Scheme is used for all development and
+has allowed Merced to realize the large productivity gains that come
+with using Scheme while still maintaining tight integration with a large
+number of Java libraries.
+
+   JEmacs is included in the Kawa distribution.  It is a project to
+re-implement Emacs, allowing a mix of Java. Scheme, and Emacs Lisp.  It
+has its own home-page (http://jemacs.sourceforge.net/).
+
+   BRL ("the Beautiful Report Language") is a database-oriented language
+to embed in HTML and other markup.  BRL (http://brl.sourceforge.net/)
+allows you to embed Scheme in a an HTML file on a web server.
+
+   The SchemeWay Project (http://schemeway.sourceforge.net) is a set of
+Eclipse (http://www.eclipse.org) plug-ins for professional Scheme
+programming. The first plugin released, SchemeScript, is a
+fully-featured Scheme editor customizable in Scheme. It embeds the Kawa
+Scheme system and has many features that ease Kawa Scheme programming
+(like code completion on variable names, class and method names,
+namespaces, etc).
+
+   Nü Echo (http://www.nuecho.com) develops high-performance speech
+enabled applications. Nü Echo uses Kawa for the development of
+innovative speech application development tools, like a complete grammar
+IDE (http://www.nuecho.com/en/services/grammar.shtml) and a S-expression
+based language and development environment for the specification of
+highly reusable dialog components
+(http://www.nuecho.com/en/services/dcl.shtml).
+
+   The Health Media Research Laboratory, part of the Comprehensive
+Cancer Center at the University of Michigan, is using Kawa as an
+integral part of its core tailoring technologies. Java programs using
+Kawa libraries are used to administer customized web-based surveys,
+generate tailored feedback, validate data, and "characterize," or
+transform, data. Kawa code is embedded directly in XML-formatted surveys
+and data dictionaries. Performance and ease of implementation has far
+exceeded expectations. For more information contact Paul R. Potts,
+Technical Director, Health Media Research Lab, `<potts@umich.edu>'.
+
+   Mike Dillon (`mdillon@gjt.org') did the preliminary work of creating
+a Kawa plugin for jEdit. It is called SchemeShell and provides a REPL
+inside of the jEdit console for executing expressions in Kawa (much as
+the BeanShell plugin does with the BeanShell scripting language).  It is
+currently available only via CVS from:
+     CVSROOT=:pserver:anonymous@cvs.jedit.sourceforge.net:/cvsroot/jedit
+     MODULE=plugins/SchemeShell
+
+   STMicroelectronics (`marco.vezzoli@st.com') uses Kawa in a prototypal
+intranet 3tier information retrival system as a communication protocol
+between server and clients and to do server agents programming.
+
+   The Nice Programming Language is a new open source language with a
+Java-like syntax. It features multiple dispatch, parametric types,
+higher-order functions, tuples, optional parameters, safe static typing
+of `null', ..., and the new concept of "abstract interfaces".  The Nice
+compiler (`nicec') uses Kawa's `gnu.expr' and `gnu.bytecode' packages to
+generate Java bytecode.  You can find more about Nice at
+`http://nice.sourceforge.net'.  For more information feel free to
+contact Daniel Bonniot <bonniot@users.sf.net>).
+
+
+File: kawa.info,  Node: License,  Next: Overall Index,  Prev: Community,  Up: Top
+
+24 License
+**********
+
+* Menu:
+
+* Software-License::      License for the Kawa software
+* Manual-License::        License for the Kawa manual
+
+
+File: kawa.info,  Node: Software-License,  Next: Manual-License,  Up: License
+
+24.1 License for the Kawa software
+==================================
+
+The license for the Kawa software (except the optional JEmacs and BRL
+features - see below) is the X11/MIT license
+(http://opensource.org/licenses/mit-license.php) which is quoted below.
+
+     The software (with related files and documentation) in these packages
+     are copyright (C) 1996-2009  Per Bothner.
+
+     Permission is hereby granted, free of charge, to any person obtaining
+     a copy of this software and associated documentation files (the
+     "Software"), to deal in the Software without restriction, including
+     without limitation the rights to use, copy, modify, merge, publish,
+     distribute, sublicense, and/or sell copies of the Software, and to
+     permit persons to whom the Software is furnished to do so, subject to
+     the following conditions:
+
+     The above copyright notice and this permission notice shall be
+     included in all copies or substantial portions of the Software.
+
+     THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+     EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+     MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+     NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+     LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+     OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+     WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+   In the past the Kawa license was a "modified GNU GPL (General Public
+License)".  If you find any files that contain the old license or
+otherwise seem to contradict the new license, please report that as a
+bug.
+
+   Some of the JEmacs files are based on Emacs and have a GPL license,
+which is incompatible with non-Free (proprietary) products.  For that
+reason, the `gnu.jemacs.*' packages are not included any more in the
+standard `.jar' or by default when building from source, to avoid
+surprises.  To build JEmacs you have to specify the `configure' flag
+`--enable-jemacs' or the `ant' flag `-Denable-jemacs=true'.
+
+   Some code in `gnu/brl' and `gnu/kawa/brl' is copyright Bruce R. Lewis
+and Eaton Vance Management, with a modified-GPL license: no restrictions
+if used unmodified, but otherwise the GPL applies.  These packages are
+no longer included by default in Kawa builds, but have to be selected
+with the `configure' flag `--enable-brl' or the `ant' flag
+`-Denable-brl=true'.
+
+   Kawa uses some math routines from fdlib's libf77, which have a AT&T
+Bell Laboratories and Bellcore copyright.  See the source file
+`gnu/math/DComplex.java'.
+
+   The sorting routine in `gnu.xquery.util.OrderedTuples' is a
+re-implementatiomn in Java of code copyrighted by Simon Tatham.
+
+   Some of the Scheme code in `kawa/lib' and `gnu/kawa/slib' are
+copyright other parties, and may have slightly different license
+wording, but I believe none of then contradicts the main Kawa license or
+impose extra restrictions.  Search for the word `copyright' in these
+directories.
+
+   Some code has been converted from other languages, with permission.
+This includes the `rationalize' method in `gnu/math/RatNum.java', based
+on an algorith of Alan Bawden, as expressed by Marc Feeley in C-Gambit.
+The concepts and algorithm of `gnu/text/PrettyWriter.java' are converted
+from SBCL, which is in the public domain.
+
+
+File: kawa.info,  Node: Manual-License,  Prev: Software-License,  Up: License
+
+24.2 License for the Kawa manual
+================================
+
+Here is the copyright license for this manual:
+
+   Copyright © 1996, 1997, 1998, 1999, 2005 Per Bothner
+
+   Permission is granted to make and distribute verbatim copies of this
+manual provided the copyright notice and this permission notice are
+preserved on all copies.
+
+   Permission is granted to copy and distribute modified versions of
+this manual under the conditions for verbatim copying, provided that the
+entire resulting derived work is distributed under the terms of a
+permission notice identical to this one.
+
+   Permission is granted to copy and distribute translations of this
+manual into another language, under the above conditions for modified
+versions, except that this permission notice may be stated in a
+translation approved by the author.
+
+   Parts of this manual is copied from the R6RS (http://www.r6rs.org/)
+specifications, which states:
+     We intend this report to belong to the entire Scheme community, and
+     so we grant permission to copy it in whole or in part without fee.
+     In particular, we encourage implementors of Scheme to use this
+     report as a starting point for manuals and other documentation,
+     modifying it as necessary.
+
+   Parts of this manual were derived from the SLIB manual, copyright ©
+1993-1998 Todd R. Eigenschink and Aubrey Jaffer.
+
+   Parts of this manual were derived from ISO/EIC 10179:1996(E)
+(Document Style and Specifical Language) - unknown copyright.
+
+   This manual has quoted from SRFI-6 (Basic String Ports), which is
+Copyright (C) William D Clinger (1999). All Rights Reserved.
+
+   This manual has quoted from SRFI-8 (receive: Binding to multiple
+values), which is Copyright (C) John David Stone (1999). All Rights
+Reserved.
+
+   This manual has quoted from SRFI-9 (Defining Record Types) which is
+Copyright (C) Richard Kelsey (1999).  All Rights Reserved.
+
+   This manual has quoted from SRFI-11 (Syntax for receiving multiple
+values), which is Copyright (C) Lars T. Hansen (1999). All Rights
+Reserved.
+
+   This manual has quoted from SRFI-25 (Multi-dimensional Array
+Primitives), which is Copyright (C) Jussi Piitulainen (2001). All Rights
+Reserved.
+
+   This manual has quoted from SRFI-26 (Notation for Specializing
+Parameters without Currying), which is Copyright (C) Sebastian Egner
+(2002). All Rights Reserved.
+
+   This manual has quoted from SRFI-39 (Parameter objects), which is
+Copyright (C) Marc Feeley (2002). All Rights Reserved.
+
+   The following notice applies to SRFI-6, SRFI-8, SRFI-9, SRFI-11,
+SRFI-25, SRFI-26, and SRFI-39, which are quoted in this manual, but it
+does not apply to the manual as a whole:
+
+     This document and translations of it may be copied and furnished to
+     others, and derivative works that comment on or otherwise explain
+     it or assist in its implementation may be prepared, copied,
+     published and distributed, in whole or in part, without restriction
+     of any kind, provided that the above copyright notice and this
+     paragraph are included on all such copies and derivative works.
+     However, this document itself may not be modified in any way, such
+     as by removing the copyright notice or references to the Scheme
+     Request For Implementation process or editors, except as needed for
+     the purpose of developing SRFIs in which case the procedures for
+     copyrights defined in the SRFI process must be followed, or as
+     required to translate it into languages other than English.
+
+     The limited permissions granted above are perpetual and will not be
+     revoked by the authors or their successors or assigns.
+
+     This document and the information contained herein is provided on
+     an "AS IS" basis and THE AUTHOR AND THE SRFI EDITORS DISCLAIM ALL
+     WARRANTIES, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY
+     WARRANTY THAT THE USE OF THE INFORMATION HEREIN WILL NOT INFRINGE
+     ANY RIGHTS OR ANY IMPLIED WARRANTIES OF MERCHANTABILITY OR FITNESS
+     FOR A PARTICULAR PURPOSE.
+
+   This manual has quoted from SRFI-69 (Basic hash tables), which is
+Copyright (C) Panu Kalliokoski (2005). All Rights Reserved.
+
+   The following notice applies to SRFI-69, which are quoted in this
+manual, but it does not apply to the manual as a whole:
+
+     Permission is hereby granted, free of charge, to any person
+     obtaining a copy of this software and associated documentation
+     files (the Software), to deal in the Software without restriction,
+     including without limitation the rights to use, copy, modify,
+     merge, publish, distribute, sublicense, and/or sell copies of the
+     Software, and to permit persons to whom the Software is furnished
+     to do so, subject to the following conditions:
+
+     The above copyright notice and this permission notice shall be
+     included in all copies or substantial portions of the Software.
+
+     THE SOFTWARE IS PROVIDED AS IS, WITHOUT WARRANTY OF ANY KIND,
+     EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+     MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+     NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+     BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+     ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+     CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+     SOFTWARE.
+
+   This manual has made use text and examples from Dorai Sitaram's
+`pregexp' implementation.  But not where the latter talks about
+`pregexp-xxx' functions the manual also also talks about the `regex-xxx'
+functions (which are are similar but use a slight different regular
+expression syntax).  The `pregexp' distribution has the following
+`COPYING' file:
+     Copyright (c) 1999-2005, Dorai Sitaram.  All rights reserved.
+
+     Permission to copy, modify, distribute, and use this work or a
+     modified copy of this work, for any purpose, is hereby granted,
+     provided that the copy includes this copyright notice, and in the
+     case of a modified copy, also includes a notice of modification.
+     This work is provided as is, with no warranty of any kind.
+
+
+File: kawa.info,  Node: Overall Index,  Prev: License,  Up: Top
+
+Index
+*****
+
+ [index ]
+* Menu:
+
+* #!eof:                                 Special named constants.
+                                                              (line  18)
+* #!key:                                 Special named constants.
+                                                              (line  14)
+* #!null:                                Special named constants.
+                                                              (line  30)
+* #!optional:                            Special named constants.
+                                                              (line   6)
+* #!rest:                                Special named constants.
+                                                              (line  10)
+* #!void:                                Special named constants.
+                                                              (line  26)
+* *:                                     Arithmetic operations.
+                                                              (line   7)
+* *print-base*:                          Ports.               (line 151)
+* *print-miser-width*:                   Ports.               (line 169)
+* *print-radix*:                         Ports.               (line 157)
+* *print-right-margin*:                  Ports.               (line 166)
+* +:                                     Arithmetic operations.
+                                                              (line   6)
+* -:                                     Arithmetic operations.
+                                                              (line  46)
+* - <1>:                                 Arithmetic operations.
+                                                              (line  47)
+* /:                                     Arithmetic operations.
+                                                              (line  67)
+* / <1>:                                 Arithmetic operations.
+                                                              (line  68)
+* <f32vector>:                           Uniform vectors.     (line  46)
+* <f64vector>:                           Uniform vectors.     (line  50)
+* <s16vector>:                           Uniform vectors.     (line  19)
+* <s32vector>:                           Uniform vectors.     (line  28)
+* <s64vector>:                           Uniform vectors.     (line  37)
+* <s8vector>:                            Uniform vectors.     (line  10)
+* <u16vector>:                           Uniform vectors.     (line  23)
+* <u32vector>:                           Uniform vectors.     (line  32)
+* <u64vector>:                           Uniform vectors.     (line  41)
+* <u8vector>:                            Uniform vectors.     (line  14)
+* –no-warn-whatever:                     Compilation options. (line  22)
+* –warn-whatever:                        Compilation options. (line  22)
+* abbrev-prefix:                         Datum syntax.        (line  31)
+* abbreviation:                          Datum syntax.        (line  30)
+* abs:                                   Arithmetic operations.
+                                                              (line 177)
+* acos:                                  Arithmetic operations.
+                                                              (line 286)
+* alist->hash-table:                     Hash tables.         (line 253)
+* apos-attribute-datum:                  XML literals.        (line 107)
+* apply:                                 Procedures.          (line   6)
+* arg-with-default:                      Extended formals.    (line  22)
+* arithmetic-shift:                      Logical Number Operations.
+                                                              (line 207)
+* array:                                 Arrays.              (line  44)
+* array-end:                             Arrays.              (line  60)
+* array-rank:                            Arrays.              (line  49)
+* array-ref:                             Arrays.              (line  63)
+* array-ref <1>:                         Arrays.              (line  64)
+* array-set!:                            Arrays.              (line  85)
+* array-set! <1>:                        Arrays.              (line  86)
+* array-start:                           Arrays.              (line  57)
+* array?:                                Arrays.              (line  20)
+* as:                                    Type tests and conversions.
+                                                              (line  22)
+* as-xml:                                Formatting XML.      (line  45)
+* ash:                                   Logical Number Operations.
+                                                              (line 210)
+* asin:                                  Arithmetic operations.
+                                                              (line 285)
+* atan:                                  Arithmetic operations.
+                                                              (line 287)
+* atan <1>:                              Arithmetic operations.
+                                                              (line 288)
+* atmosphere:                            Lexical syntax.      (line  75)
+* attribute-name:                        Creating XML nodes.  (line  41)
+* base-uri:                              Eval and Environments.
+                                                              (line  49)
+* bit-extract:                           Logical Number Operations.
+                                                              (line 213)
+* bitwise-and:                           Logical Number Operations.
+                                                              (line  15)
+* bitwise-arithmetic-shift:              Logical Number Operations.
+                                                              (line 120)
+* bitwise-arithmetic-shift-left:         Logical Number Operations.
+                                                              (line 133)
+* bitwise-arithmetic-shift-right:        Logical Number Operations.
+                                                              (line 134)
+* bitwise-bit-count:                     Logical Number Operations.
+                                                              (line  36)
+* bitwise-bit-field:                     Logical Number Operations.
+                                                              (line  89)
+* bitwise-bit-set?:                      Logical Number Operations.
+                                                              (line  68)
+* bitwise-copy-bit:                      Logical Number Operations.
+                                                              (line  78)
+* bitwise-copy-bit-field:                Logical Number Operations.
+                                                              (line 100)
+* bitwise-first-bit-set:                 Logical Number Operations.
+                                                              (line  60)
+* bitwise-if:                            Logical Number Operations.
+                                                              (line  25)
+* bitwise-ior:                           Logical Number Operations.
+                                                              (line  16)
+* bitwise-length:                        Logical Number Operations.
+                                                              (line  43)
+* bitwise-not:                           Logical Number Operations.
+                                                              (line   9)
+* bitwise-reverse-bit-field:             Logical Number Operations.
+                                                              (line 162)
+* bitwise-rotate-bit-field:              Logical Number Operations.
+                                                              (line 140)
+* bitwise-xor:                           Logical Number Operations.
+                                                              (line  17)
+* call-with-input-string:                Ports.               (line  50)
+* call-with-output-string:               Ports.               (line  55)
+* call-with-values:                      Multiple values.     (line  11)
+* catch:                                 Exceptions.          (line   6)
+* ceiling:                               Arithmetic operations.
+                                                              (line 207)
+* char->integer:                         Characters.          (line  38)
+* char-alphabetic?:                      Unicode.             (line  93)
+* char-ci<=?:                            Unicode.             (line  84)
+* char-ci<?:                             Unicode.             (line  82)
+* char-ci=?:                             Unicode.             (line  81)
+* char-ci>=?:                            Unicode.             (line  85)
+* char-ci>?:                             Unicode.             (line  83)
+* char-downcase:                         Unicode.             (line  14)
+* char-foldcase:                         Unicode.             (line  16)
+* char-general-category:                 Unicode.             (line 120)
+* char-lower-case?:                      Unicode.             (line  97)
+* char-numeric?:                         Unicode.             (line  94)
+* char-title-case?:                      Unicode.             (line  98)
+* char-titlecase:                        Unicode.             (line  15)
+* char-upcase:                           Unicode.             (line  13)
+* char-upper-case?:                      Unicode.             (line  96)
+* char-whitespace?:                      Unicode.             (line  95)
+* char<=?:                               Characters.          (line  54)
+* char<?:                                Characters.          (line  52)
+* char=?:                                Characters.          (line  51)
+* char>=?:                               Characters.          (line  55)
+* char>?:                                Characters.          (line  53)
+* char?:                                 Characters.          (line  35)
+* character:                             Standard Types.      (line  67)
+* character-except-vbar:                 Lexical syntax.      (line 142)
+* character-except-x:                    Lexical syntax.      (line 143)
+* child-value:                           Allocating objects.  (line  76)
+* class-methods:                         Method operations.   (line 210)
+* command-line:                          Processes.           (line   6)
+* command-line-arguments:                Processes.           (line  13)
+* command-parse:                         Processes.           (line  60)
+* comment:                               Lexical syntax.      (line  68)
+* comment <1>:                           Creating XML nodes.  (line  44)
+* comment <2>:                           Creating XML nodes.  (line  49)
+* comment-cont:                          Lexical syntax.      (line  74)
+* comment-text:                          Lexical syntax.      (line  73)
+* compile-file:                          Archive compilation. (line   6)
+* complex:                               Standard Types.      (line  29)
+* compound-datum:                        Datum syntax.        (line  26)
+* cond-expand:                           Syntax and conditional compilation.
+                                                              (line  56)
+* cond-expand-clause:                    Syntax and conditional compilation.
+                                                              (line  59)
+* constant-fold:                         Procedures.          (line  13)
+* constituent:                           Lexical syntax.      (line 123)
+* constructor-value:                     Allocating objects.  (line  74)
+* copy-file:                             Files.               (line  32)
+* cos:                                   Arithmetic operations.
+                                                              (line 283)
+* create-directory:                      Files.               (line  36)
+* current-error-port:                    Ports.               (line   6)
+* current-servlet:                       Servlets.            (line 149)
+* current-servlet-config:                Servlets.            (line 157)
+* current-servlet-context:               Servlets.            (line 153)
+* cut:                                   Extended formals.    (line  69)
+* cute:                                  Extended formals.    (line 109)
+* datum:                                 Datum syntax.        (line  13)
+* default-prompter:                      Ports.               (line  79)
+* define:                                Declaring Types of Variables.
+                                                              (line  17)
+* define-alias:                          Locations.           (line  56)
+* define-base-unit:                      Quantities.          (line  37)
+* define-class:                          Defining new classes.
+                                                              (line  20)
+* define-constant:                       Module classes.      (line  73)
+* define-enum:                           Enumerations.        (line  32)
+* define-macro:                          Syntax and conditional compilation.
+                                                              (line  20)
+* define-namespace:                      Namespaces.          (line 126)
+* define-private:                        Module classes.      (line  69)
+* define-private <1>:                    Module classes.      (line  70)
+* define-private-namespace:              Namespaces.          (line 166)
+* define-procedure:                      Procedure properties.
+                                                              (line  34)
+* define-record-type:                    Record types.        (line  13)
+* define-simple-class:                   Defining new classes.
+                                                              (line  22)
+* define-syntax:                         Syntax and conditional compilation.
+                                                              (line   8)
+* define-syntax-case:                    Syntax and conditional compilation.
+                                                              (line  11)
+* define-unit:                           Quantities.          (line  43)
+* define-variable:                       Module classes.      (line  81)
+* define-xml-namespace:                  Namespaces.          (line 191)
+* defined-datum:                         Datum syntax.        (line  18)
+* defining-datum:                        Datum syntax.        (line  17)
+* defmacro:                              Syntax and conditional compilation.
+                                                              (line  23)
+* delete-file:                           Files.               (line  26)
+* delimiter:                             Lexical syntax.      (line  40)
+* denominator:                           Arithmetic operations.
+                                                              (line 196)
+* digit:                                 Lexical syntax.      (line 132)
+* disassemble:                           Debugging.           (line  36)
+* div:                                   Arithmetic operations.
+                                                              (line  93)
+* div-and-mod:                           Arithmetic operations.
+                                                              (line  95)
+* div0:                                  Arithmetic operations.
+                                                              (line 122)
+* div0-and-mod0:                         Arithmetic operations.
+                                                              (line 124)
+* dynamic-wind:                          Exceptions.          (line  70)
+* element-name:                          Creating XML nodes.  (line  34)
+* environment-bound?:                    Eval and Environments.
+                                                              (line  37)
+* equal-hash:                            Hash tables.         (line 193)
+* error:                                 Exceptions.          (line  31)
+* error-response:                        HTTP response.       (line  29)
+* escape-sequence:                       Lexical syntax.      (line 136)
+* eval:                                  Eval and Environments.
+                                                              (line   6)
+* exit:                                  Processes.           (line  37)
+* exp:                                   Arithmetic operations.
+                                                              (line 279)
+* expand:                                Syntax and conditional compilation.
+                                                              (line 107)
+* f32vector:                             Uniform vectors.     (line  88)
+* f32vector->list:                       Uniform vectors.     (line 139)
+* f32vector-length:                      Uniform vectors.     (line 102)
+* f32vector-ref:                         Uniform vectors.     (line 114)
+* f32vector-set!:                        Uniform vectors.     (line 126)
+* f32vector?:                            Uniform vectors.     (line  62)
+* f64vector:                             Uniform vectors.     (line  89)
+* f64vector->list:                       Uniform vectors.     (line 140)
+* f64vector-length:                      Uniform vectors.     (line 103)
+* f64vector-ref:                         Uniform vectors.     (line 115)
+* f64vector-set!:                        Uniform vectors.     (line 127)
+* f64vector?:                            Uniform vectors.     (line  63)
+* feature-identifier:                    Syntax and conditional compilation.
+                                                              (line  64)
+* feature-requirement:                   Syntax and conditional compilation.
+                                                              (line  60)
+* fff-rec:                               Syntax and conditional compilation.
+                                                              (line  60)
+* field:                                 Field operations.    (line  55)
+* field-decl:                            Defining new classes.
+                                                              (line  89)
+* field-decl <1>:                        Anonymous classes.   (line  11)
+* field-or-method-decl:                  Defining new classes.
+                                                              (line  26)
+* field-or-method-decl <1>:              Anonymous classes.   (line  10)
+* file-directory?:                       Files.               (line  11)
+* file-exists?:                          Files.               (line   6)
+* file-readable?:                        Files.               (line  17)
+* file-writable?:                        Files.               (line  21)
+* filepath:                              Paths.               (line  34)
+* filepath?:                             Paths.               (line  38)
+* floor:                                 Arithmetic operations.
+                                                              (line 206)
+* fluid-let:                             Eval and Environments.
+                                                              (line  41)
+* force:                                 Threads.             (line  14)
+* force-output:                          Ports.               (line  60)
+* formal-arguments:                      Extended formals.    (line  15)
+* formals:                               Extended formals.    (line  12)
+* format:                                Format.              (line   6)
+* future:                                Threads.             (line  11)
+* gcd:                                   Arithmetic operations.
+                                                              (line 183)
+* gentemp:                               Syntax and conditional compilation.
+                                                              (line  50)
+* get-output-string:                     Ports.               (line  45)
+* get-request:                           Servlets.            (line 160)
+* get-response:                          Servlets.            (line 164)
+* Glassfish:                             Servlets.            (line 109)
+* hash:                                  Hash tables.         (line 387)
+* hash-by-identity:                      Hash tables.         (line 409)
+* hash-table->alist:                     Hash tables.         (line 357)
+* hash-table-copy:                       Hash tables.         (line 370)
+* hash-table-delete!:                    Hash tables.         (line 297)
+* hash-table-equivalence-function:       Hash tables.         (line 268)
+* hash-table-exists?:                    Hash tables.         (line 304)
+* hash-table-fold:                       Hash tables.         (line 347)
+* hash-table-hash-function:              Hash tables.         (line 271)
+* hash-table-keys:                       Hash tables.         (line 330)
+* hash-table-merge!:                     Hash tables.         (line 374)
+* hash-table-ref:                        Hash tables.         (line 277)
+* hash-table-ref/default:                Hash tables.         (line 285)
+* hash-table-set!:                       Hash tables.         (line 291)
+* hash-table-size:                       Hash tables.         (line 326)
+* hash-table-update!:                    Hash tables.         (line 310)
+* hash-table-update!/default:            Hash tables.         (line 318)
+* hash-table-values:                     Hash tables.         (line 334)
+* hash-table-walk:                       Hash tables.         (line 339)
+* hash-table?:                           Hash tables.         (line 250)
+* hashtable-clear!:                      Hash tables.         (line 143)
+* hashtable-clear! <1>:                  Hash tables.         (line 144)
+* hashtable-contains?:                   Hash tables.         (line 114)
+* hashtable-copy:                        Hash tables.         (line 137)
+* hashtable-copy <1>:                    Hash tables.         (line 138)
+* hashtable-delete!:                     Hash tables.         (line 110)
+* hashtable-entries:                     Hash tables.         (line 155)
+* hashtable-equivalence-function:        Hash tables.         (line 173)
+* hashtable-hash-function:               Hash tables.         (line 178)
+* hashtable-keys:                        Hash tables.         (line 151)
+* hashtable-mutable?:                    Hash tables.         (line 182)
+* hashtable-ref:                         Hash tables.         (line 101)
+* hashtable-set!:                        Hash tables.         (line 105)
+* hashtable-size:                        Hash tables.         (line  97)
+* hashtable-update!:                     Hash tables.         (line 118)
+* hashtable?:                            Hash tables.         (line  94)
+* hex-digit:                             Lexical syntax.      (line 133)
+* hex-scalar-value:                      Lexical syntax.      (line 140)
+* home-directory:                        Miscellaneous.       (line   9)
+* html::                                 Creating HTML nodes. (line  11)
+* identifier:                            Lexical syntax.      (line 117)
+* include:                               Syntax and conditional compilation.
+                                                              (line  98)
+* include-relative:                      Syntax and conditional compilation.
+                                                              (line 103)
+* indexnum:                              Datum syntax.        (line  21)
+* initial:                               Lexical syntax.      (line 119)
+* inline-hex-escape:                     Lexical syntax.      (line 139)
+* input-port:                            Standard Types.      (line  78)
+* input-port-column-number:              Ports.               (line 110)
+* input-port-line-number:                Ports.               (line 101)
+* input-port-prompter:                   Ports.               (line  71)
+* input-port-read-state:                 Ports.               (line 115)
+* instance?:                             Type tests and conversions.
+                                                              (line  18)
+* integer:                               Standard Types.      (line  38)
+* integer->char:                         Characters.          (line  39)
+* integer-length:                        Logical Number Operations.
+                                                              (line 201)
+* interaction-environment:               Eval and Environments.
+                                                              (line  32)
+* interlexeme-space:                     Lexical syntax.      (line  76)
+* invoke:                                Method operations.   (line 147)
+* invoke-special:                        Method operations.   (line 183)
+* invoke-static:                         Method operations.   (line 120)
+* key-arg:                               Extended formals.    (line  21)
+* keyword:                               Keywords.            (line  10)
+* keyword <1>:                           Standard Types.      (line  48)
+* keyword->string:                       Keywords.            (line  19)
+* keyword?:                              Keywords.            (line  16)
+* lambda-expression:                     Extended formals.    (line  10)
+* lcm:                                   Arithmetic operations.
+                                                              (line 184)
+* let:                                   Declaring Types of Variables.
+                                                              (line   6)
+* let*:                                  Declaring Types of Variables.
+                                                              (line  13)
+* let*-values:                           Multiple values.     (line  40)
+* let-values:                            Multiple values.     (line  16)
+* letrec:                                Declaring Types of Variables.
+                                                              (line  15)
+* letter:                                Lexical syntax.      (line 121)
+* lexeme:                                Lexical syntax.      (line  35)
+* lexeme-datum:                          Datum syntax.        (line  23)
+* line ending:                           Lexical syntax.      (line  65)
+* list:                                  Datum syntax.        (line  27)
+* list <1>:                              Standard Types.      (line  51)
+* list->f32vector:                       Uniform vectors.     (line 151)
+* list->f64vector:                       Uniform vectors.     (line 152)
+* list->s16vector:                       Uniform vectors.     (line 145)
+* list->s32vector:                       Uniform vectors.     (line 147)
+* list->s64vector:                       Uniform vectors.     (line 149)
+* list->s8vector:                        Uniform vectors.     (line 143)
+* list->string:                          Strings.             (line  78)
+* list->u16vector:                       Uniform vectors.     (line 146)
+* list->u32vector:                       Uniform vectors.     (line 148)
+* list->u64vector:                       Uniform vectors.     (line 150)
+* list->u8vector:                        Uniform vectors.     (line 144)
+* load:                                  Eval and Environments.
+                                                              (line  59)
+* load-relative:                         Eval and Environments.
+                                                              (line  65)
+* location:                              Locations.           (line  41)
+* log:                                   Arithmetic operations.
+                                                              (line 280)
+* log <1>:                               Arithmetic operations.
+                                                              (line 281)
+* logand:                                Logical Number Operations.
+                                                              (line 187)
+* logbit?:                               Logical Number Operations.
+                                                              (line 204)
+* logcount:                              Logical Number Operations.
+                                                              (line 196)
+* logior:                                Logical Number Operations.
+                                                              (line 190)
+* lognot:                                Logical Number Operations.
+                                                              (line 184)
+* logop:                                 Logical Number Operations.
+                                                              (line 170)
+* logtest:                               Logical Number Operations.
+                                                              (line 174)
+* logxor:                                Logical Number Operations.
+                                                              (line 193)
+* make:                                  Allocating objects.  (line 148)
+* make-array:                            Arrays.              (line  37)
+* make-array <1>:                        Arrays.              (line  38)
+* make-attribute:                        Creating XML nodes.  (line  37)
+* make-element:                          Creating XML nodes.  (line  16)
+* make-eq-hashtable:                     Hash tables.         (line  49)
+* make-eq-hashtable <1>:                 Hash tables.         (line  50)
+* make-eqv-hashtable:                    Hash tables.         (line  56)
+* make-eqv-hashtable <1>:                Hash tables.         (line  57)
+* make-f32vector:                        Uniform vectors.     (line  74)
+* make-f64vector:                        Uniform vectors.     (line  75)
+* make-hash-table:                       Hash tables.         (line 227)
+* make-hashtable:                        Hash tables.         (line  63)
+* make-hashtable <1>:                    Hash tables.         (line  64)
+* make-parameter:                        Parameter objects.   (line  47)
+* make-procedure:                        Generic procedures.  (line  20)
+* make-process:                          Processes.           (line  44)
+* make-quantity:                         Quantities.          (line  33)
+* make-record-type:                      Dynamic records.     (line  11)
+* make-s16vector:                        Uniform vectors.     (line  68)
+* make-s32vector:                        Uniform vectors.     (line  70)
+* make-s64vector:                        Uniform vectors.     (line  72)
+* make-s8vector:                         Uniform vectors.     (line  66)
+* make-string:                           Strings.             (line  22)
+* make-string <1>:                       Strings.             (line  23)
+* make-temporary-file:                   Files.               (line  45)
+* make-u16vector:                        Uniform vectors.     (line  69)
+* make-u32vector:                        Uniform vectors.     (line  71)
+* make-u64vector:                        Uniform vectors.     (line  73)
+* make-u8vector:                         Uniform vectors.     (line  67)
+* method-decl:                           Defining new classes.
+                                                              (line 152)
+* method-decl <1>:                       Anonymous classes.   (line  13)
+* mod:                                   Arithmetic operations.
+                                                              (line  94)
+* mod0:                                  Arithmetic operations.
+                                                              (line 123)
+* module-compile-options:                Compilation options. (line  58)
+* module-export:                         Module classes.      (line  49)
+* module-extends:                        Module classes.      (line 123)
+* module-implements:                     Module classes.      (line 127)
+* module-name:                           Module classes.      (line 114)
+* module-static:                         Module classes.      (line 176)
+* module-static <1>:                     Module classes.      (line 177)
+* module-static <2>:                     Module classes.      (line 178)
+* module-static <3>:                     Module classes.      (line 179)
+* module-uri:                            Resources.           (line  22)
+* modulo:                                Arithmetic operations.
+                                                              (line 166)
+* multi-escape-sequence:                 Lexical syntax.      (line 141)
+* namespace:                             Namespaces.          (line  38)
+* namespace-prefix:                      Namespaces.          (line  59)
+* namespace-uri:                         Namespaces.          (line  56)
+* nested-comment:                        Lexical syntax.      (line  72)
+* nondefining-datum:                     Datum syntax.        (line  19)
+* null-environment:                      Eval and Environments.
+                                                              (line  13)
+* number:                                Standard Types.      (line  22)
+* numerator:                             Arithmetic operations.
+                                                              (line 195)
+* Object:                                Standard Types.      (line  19)
+* object:                                Anonymous classes.   (line   6)
+* open-input-string:                     Ports.               (line  19)
+* open-output-string:                    Ports.               (line  33)
+* opt-arg:                               Extended formals.    (line  20)
+* option-pair:                           Defining new classes.
+                                                              (line  25)
+* options:                               Options.             (line   5)
+* output-port:                           Standard Types.      (line  81)
+* pair:                                  Standard Types.      (line  55)
+* parameterize:                          Parameter objects.   (line  89)
+* parse-format:                          Format.              (line  26)
+* path:                                  Paths.               (line  14)
+* path <1>:                              Paths.               (line  22)
+* path-authority:                        Paths.               (line  68)
+* path-directory:                        Paths.               (line 105)
+* path-extension:                        Paths.               (line 136)
+* path-file:                             Paths.               (line  96)
+* path-fragment:                         Paths.               (line 149)
+* path-host:                             Paths.               (line  75)
+* path-last:                             Paths.               (line 125)
+* path-parent:                           Paths.               (line 117)
+* path-port:                             Paths.               (line  87)
+* path-query:                            Paths.               (line 142)
+* path-scheme:                           Paths.               (line  61)
+* path-user-info:                        Paths.               (line  81)
+* path?:                                 Paths.               (line  31)
+* peculiar-identifier:                   Lexical syntax.      (line 144)
+* port-char-encoding:                    Ports.               (line 132)
+* port-column:                           Ports.               (line  86)
+* port-line:                             Ports.               (line  87)
+* primitive-array-get:                   Low-level array macros.
+                                                              (line  22)
+* primitive-array-length:                Low-level array macros.
+                                                              (line  28)
+* primitive-array-new:                   Low-level array macros.
+                                                              (line  10)
+* primitive-array-set:                   Low-level array macros.
+                                                              (line  15)
+* primitive-constructor:                 Low-level Method invocation.
+                                                              (line  11)
+* primitive-get-field:                   Low-level Field operations.
+                                                              (line  16)
+* primitive-get-static:                  Low-level Field operations.
+                                                              (line  31)
+* primitive-interface-method:            Low-level Method invocation.
+                                                              (line  26)
+* primitive-set-field:                   Low-level Field operations.
+                                                              (line  22)
+* primitive-set-static:                  Low-level Field operations.
+                                                              (line  36)
+* primitive-static-method:               Low-level Method invocation.
+                                                              (line  21)
+* primitive-throw:                       Exceptions.          (line  38)
+* primitive-virtual-method:              Low-level Method invocation.
+                                                              (line  16)
+* procedure:                             Standard Types.      (line  75)
+* procedure-property:                    Procedure properties.
+                                                              (line  15)
+* process-command-line-assignments:      Processes.           (line  18)
+* processing-instruction:                Creating XML nodes.  (line  52)
+* processing-instruction <1>:            Creating XML nodes.  (line  57)
+* property-initializer:                  Allocating objects.  (line  75)
+* provide:                               Module classes.      (line 259)
+* QName:                                 XML literals.        (line 123)
+* quantity:                              Standard Types.      (line  25)
+* quantity->number:                      Quantities.          (line  24)
+* quantity->unit:                        Quantities.          (line  29)
+* quantity?:                             Quantities.          (line  18)
+* quot-attribute-datum:                  XML literals.        (line 104)
+* quotient:                              Arithmetic operations.
+                                                              (line 149)
+* rational:                              Standard Types.      (line  35)
+* rationalize:                           Arithmetic operations.
+                                                              (line 253)
+* read-line:                             Ports.               (line  10)
+* real:                                  Standard Types.      (line  32)
+* receive:                               Multiple values.     (line  56)
+* record-accessor:                       Dynamic records.     (line  38)
+* record-constructor:                    Dynamic records.     (line  20)
+* record-modifier:                       Dynamic records.     (line  47)
+* record-predicate:                      Dynamic records.     (line  32)
+* record-type-descriptor:                Dynamic records.     (line  62)
+* record-type-field-names:               Dynamic records.     (line  74)
+* record-type-name:                      Dynamic records.     (line  68)
+* record?:                               Dynamic records.     (line  58)
+* regex:                                 Regular expressions. (line  56)
+* regex <1>:                             Regular expressions. (line  60)
+* regex-match:                           Regular expressions. (line 147)
+* regex-match-positions:                 Regular expressions. (line 112)
+* regex-quote:                           Regular expressions. (line 214)
+* regex-split:                           Regular expressions. (line 159)
+* regex‑replace:                         Regular expressions. (line 187)
+* regex‑replace*:                        Regular expressions. (line 204)
+* remainder:                             Arithmetic operations.
+                                                              (line 153)
+* rename-file:                           Files.               (line  29)
+* req-arg:                               Extended formals.    (line  19)
+* req-opt-args:                          Extended formals.    (line  17)
+* request-body-string:                   HTTP requests.       (line 136)
+* request-context-path:                  HTTP requests.       (line  50)
+* request-header:                        HTTP requests.       (line 114)
+* request-header-map:                    HTTP requests.       (line 120)
+* request-input-port:                    HTTP requests.       (line 128)
+* request-input-stream:                  HTTP requests.       (line 132)
+* request-local-host:                    HTTP requests.       (line 149)
+* request-local-IP-address:              HTTP requests.       (line 152)
+* request-local-path:                    HTTP requests.       (line  67)
+* request-local-port:                    HTTP requests.       (line 158)
+* request-local-socket-address:          HTTP requests.       (line 145)
+* request-method:                        HTTP requests.       (line 191)
+* request-parameter:                     HTTP requests.       (line  87)
+* request-parameter-map:                 HTTP requests.       (line 103)
+* request-parameters:                    HTTP requests.       (line  95)
+* request-path:                          HTTP requests.       (line  29)
+* request-path-info:                     Servlets.            (line 173)
+* request-path-translated:               HTTP requests.       (line 186)
+* request-query-string:                  HTTP requests.       (line  73)
+* request-remote-host:                   HTTP requests.       (line 171)
+* request-remote-IP-address:             HTTP requests.       (line 174)
+* request-remote-port:                   HTTP requests.       (line 180)
+* request-remote-socket-address:         HTTP requests.       (line 166)
+* request-scheme:                        HTTP requests.       (line 195)
+* request-script-path:                   HTTP requests.       (line  57)
+* request-servlet-path:                  Servlets.            (line 168)
+* request-URI:                           HTTP requests.       (line  19)
+* request-uri:                           HTTP requests.       (line  40)
+* request-url:                           HTTP requests.       (line  44)
+* require:                               Module classes.      (line 230)
+* resolve-uri:                           Paths.               (line 156)
+* resource-url:                          Resources.           (line  12)
+* response-content-type:                 HTTP response.       (line  24)
+* response-header:                       HTTP response.       (line  18)
+* response-status:                       HTTP response.       (line  38)
+* rest-arg:                              Extended formals.    (line  24)
+* rest-key-args:                         Extended formals.    (line  18)
+* reverse!:                              Lists.               (line  12)
+* round:                                 Arithmetic operations.
+                                                              (line 209)
+* runnable:                              Threads.             (line  19)
+* s16vector:                             Uniform vectors.     (line  82)
+* s16vector->list:                       Uniform vectors.     (line 133)
+* s16vector-length:                      Uniform vectors.     (line  96)
+* s16vector-ref:                         Uniform vectors.     (line 108)
+* s16vector-set!:                        Uniform vectors.     (line 120)
+* s16vector?:                            Uniform vectors.     (line  56)
+* s32vector:                             Uniform vectors.     (line  84)
+* s32vector->list:                       Uniform vectors.     (line 135)
+* s32vector-length:                      Uniform vectors.     (line  98)
+* s32vector-ref:                         Uniform vectors.     (line 110)
+* s32vector-set!:                        Uniform vectors.     (line 122)
+* s32vector?:                            Uniform vectors.     (line  58)
+* s64vector:                             Uniform vectors.     (line  86)
+* s64vector->list:                       Uniform vectors.     (line 137)
+* s64vector-length:                      Uniform vectors.     (line 100)
+* s64vector-ref:                         Uniform vectors.     (line 112)
+* s64vector-set!:                        Uniform vectors.     (line 124)
+* s64vector?:                            Uniform vectors.     (line  60)
+* s8vector:                              Uniform vectors.     (line  80)
+* s8vector->list:                        Uniform vectors.     (line 131)
+* s8vector-length:                       Uniform vectors.     (line  94)
+* s8vector-ref:                          Uniform vectors.     (line 106)
+* s8vector-set!:                         Uniform vectors.     (line 118)
+* s8vector?:                             Uniform vectors.     (line  54)
+* scheme-implementation-version:         Miscellaneous.       (line   6)
+* scheme-report-environment:             Eval and Environments.
+                                                              (line  21)
+* scheme-window:                         Miscellaneous.       (line  12)
+* Scheme.eval:                           Evaluating Scheme expressions from Java.
+                                                              (line  14)
+* Scheme.eval <1>:                       Evaluating Scheme expressions from Java.
+                                                              (line  20)
+* Scheme.eval <2>:                       Evaluating Scheme expressions from Java.
+                                                              (line  26)
+* Scheme.registerEnvironment:            Evaluating Scheme expressions from Java.
+                                                              (line  10)
+* servlet-context-realpath:              Servlets.            (line 177)
+* set-input-port-line-number!:           Ports.               (line 106)
+* set-input-port-prompter!:              Ports.               (line  74)
+* set-port-line!:                        Ports.               (line  98)
+* set-procedure-property!:               Procedure properties.
+                                                              (line  20)
+* setter:                                Locations.           (line  25)
+* shape:                                 Arrays.              (line  23)
+* share-array:                           Arrays.              (line  99)
+* sin:                                   Arithmetic operations.
+                                                              (line 282)
+* sleep:                                 Threads.             (line  25)
+* slot-ref:                              Field operations.    (line  84)
+* slot-set!:                             Field operations.    (line  87)
+* special-initial:                       Lexical syntax.      (line 127)
+* special-subsequent:                    Lexical syntax.      (line 135)
+* sqrt:                                  Arithmetic operations.
+                                                              (line 317)
+* static-field:                          Field operations.    (line  69)
+* string:                                Strings.             (line  28)
+* string <1>:                            Standard Types.      (line  58)
+* String:                                Standard Types.      (line  84)
+* string->keyword:                       Keywords.            (line  23)
+* string->list:                          Strings.             (line  77)
+* string->symbol:                        Simple symbols.      (line  29)
+* string-append:                         Strings.             (line  73)
+* string-capitalize!:                    Unicode.             (line 241)
+* string-ci-hash:                        Hash tables.         (line 206)
+* string-ci-hash <1>:                    Hash tables.         (line 403)
+* string-ci<=?:                          Unicode.             (line 200)
+* string-ci<?:                           Unicode.             (line 198)
+* string-ci=?:                           Unicode.             (line 197)
+* string-ci>=?:                          Unicode.             (line 201)
+* string-ci>?:                           Unicode.             (line 199)
+* string-copy:                           Strings.             (line  90)
+* string-downcase:                       Unicode.             (line 134)
+* string-downcase!:                      Unicode.             (line 237)
+* string-foldcase:                       Unicode.             (line 136)
+* string-hash:                           Hash tables.         (line 201)
+* string-hash <1>:                       Hash tables.         (line 398)
+* string-length:                         Strings.             (line  31)
+* string-normalize-nfc:                  Unicode.             (line 213)
+* string-normalize-nfd:                  Unicode.             (line 211)
+* string-normalize-nfkc:                 Unicode.             (line 214)
+* string-normalize-nfkd:                 Unicode.             (line 212)
+* string-ref:                            Strings.             (line  35)
+* string-titlecase:                      Unicode.             (line 135)
+* string-upcase:                         Unicode.             (line 133)
+* string-upcase!:                        Unicode.             (line 233)
+* string<=?:                             Strings.             (line  50)
+* string<?:                              Strings.             (line  48)
+* string=?:                              Strings.             (line  41)
+* string>=?:                             Strings.             (line  51)
+* string>?:                              Strings.             (line  49)
+* string?:                               Strings.             (line  19)
+* subsequent:                            Lexical syntax.      (line 129)
+* substring:                             Strings.             (line  63)
+* symbol:                                Datum syntax.        (line  25)
+* symbol <1>:                            Namespaces.          (line  70)
+* symbol <2>:                            Namespaces.          (line  71)
+* symbol <3>:                            Standard Types.      (line  42)
+* symbol->string:                        Simple symbols.      (line  22)
+* symbol-hash:                           Hash tables.         (line 211)
+* symbol-local-name:                     Namespaces.          (line  92)
+* symbol-namespace:                      Namespaces.          (line 105)
+* symbol-namespace-uri:                  Namespaces.          (line 101)
+* symbol-prefix:                         Namespaces.          (line  97)
+* symbol-read-case:                      Ports.               (line 123)
+* symbol=?:                              Namespaces.          (line 109)
+* symbol?:                               Simple symbols.      (line  12)
+* synchronized:                          Miscellaneous.       (line  33)
+* synchronized methods:                  Defining new classes.
+                                                              (line 257)
+* system:                                Processes.           (line  54)
+* system-tmpdir:                         Files.               (line  42)
+* tan:                                   Arithmetic operations.
+                                                              (line 284)
+* this:                                  Objects Classes and Modules.
+                                                              (line  29)
+* throw:                                 Exceptions.          (line  23)
+* tokenize-string-to-string-array:       Processes.           (line  68)
+* Tomcat:                                Servlets.            (line  84)
+* trace:                                 Debugging.           (line   6)
+* truncate:                              Arithmetic operations.
+                                                              (line 208)
+* try-catch:                             Exceptions.          (line  49)
+* try-finally:                           Exceptions.          (line  42)
+* u16vector:                             Uniform vectors.     (line  83)
+* u16vector->list:                       Uniform vectors.     (line 134)
+* u16vector-length:                      Uniform vectors.     (line  97)
+* u16vector-ref:                         Uniform vectors.     (line 109)
+* u16vector-set!:                        Uniform vectors.     (line 121)
+* u16vector?:                            Uniform vectors.     (line  57)
+* u32vector:                             Uniform vectors.     (line  85)
+* u32vector->list:                       Uniform vectors.     (line 136)
+* u32vector-length:                      Uniform vectors.     (line  99)
+* u32vector-ref:                         Uniform vectors.     (line 111)
+* u32vector-set!:                        Uniform vectors.     (line 123)
+* u32vector?:                            Uniform vectors.     (line  59)
+* u64vector:                             Uniform vectors.     (line  87)
+* u64vector->list:                       Uniform vectors.     (line 138)
+* u64vector-length:                      Uniform vectors.     (line 101)
+* u64vector-ref:                         Uniform vectors.     (line 113)
+* u64vector-set!:                        Uniform vectors.     (line 125)
+* u64vector?:                            Uniform vectors.     (line  61)
+* u8vector:                              Uniform vectors.     (line  81)
+* u8vector->list:                        Uniform vectors.     (line 132)
+* u8vector-length:                       Uniform vectors.     (line  95)
+* u8vector-ref:                          Uniform vectors.     (line 107)
+* u8vector-set!:                         Uniform vectors.     (line 119)
+* u8vector?:                             Uniform vectors.     (line  55)
+* unescaped-data:                        Formatting XML.      (line  54)
+* uniform-vector:                        Datum syntax.        (line  34)
+* unless:                                Miscellaneous.       (line  25)
+* untrace:                               Debugging.           (line  33)
+* URI:                                   Paths.               (line  42)
+* URI?:                                  Paths.               (line  50)
+* URL:                                   Paths.               (line  53)
+* values:                                Multiple values.     (line   8)
+* values-append:                         Multiple values.     (line  88)
+* vector:                                Datum syntax.        (line  33)
+* vector <1>:                            Standard Types.      (line  72)
+* vector-append:                         Miscellaneous.       (line  29)
+* warn-as-error:                         Compilation options. (line  42)
+* warn-invoke-unknown-method:            Compilation options. (line  28)
+* warn-undefined-variable:               Compilation options. (line  34)
+* warn-unknown-member:                   Compilation options. (line  22)
+* when:                                  Miscellaneous.       (line  21)
+* whitespace:                            Lexical syntax.      (line  61)
+* with-compile-options:                  Compilation options. (line  73)
+* xml-attribute:                         XML literals.        (line  99)
+* xml-attribute-value:                   XML literals.        (line 101)
+* xml-CDATA-constructor:                 XML literals.        (line 189)
+* xml-CDATA-content:                     XML literals.        (line 190)
+* xml-character-reference:               XML literals.        (line  82)
+* xml-comment-constructor:               XML literals.        (line 180)
+* xml-comment-content:                   XML literals.        (line 181)
+* xml-constructor:                       XML literals.        (line  23)
+* xml-element-constructor:               XML literals.        (line  31)
+* xml-element-datum:                     XML literals.        (line  74)
+* xml-enclosed-expression:               XML literals.        (line  37)
+* xml-escaped:                           XML literals.        (line  78)
+* xml-literal:                           XML literals.        (line  22)
+* xml-local-part:                        XML literals.        (line 125)
+* xml-name-form:                         XML literals.        (line  35)
+* xml-namespace-declaration-attribute:   XML literals.        (line 133)
+* xml-PI-constructor:                    XML literals.        (line 160)
+* xml-PI-content:                        XML literals.        (line 162)
+* xml-PI-target:                         XML literals.        (line 161)
+* xml-prefix:                            XML literals.        (line 126)
+

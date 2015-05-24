@@ -1,0 +1,1325 @@
+2010-11-04  Per Bothner  <per@bothner.com>
+
+	* Makefile.am (SCM_COMPILE_FLAGS): Change to use new
+	--warn-unknown-member flag.
+
+2010-10-15  Per Bothner  <per@bothner.com>
+
+	* numbers.scm (gcd, lcm):  Change args #!rest array from Object[]
+	to integer[], now that the latter works.
+
+	* numbers.scm (number->string): Set explicit return type as string.
+	Type inference depends on compilation order, which is bad.
+
+	* numbers.scm (odd?, even?): Remove functions.
+
+2010-08-28  Per Bothner  <per@bothner.com>
+
+	* syntax.scm (identifier-list?, identifier-pair-list? obj):
+	Specify that return types are boolean.
+
+2010-08-20  Per Bothner  <per@bothner.com>
+
+	* parameters.scm (parameterize%): Update since setWithSave/setRestore
+	no longer take CallContext argument.
+
+2010-07-23  Per Bothner  <per@bothner.com>
+
+	* kawa/hashtable.scm (class hashtable): Added toNodeList
+	and toNodeArray methods.
+
+2010-06-14  Per Bothner  <per@bothner.com>
+
+	* misc.scm (namespace-uri, namespace-prefix): New functions.
+
+2010-05-31  Per Bothner  <per@bothner.com>
+
+	* misc.scm (symbol=?, symbol-local-name, symbol-namespace,
+	symbol-namespace-uri, symbol-prefix): New functions.
+
+2010-05-19  Per Bothner  <per@bothner.com>
+
+	* misc.scm (namespace): Remove function; "namespace" is now a type
+	alias instead.
+
+	* misc.scm (namespace): Handle optional prefix argument.
+
+2010-05-07  Per Bothner  <per@bothner.com>
+
+	* system.scm (compile-file): Set Compilation#explicit.
+
+2010-04-10  Per Bothner  <per@bothner.com>
+
+	* rnrs/unicode.scm (string-normalize): Add a try-catch for a better
+	error when java.text.Normalizer is missing, in java6compat5 mode.
+
+	* misc.scm (force): Now just call kawa.lang.Promise:force,
+	to all for a conditional on JAVA5.
+
+2010-01-06  Per Bothner  <per@bothner.com>
+
+	* strings.scm:  Update some of the type specifiers to use the
+	new format, where separators before or after are uptional.
+	This is mainly for testing, but more will be changed later.
+
+2009-12-25  root  <per@bothner.com>
+
+	* std_syntax.scm (begin-for-syntax, define-for-syntax): New macros,
+	implemented by calling eval at macro-expansion time.
+	* prim_syntax.scm (define-for-syntax): Remove place-holder definition.
+
+2009-12-07  Per Bothner  <per@bothner.com>
+
+	* std_syntax.scm: Update for SyntaxForm made an interface.
+	* prim_syntax.java: Likewise.
+
+2009-12-06  Per Bothner  <per@bothner.com>
+
+	* syntax.scm (case-lambda): Build GenericProc without sorting the
+	methods for specificity.  This fixes Savannah bug #28022:
+	"case-lambda (srfi 16) not working with strings".
+	At the same time clean up to use #` and #' for syntax templates.
+
+2009-10-18  Per Bothner  <per@bothner.com>
+
+	* numbers.scm (bitwise-arithmetic-shift, bitwise-arithmetic-shift-left,
+	bitwise-arithmetic-shift-right, bitwise-not, bitwise-and, bitwise-ior,
+	bitwise-xor): Removed - now implemented by gnu.kawa.functions.BitwiseOp.
+
+2009-10-17  Per Bothner  <per@bothner.com>
+
+	* vectors.scm ($make$vector$): Remove no-longer used procedure.
+
+2009-10-09  Per Bothner  <per@bothner.com>
+
+	* std_syntax.scm (define-procedure): Use 'java.lang.Object' explicitly
+	rather than semi-ambiguous 'object'.
+
+2009-10-03  Per Bothner  <per@bothner.com>
+
+	* std_syntax.scm (do):  Re-write so we can handle type-specifiers
+	for mutliple variable clauses.
+
+	* std_syntax.scm (do):  Re-order parts of 'do' to avoid a goto
+	in generated code.
+
+2009-09-29  Per Bothner  <per@bothner.com>
+
+	* trace.scm (disassemble): New function.
+
+2009-09-20  Per Bothner  <per@bothner.com>
+
+	* rnrs/unicode.scm (string-normalize-nfd, string-normalize-nfkd,
+	string-normalize-nfc, string-normalize-nfkc): Compile as just stubs
+	if we don't have feature string-normalize-unicode.
+
+	* numbers.scm (quotient, remainder, module): These are now
+	implemented by DivideOp.
+	(div-and-mod, div0-and-mod0): New R6RS functions.
+
+	* numbers.scm (bitwise-copy-bit-field, bitwise-rotate-bit-field,
+	bitwise-if): Optimization, primarily inlining.
+
+	* numbers.scm (inexact, exact): New R6RS functions.
+	(exact->inexact, inexact->exact): Re-implement using new
+	Arithmetic.toInexact and Arithetic.toExact methods.
+
+2009-09-15  Per Bothner  <per@bothner.com>
+
+	* system.scm (process-command-line-assignments): New function.
+	* rnrs/programs.scm (exit): Make compatible with R6RS.
+	(command-line): Update for commandLineArgArray moved.
+
+2009-09-12  Per Bothner  <per@bothner.com>
+
+	* numbers.scm (number?): Say yes for any java.lang.Number.
+	(zero?, abs, magnitude, exact->inexact, inexact->exact):
+	Generalize to any java.lang.Number, not just Numeric.
+
+2009-09-11  Per Bothner  <per@bothner.com>
+
+	* numbers.scm (exact?, inexact?): Use Arithmetic.isExact.
+
+2009-08-27  Per Bothner  <per@bothner.com>
+
+	* rnrs/programs.scm (command-line): commandLineArgArray was moved
+	from kawa.repl to gnu.expr.ModuleBody.
+
+	* rnrs/programs.scm: New file, implements (rnrs library)
+	module.
+	* Makefile.am: Update accordingly.
+	* thread.scm (exit): Move to programs.scm.
+
+	Separation of syntax from runtime code.
+	* misc_syntax.scm: New file.
+	* Makefile.am: Update accordingly.
+	* misc.scm (provide, test-begin): Moved to misc_syntax.scm.
+	* files.scm (module-uri, resource-url, include, include-relative):
+	Likewise.
+
+2009-08-13  Per Bothner  <per@bothner.com>
+
+	Move some functions out of syntax*scm so the latter
+	can be kept out of kawart.jar.
+	* std_syntax.scm (add-procedure-properties): Move to misc.scm.
+	* syntax.scm (gentemp): Moved to misc.scm.
+	(catch): Moved to system.scm.
+	* system.scm (catch): Moved here.
+	* misc.scm (add-procedure-properties, gentemp): Moved here.
+	* ports.scm (define-alias-parameter): Moved to syntax.scm, since
+	it isn't needed for kawart.jar.
+	* syntax.scm (define-alias-parameter): Moved here.
+
+2009-07-04  Per Bothner  <per@bothner.com>
+
+	* std_syntax.scm (letrec): Move to prim_syntax.scm.
+	* prim_syntax.scm (letrec): Re-write to use syntax-case.  This allows
+	us to reverse the list of processed declarations, so they end up
+	in the correct order.  Also, some better error messages.
+
+2009-06-02  Per Bothner  <per@bothner.com>
+
+	* rnrs/unicode.scm: New module, implements (rnrs unicode) library.
+	* Makefile.am: Update acordingly.
+	* characters.scm: Move some functions rnrs/unicode.scm.
+	* strings.scm: Likewise.
+
+2009-05-30  Per Bothner  <per@bothner.com>
+
+	* kawa/regex.scm: New module.
+	* Makefile.am: Update accordingly.
+
+2009-03-17  Per Bothner  <per@bothner.com>
+
+	* kawa/hashtable.scm: Change Java class name to avoid name conflict
+	on Windows.
+
+2009-03-16  Per Bothner  <per@bothner.com>
+
+	* srfi95.scm: We require the vectors module.
+
+2009-03-15  Per Bothner  <per@bothner.com>
+
+	* kawa/hashtable.scm: New module, using code taken from srfi69.scm.
+	* rnrs/hashtables.scm: Implement R6RS (rnrs hashtables) library.
+	* Makefile.am: Update accordingly.
+
+2009-03-13  Per Bothner  <per@bothner.com>
+
+	* syntax.scm: Implement R6RS 'import' keyword.
+	* lists.scm, std_syntax.scm, syntax.scm: More some functons and macros
+	around so import can make use of what it needs.
+
+	* srfi95.scm: New SRFI-95 (sorting and merging) implementation,
+	based on the SRFI-95 public-domain reference implementation,
+	based on SLIB, by Richard A. O'Keefe and Aubrey Jaffer.
+	* rnrs/sorting.scm: New implementation of R6RS sorting library.
+	* Makefile.am: Update accordingly.
+
+2009-02-06  Per Bothner  <per@bothner.com>
+
+	* files.scm (resource-url): New function.
+	(resource-uri): Remove similarly-named function
+
+2008-10-24  Per Bothner  <per@bothner.com>
+
+	* numbers.scm: Don't require misc.scm, to avoid a cycle (ports
+	requires numbers requires misc requires numbers).
+	(bitwise-arithmetic-shift-left, bitwise-arithmetic-shift-right):
+	Inline call to error, to avoid a cycle.
+
+	* do.scm: Remove long-unused file.
+
+2008-07-17  Per Bothner  <per@bothner.com>
+
+	* numbers.scm: Implement R6RS bitwise- functions.
+	(arithmetic-shift): Rename to bitwise-arithmetic-shift.
+	(lognot): Rename to bitwise-not.
+	(logand): Rename to bitwise-and.
+	(logior): Rename to bitwise-ior.
+	(logxor): Rename to bitwise-xor.
+	(logbit?): Rename to bitwise-bit-set?.
+	(bit-extract): Rename to bitwise-bit-field.
+	(integer-length): Rename to bitwise-length;
+	(bitwise-arithmetic-shift-left, bitwise-arithmetic-shift-right,
+	bitwise-copy-bit, bitwise-copy-bit-field, bitwise-if, bitwise-bit-count,
+	bitwise-first-bit-set, bitwise-rotate-bit-field,
+	bitwise-reverse-bit-field): New functions.
+	(logcount): Fix to return non-zero, as specified.
+
+2008-06-01  Per Bothner  <per@bothner.com>
+
+	* vectors.scm (vector): "vector" is now a LangObjType, so rename
+	vector function to $make$vector$.
+	When calling FVector constructor name that directly.
+	* arrays.scm (array): Likewise.
+	* string.scm (string): "string" is now a LangObjType, so rename
+	string function to $make$string$.
+	* misc.scm (procedure?): Also allow a LangObjType.
+
+2007-11-05  Per Bothner  <per@bothner.com>
+
+	* numbers.scm (sqrt): Add overload, to handle java.lang.Float etc.
+
+2007-11-02  Per Bothner  <per@bothner.com>
+
+	* numbers.scm (integer?): True for all types convertible to <integer>.
+	(quotient, remainder, modulo): Now generalized to types convertible
+	to integer.  Make use of define-procedure for "overloads".
+	(gcm, lcm): Minor tweak.
+
+2007-06-11  Per Bothner  <per@bothner.com>
+
+	* files.scm (delete): Generalize since Path now has a delete method.
+
+2007-04-20  Per Bothner  <per@bothner.com>
+
+	* files.scm (make-temporary-file):  Update.
+	This fixes Savannah bug #19569, make-temporary-file.
+
+2007-03-25  Per Bothner  <per@bothner.com>
+
+	* prim_syntax.scm (define-constant): Fix matching of"compound names"
+	i.e. ($lookup$ PART1 'PART2), like we do for define and define-private.
+
+2007-03-08  Per Bothner  <per@bothner.com>
+
+	* system.scm (command-parse): Update - symbols are no longer
+	java.lang.String objects.
+
+2007-02-18  Per Bothner  <per@bothner.com>
+
+	* files.scm: Change various functions to return java.lang.String
+	rather than converting to FString.
+	* keywords.scm: Likewise.
+	* syntax.scm: Likewise.
+	* reflection.scm: Likewise.
+	* ports.scm: Likewise.
+	(define-alias-parameter): Simplify - use Symbol directly.
+	(open-input-string, call-with-input-string): Use new
+	CharArrayInPort.make factory method.
+	* numbers.scm (string->number): Use new LispReader.parseNumber method.
+	* strings.scm: Update for new string typing.
+	* misc.scm (scheme-implementation-version): Simplify.
+	(symbol->string): Now returns a constant-string.
+	* system.scm (compile-file): Explicitly call toString.
+
+	* files.scm (path-directory, path-parent): Add toString invocation.
+
+2007-02-08  Per Bothner  <per@bothner.com>
+
+	* Makefile.am (SCM_COMPILE_FLAGS): Add --warn-invoke-unknown-method
+	amd --warn-as-error compiles flags.
+
+2007-02-05  Per Bothner  <per@bothner.com>
+
+	* syntax.scm (define-syntax-case): New macro.
+
+2007-02-01  Per Bothner  <per@bothner.com>
+
+	* files.scm (file-readable?, file-writable?, delete-file, rename-file,
+	copy-file, create-directory): Change parameter type to filepath.
+	(delete-file): If delete fails, throw exception.
+
+2007-01-09  Per Bothner  <per@bothner.com>
+
+	* files.scm (path-path): Rename to path-file.
+	(pah-directory, path-parent, path-last, path-extension):
+	New functions.
+
+2007-01-08  Per Bothner  <per@bothner.com>
+
+	* files.scm (file-exists?, file-directory?): Generalize to path.
+
+2007-01-04  Per Bothner  <per@bothner.com>
+
+	* files.scm (resource-uri): Use Path rather than URI_utils resolve.
+	* files.scm (include-relative): Likewise.
+
+	* misc.scm (base-uri): Use Path's currentPath method.
+
+2007-01-02  Per Bothner  <per@bothner.com>
+
+	* files.scm (path-query): Fix copy-paste thinko.
+
+	* files.scm (resolve-uri): Fix implementation.
+
+	* file.scm (path?, filepath?, URI?, absolute-path? path-scheme,
+	path-authority, path-user-info, path-host, path-port, path-path,
+	path-fragment, path-query): New functions.
+	(->pathname): Use path constructor.
+	(URI): Remove - now defined in LangObjType.
+	(resolve-uri): Update.
+
+	* ports.scm (open-input-file, open-output-file, call-with-input-file,
+	call-with-output-file, with-input-from-file, with-output-to-file):
+	Cast to path.
+
+2006-12-20  Per Bothner  <per@bothner.com>
+
+	* Makefile.am: Simplify - we use '$JAVA kawa.repl' rather than $KAWA1.
+
+2006-11-17  Per Bothner  <per@bothner.com>
+
+	* ports.scm (write-char): Use Char class's new print method.
+
+2006-11-13  Per Bothner  <per@bothner.com>
+
+	* files.scm: Update for SourceLocator-related changes.
+	* syntax.scm: Likewise.
+
+2006-10-30  Per Bothner  <per@bothner.com>
+
+	* misc.scm (base-uri): Update Since BaseUri class is now gone.
+
+2006-09-08  Per Bothner  <per@bothner.com>
+
+	* numbers.scm: Add require of kawa.lib.syntax needed for
+	define-procedure.
+
+2006-09-03  Per Bothner  <per@bothner.com>
+
+	* ports.scm (read): New function, transcribed from
+	kawa/standard/read.java.
+	(read-line): New function, transcribeconverted from argument-handling
+	part of kawa/standard/read_line.java.
+
+	* numbers.scm (atan): New function, transcribed from
+	kawa/standard/atan.java.
+	* numbers.scm (string->number): New function, transcribed from
+	kawa/standard/string2number.java.
+
+2006-05-22  Per Bothner  <per@bothner.com>
+
+	* arrays.scm: Add require declaration for kawa.lib modules we depend on.
+	* characters.scm: Likewise.
+	* files.scm: Likewise.
+	* keywords.scm: Likewise.
+	* lists.scm: Likewise.
+	* misc.scm: Likewise.
+	* numbers.scm: Likewise.
+	* parameters.scm: Likewise.
+	* ports.scm: Likewise.
+	* reflection.scm: Likewise.
+	* std_syntax.scm: Likewise.
+	* strings.scm: Likewise.
+	* syntax.scm: Likewise.
+	* system.scm: Likewise.
+	* thread.scm: Likewise.
+	* trace.scm: Likewise.
+	* uniform.scm: Likewise.
+	* vectors.scm: Likewise.
+	* windows.scm: Likewise.
+	* system.scm (compile-file): Remove resolve call.
+	* files.scm: Inline cons call.
+
+2006-05-22  Per Bothner  <per@bothner.com>
+
+	* strings.scm (string->list): Inline cons.
+	* numbers.scm (make-quantity): Add explicit toString call.
+	* std_syntax.scm: Remove bogus export.
+
+2006-05-19  Per Bothner  <per@bothner.com>
+
+	* lists.scm (car, cdr, define-cxr): Use name: lambda keyword to set
+	name, so we don't have to use less-efficient define kludge.
+
+2006-05-06  Per Bothner  <per@bothner.com>
+
+	* files.scm (make-temporary-file): Reimplement using new method
+	in gnu.kawa.functions.FileUtils.
+
+	* numbers.scm (quantity->number, quantity->unit, make-quantity):
+	New functions, converted from Java classes in kawa.standard.
+	* strings.scm (string): Likewise.
+
+	* misc.scm (test-begin): Update test-%begin -> %test-begin.
+
+2006-05-01  Per Bothner  <per@bothner.com>
+
+	* ports.scm (open-output-string, get-output-string): Use new compact
+	syntax for constructors and method calls.  Also avoids a dependency
+	of reflection.scm.
+	* strings.scm (string-append/shared): Likewise for array accesses.
+
+2006-04-14  Per Bothner  <per@bothner.com>
+
+	* lists.scm (define-cxr): New non-exported helper macro.
+	(caar, cadr, cdar, cddr,
+	caaar, caadr, cadar, caddr, cdaar, cdadr, cddar, cdddr
+	caaaar, caaadr, caadar, caaddr, cadaar, cadadr, caddar, cadddr
+	cdaaar, cdaadr, cdadar, cdaddr, cddaar, cddadr, cdddar, cddddr):
+	Use define-cxr to define functions.
+
+2006-03-03  Per Bothner  <per@bothner.com>
+
+	* numbers.scm (duration): New function.
+
+2006-02-14  Per Bothner  <per@bothner.com>
+
+	* prim_syntax.scm (define-syntax, define, define-private,
+	define-constant): Recognize "compound names" - ($lookup$ PART1 'PART2),
+	which appeared as PART1:PART2 is the source code.
+	(define_for_syntax): Just define in terms of define, for now.
+
+2006-02-10  Per Bothner  <per@bothner.com>
+
+	* number.scm (max, min, gcd, lcm, logand, logior, logxor):
+	Use more convenient array:length syntax.
+
+	* numbers.scm (number->string): Use new Arithmetic:toString function,
+	which also support java.lang.Long, gnu.math.BigDecimal, etc.
+
+2006-02-07  Per Bothner  <per@bothner.com>
+
+	* numbers.scm (integer?, max, min, gcd, lcm, logand, logior, logxor):
+	Rewrite from Java to Scheme, now that array operations are less tedious.
+
+	* lists.scm (set-car!): Use new syntax.
+
+2006-02-02  Per Bothner  <per@bothner.com>
+
+	* misc.scm (namespace): New function.
+
+2006-01-10  Per Bothner  <per@bothner.com>
+
+	* files.scm (resource-uri): New syntax.
+	(module-uri): Fix typo.
+
+2006-01-07  Per Bothner  <per@bothner.com>
+
+	* files.scm (URI): Give specific <URI> return type.
+	(resolve-uri): New procedure.
+	(module-uri): New macro.
+
+2006-01-04  Per Bothner  <per@bothner.com>
+
+	* files.scm (include-relative): Update to use URI_utils.
+
+	* ports.scm (open-input-file, open-output-file, call-with-input-file,
+	with-input-from-file, with-output-to-file): Generalize to use
+	general path - specifically URIs - and the methods in URI_utils.
+
+2006-01-02  Per Bothner  <per@bothner.com>
+
+	* files.scm (URI): Update package for moved URI_utils class.
+
+2005-12-31  Per Bothner  <per@bothner.com>
+
+	* files.scm (URI): New procedure.
+
+2005-11-23  Per Bothner  <per@bothner.com>
+
+	* std_syntax.scm (generate-temporaries): New function.
+	* std_syntax.scm (delay): Inline allocation of Promise.
+	(%make-promise): Remove.
+	* reflection.scm (primitive-constructor): New macro.
+	(record-constructor, primitive-array-new, primitive-array-set,
+	primitive-array-get, primitive-array-length, primitive-get-field,
+	primitive-set-field, primitive-get-static, primitive-set-static): Use
+	make procedure instead of primitive-constructor.
+
+2005-10-27  Per Bothner  <per@bothner.com>
+
+	* system.scm (compile-file): Call Language's resolve method.
+
+2005-10-24  Per Bothner  <per@bothner.com>
+
+	* misc.scm (test-begin): New macro.
+
+	* prim_syntax.scm (define-for-syntax): New macro - as in mzscheme.
+	* syntax.scm (syntax-source, syntax-ilne, syntax-column): New
+	macros, matching ones in mzscheme.
+
+	* misc.scm (provide): New macro.
+
+2005-10-19  Per Bothner  <per@bothner.com>
+
+	* syntax.scm (case-lambda): Reimplement to translate to make-procedure.
+	Use syntax-case in implementation.
+
+2005-08-15  thomas kirk  <tk@research.att.com>
+
+	* thread.scm (runnable): New function.
+
+2005-08-23  Per Bothner  <per@bothner.com>
+
+	* numbers.scm (angle): Remove redundant number() call.
+
+2005-08-03  Per Bothner  <per@bothner.com>
+
+	* lists.scm: Use new namespace-prefix-based syntax more places.
+	* ports.scm: Likewise.
+
+2005-07-23  Per Bothner  <per@bothner.com>
+
+	* windows.scm (scheme-window): Specifically use Scheme rather than
+	current language.  Update for new GuiConsole constructor.  Return void.
+
+	* parameters.scm (parameterize%): setWithSave and setRestore now
+	require an extra CallContext parameter.
+
+2005-06-04  Per Bothner  <per@bothner.com>
+
+	* ports.scm (write, display): New functions.
+
+2005-04-03  Per Bothner  <per@bothner.com>
+
+	* package-info.java: New file, used by javadoc.
+
+2005-03-28  Per Bothner  <per@bothner.com>
+
+	* ports.scm (define-alias-parameter): Fix harmless typo.
+
+2005-03-23  Per Bothner  <per@bothner.com>
+
+	* ports.scm (with-output-to-file, with-output-to-file): New functions.
+	* thread.scm (sleep): New function.
+
+2005-03-18  Per Bothner  <per@bothner.com>
+
+	* system.scm (convert-list-to-string-array): Optimize by adding type
+	declarations and inlining car/cdr.
+	(tokenize-string-to-string-array): Likewise.
+
+	* prim_syntax.scm (try-catch): Don't translate catch-clause to a let,
+	with a bogus initial value.  Instead we generate a temporary LambdaExp.
+	Fixes Savannah bug #11540.
+
+2005-03-17  Per Bothner  <per@bothner.com>
+
+	* Makefile.am (SCM_COMPILE_FLAGS): Revert yesterday's change -
+	--module-static-run is now set in ../../Make-rules.
+
+2005-03-16  Per Bothner  <per@bothner.com>
+
+	* Makefile.am (SCM_COMPILE_FLAGS): Add new --module-static-run flag.
+
+	* strings.scm (list->string): Inline car and cdr calls.
+	* files.scm (include-relative): Likewise, aided by type specifier.
+
+2005-03-04  Per Bothner  <per@bothner.com>
+
+	* windows.scm (scheme-window): Update Interpreter -> Language.
+	* std_syntax (%lang-boolean): Likewise.
+
+2005-02-24  Per Bothner  <per@bothner.com>
+
+	* ports.scm (define-alias-parameter): New helper macro.
+	(current-input-port, current-output-port, current-error-port):
+	Re-define as "parameter objects", using define-alias-parameter.
+
+2005-02-23  Per Bothner  <per@bothner.com>
+
+	* std_syntax.scm (syntax-object->datum): Use new Quote.quote method.
+
+2005-02-12  Per Bothner  <per@bothner.com>
+
+	* parameters.scm: New file, implements SRFI-39.
+	* Makefile.am: Update accordingly.
+	
+	* misc.scm (force arg): Remove some old debugging junk.
+
+2005-01-29  Per Bothner  <per@bothner.com>
+
+	* misc.scm (environment-bound?):  Use new
+	gnu.kawa.lispexpr.LispLanguage:langSymbolToSymbol.
+	Fixes Savannah bug #11775.
+
+2005-01-28  Per Bothner  <per@bothner.com>
+
+	* characters.scm:  Comparisons (such as char-=?, char-ci<?) are
+	implemented much more efficiently, compiles without warnings on Java5,
+	and if using Java5 use the int versions in java.lang.Character.
+
+2005-01-27  Per Bothner  <per@bothner.com>
+
+	* misc.scm (symbol?): Also true for gnu.mapping.Symbol.
+
+2004-12-24  Per Bothner  <per@bothner.com>
+
+	* std_syntax.scm (with-syntax): New syntax, converted from psyntax.ss.
+	(syntax-object->datum, datum->syntax-object): New functions.
+	* files.scm (include): New syntax, imported from psyntax.ss.
+	(include-relative): New syntax.
+
+2004-12-18  Per Bothner  <per@bothner.com>
+
+	* syntax.scm (let-values): SRFI-11 implementation is in the public
+	domain, so remove copyright notice.
+	* syntax.scm (case-lambda): Add implementation from SRFI-16.
+
+2004-12-07  Per Bothner  <per@bothner.com>
+
+	* Makefile.am (SCM_COMPILE_FLAGS): Add--warn-undefined-variable.
+	* misc.scm: Add some <boolean> return type specifers.
+	(procedure?): Simplify since Location no longer extends Procedure.
+
+	* system.scm (command-parse): New function variable.
+
+	* std_syntax.scm: Add a module-export declaration, making other
+	declarations implicitly private.
+
+	* std_syntax.scm (case): Use internal %let rather than public let.
+
+2004-12-02  Per Bothner  <per@bothner.com>
+
+	* misc.scm (force): Converted to Scheme from kawa.standard.force.
+	* thread.scm (%make-future): Converted from kawa.standard.make_future.
+
+2004-11-14  Per Bothner  <per@bothner.com>
+
+	* misc.scm (scheme-report-environment): Function converted from Java.
+
+	* syntax.scm (dynamic-wind): Moved from here ...
+	* misc.scm: ... to here, to ensure it is defined before use.
+
+	* ports.scm (char-read?): New function - wrapper converted from java.
+
+2004-11-10  Per Bothner  <per@bothner.com>
+
+	* std_syntax.scm (%lang-boolean):  New helper macro.
+	(and): Rewrite to use syntax-case and %lang-boolean, so we
+	can use the same macro for Common Lisp and ELisp as well as Scheme.
+	(or): New syntax, patterned on 'and'.
+
+2004-11-08  Per Bothner  <per@bothner.com>
+
+	* prim_syntax.scm: New file.
+	* Makefile.am: Add new file.
+	* std_syntax.scm: Use %let instead of let a few places.
+	* syntax.scm (defmacro): Rewrite using %define-macro.
+	(try-finally, synchronized): Write in Scheme using syntax-case.
+	(identifer?, free-identifier=?, define-macro): New.
+	(cond-expand): Change to not use %if-feature primitive syntax,
+	* system.scm (compile-file): Add missing check for errors.
+
+2004-10-23  Per Bothner  <per@bothner.com>
+
+	* std_syntax.scm (letrec): New syntax definition.
+
+2004-08-24  Per Bothner  <per@bothner.com>
+
+	* ports.scm (open-input-file, open-ouput-file,
+	call-with-output-string):  New functions, translated from Java.
+	(call-with-input-file, call-with-output-file, call-with-input-string,
+	input-port?, output-port?, current-input-port, current-output-port,
+	current-error-port, open-output-string):  Add type specifiers.
+	* Makefile.am (java_SCM_ALWAYS):  Re-arrange to avoid forward
+	references, enabling better inlining.
+
+2004-08-24  Per Bothner  <per@bothner.com>
+
+	* ports.scm (call-with-input-file, call-with-output-file):  Fix thinko
+	- neither of these functions are void.
+
+	* files.scm (%file-separator):  "inline" symbol->string to reduce
+	circular dependencies - which currently precents automatic inlining.
+	* reflection.scm (record-type-name):  Likewise.
+	* syntax.scm (%defmacro):  Remove unused and wrong macro.
+
+2004-08-06  Per Bothner  <per@bothner.com>
+
+	* system.scm (compile-file):  New function, converted from Java.
+
+2004-07-31  Per Bothner  <per@bothner.com>
+
+	* syntax.scm (catch):  Add type declarations.  Simplify using invoke.
+
+2004-07-19  Per Bothner  <per@bothner.com>
+
+	* numbers.scm (rationalize, sqrt, exact->inexact, inexact->exact):
+	New functions, transcribed from Java code in kawa.standard.
+
+2003-11-21  Per Bothner  <per@bothner.com>
+
+	* ports.scm (call-with-input-file):  New functiom.
+	(call-with-output-file):  Add type declaration.
+
+2003-11-21  Hoehle, Joerg-Cyril <Joerg-Cyril.Hoehle@t-systems.com>
+
+	* ports.scm (call-with-output-file):  New functiom.
+
+2003-11-09  Chris Dean  <Chris.Dean@sokitomi.com>
+
+	* strings.scm (string-append, string-append/shared):  New functions.
+
+2003-10-28  Per Bothner  <per@bothner.com>
+
+	* files.scm (system-tmpdir):  Micro-optimization.
+
+2003-09-23  Per Bothner  <per@bothner.com>
+
+	* vectors.scm ((list->vector):  Don't hardwire in paramater type
+	using primitive-constructor - since that now depends on JAVA2.
+
+2003-08-20  Per Bothner  <per@bothner.com>
+
+	* numbers.scm (positive?, modulo):  New functions.
+	(quotient, remainder):  Generalize to <real> operands.
+	Fixes Savannah bug #4867.
+	(zero?, negative?):  Replace primitive-virtual-method by invoke.
+
+2003-05-30  Per Bothner  <per@bothner.com>
+
+	* lists.scm (car, cdr)  Use syntactic trick to give name to getter
+	methods that are passed to define-procedure.
+	* misc.scm (procedure-property):  Likewise.
+	* ports.scm (port-line, input-port-line-number, input-port-prompter):
+	Likewise.
+	* vectors.scm (vector-ref):  Likewise.
+
+	* syntax.scm (%defmacro):  Inline car, since it isn't defined until
+	lists.scm, which is compiled later.
+
+2003-04-05  Per Bothner  <per@bothner.com>
+
+	* ports.scm (write-char):  Don't use writeSchemeObejct method.
+
+2003-03-02  Per Bothner  <per@bothner.com>
+
+	* misc.scm (base-uri):  New function.
+
+2003-02-11  Per Bothner  <per@bothner.com>
+
+	* syntax.scm (defmacro):  Move next to %defmacro.
+
+2003-01-31  Per Bothner  <per@bothner.com>
+
+	* thread.scm (exit):  Fix typo - statuc -> status.
+	Reported by Wen-Chun Ni <wcn@tbcommerce.com>.
+
+2002-11-15  Per Bothner  <per@bothner.com>
+
+	* ports.scm (port-line, input-port-line-number, input-port-prompter):
+	Define define-procedure, and specify setter.
+	* misc.scm (procedure-property):  Likewise.
+	* vectors.scm (vector-ref):  Likewise.
+
+2002-10-14  Per Bothner  <per@bothner.com>
+
+	* misc.scm (environment-bound?):  Fix implementation.
+
+2002-08-14  Per Bothner  <per@bothner.com>
+
+	* syntax.scm (add-procedure-properties):  New helper procedure.
+	(define-procedure):  Split into two parts: define-constant, evaluated
+	st init-time, and add-procedure-properties and module-run-time.
+
+2002-08-04  Per Bothner  <per@bothner.com>
+
+	* strings.scm (string-ci=?, string<?, string>?, string<=?, string>=?,
+	string-ci<?, string-ci>?, string-ci<=?, string-ci>=?):  New procedures.
+
+2002-06-25  Per Bothner  <per@bothner.com>
+
+	* uniform.scm:  Add missing type specifiers.
+	* vectors.scm:  Add missing type specifiers.
+
+2002-06-10  Per Bothner  <per@bothner.com>
+
+	* arrays.scm:  New file, with procedures for SRFI-25.
+
+2002-05-17  Per Bothner  <per@bothner.com>
+
+	* misc.scm (null-environment):  Should take a versio number, according
+	to R5RS.  Bug reported by Dr. M. Luedde <Mirko.Luedde@Computer.Org>.
+
+2002-03-21  Per Bothner  <per@bothner.com>
+
+	* lists.scm (memq, memv, member, assq, assv, assoc): New procedures.
+
+	* syntax.scm (cond-expand):  New syntax, from srfi-0.
+
+	* syntax.scm (receive):  New syntax, from srfi-8.
+
+2001-11-12  Per Bothner  <per@bothner.com>
+
+	* ports.scm (current-input-port):  New procedure.
+
+2001-11-05  Per Bothner  <per@bothner.com>
+
+	* files.scm, keywords.scm, lists.scm, misc.scm, numbers.scm, ports.scm,
+	reflection.scm:  Various updates to avoid using <String> in conjunction
+	with a primite-xxx-mmethod macro, which can cause some confusion.
+	Mostly use invoke, invoke-static, or make, plus more type declarations.
+
+2001-11-05  Per Bothner  <per@bothner.com>
+
+	* syntax.scm:  Add Lars T Hansen's implementation of let-values
+	and let*values.  [srfi-11]
+
+Weiqi Gao <weiqigao@networkusa.net>
+
+	* ports.scm (set-input-port-line-number!):  Fix typo.
+
+2001-08-30  Per Bothner  <per@bothner.com>
+
+	* reflection.scm (record-type-name):  Assume reversible mangling.
+
+2001-08-24  Per Bothner  <per@bothner.com>
+
+	* syntax.scm (this):  Remove - now implemented by thisRef class.
+
+2001-08-17  Per Bothner  <per@bothner.com>
+
+	*  reflection.scm (record-type-name):  Update demangleName's class.
+
+2001-07-17  Per Bothner  <per@bothner.com>
+
+	* windows.scm:  New file, only compiled if --with-awt.
+	misc.scm (scheme-window):  Moved to windows.scm.
+	* Makefile.am:  Compile windows.scm, but only when --with-awt.
+
+2001-06-17  Per Bothner  <per@bothner.com>
+
+	* misc.scm (procedure?):  Return #f if a Binding (CLisp symbol).
+
+2001-06-03  Per Bothner  <per@bothner.com>
+
+	* thread.scm (exit): Call OutPort.runCleanups.
+
+	* ports.scm (write, display):  No longer written in Scheme - boo-hoo.
+
+2001-03-23  Per Bothner  <per@bothner.com>
+
+	* Makefile.am:  Tweaks to work around missing automake support.
+
+2001-03-09  Per Bothner  <per@bothner.com>
+
+	* strings.scm:  Add lots of type declarations, mostly for return type.
+
+2001-03-08  Per Bothner  <per@bothner.com>
+
+	* lists.scm (list-tail, list-ref, list?):  New procedures.
+	* numbers.scm (exact?, inexact?, number->string):  New procedures.
+	* ports.scm (open-input-string, call-with-input-string):  Re-written,
+	since strings no longer implement open method.
+	* strings.scm (string->list, list->string):  New procedures.
+	* vectors.scm (vector):  New procedure.
+	* uniform,scm, vectors.scm, strings.scm:  Various updates due to
+	change to using new gnu.lists package.
+
+2000-12-13  Per Bothner  <per@bothner.com>
+
+	* lists.scm (reverse, reverse!):  New procedures.
+
+2000-12-09  Per Bothner  <per@bothner.com>
+
+	* lists.scm:  Add return type specifiers.
+	* syntax.scm (error):  Move from here ...
+	* misc.scm (error):  ... to here to solve some order dependencies.
+
+2000-10-13  Per Bothner  <per@bothner.com>
+
+	* misc.scm (make-procedure):  Replaced by kawa.standard.MakeProcedure.
+	* syntax.scm (define-procedure):  Quote the name.
+	* lists.scm, numbers.scm:  Make module static.
+	* lists.scm (car, cdr):  New procedures.
+	* emacs.scm:  Removed; subsumed by code in gnu/jemacs.
+	* Makefile.am (java_SCM):  Make syntax.scm before lists.scm, since
+	the latter uses define-procedure.
+
+2000-10-12  Per Bothner  <per@bothner.com>
+
+	* numbers.scm:  Add (new-style) type specificiers.
+	Replace some ((primitive-virtual-method ...)) by (invoke ...).
+	(floor, ceiling, truncate, round, arithmetic-shift):  New procedures.
+
+2000-06-19  Per Bothner  <per@bothner.com>
+
+	* characters.scm (char=?, char<?, char>?, char<=?, char>=?,
+	char-ci=?, char-ci<?, char-ci>?, char-ci<=?, char-ci>=?):
+	New procedures.
+
+2000-06-18  Per Bothner  <per@bothner.com>
+
+	* misc.scm (make-procedure):  Call make, not make$.
+
+2000-06-09  Per Bothner  <per@bothner.com>
+
+	* quantities.scm:  Removed, as define-unit now has its own class.
+	* Makefile.am (java_SCM):  Update accordingly.
+
+	* misc.scm (make-procedure):  New procedures.
+	(procedure-property, set-procedure-property!):  New procedures.
+	* syntax.scm (define-procedure):  New syntax.
+
+2000-05-28  Per Bothner  <per@bothner.com>
+
+	* trace.scm (%do-trace):  Fix typo.
+
+	* Makefile.am (JAVACFLAGS):  Add --module-static flag.
+
+	* trace.scm (%do-trace):  Incorrect primitive-static-method replaced
+	by invoke-static.
+
+2000-04-17  Per Bothner  <per@bothner.com>
+
+	* strings.scm: Use invoke/invoke-static more.
+	Generalize many procedures to work on <abstract-string>.
+
+2000-04-13  Per Bothner  <per@bothner.com>
+
+	* reflection.scm (record-type-name):  Use Scheme's demangleName.
+	Use invoke-static and invoke instead of primitive-virtual-method.
+
+2000-03-12  Per Bothner  <per@bothner.com>
+
+	* ports.scm (write, display, write-char):  Added procedures.
+
+2000-02-12  Per Bothner  <per@bothner.com>
+
+	* syntax.scm (this):  New macro.
+
+2000-02-01  Per Bothner  <per@bothner.com>
+
+	* misc.scm (null-environment):  Update field name used.
+
+	* numbers.scm (logtest):  Add missing arguments.
+	
+	* std_syntax.scm (and):  Re-structure to make it easier to generate
+	better code (by leveraging off ConditionalTarget).
+
+2000-01-24  Per Bothner  <per@bothner.com>
+
+	* numbers.scm (lognot, logop, logbit?, bit-extract, logtest, logcount,
+	integer-length):  New functions;  replace classes in kawa.standard.
+	* misc.scm (null-environment, interaction-environment):  Likewise.
+	* lists.scm (cons):  New procedure, replaces kawa/standard/cons.java.
+	* vectors.scm (vector):  New procedure, replaces
+ 	kawa/standard/vector_v.java.
+
+	* numbers.scm (asin): New procedure, replaces kawa/standard/asin.java.
+	(acos): New procedure, replaces kawa/standard/acos.java.
+	* ports.scm (close-in-port):  New procedure, replaces
+ 	kawa/standard/close_input_port.java.
+	* vectors.scm (vector-fill!):  New procedure, replaces
+ 	kawa/standard/vector_fill_b.java.
+ 	(make-vector):  New procedure, replaces kawa/standard/make_vector.java.
+
+	* reflection.scm:  Update class names for kawa.lang.Prim* classes
+	moved to gnu.kawa.reflect.
+
+2000-01-23  Per Bothner  <per@bothner.com>
+
+	* misc.scm (values):  New procedure.
+
+	* files.scm (create-directory):  Style fix.
+
+	* strings.scm (make-string):  Declare count to be <int>.
+
+	* syntax.scm (defmacro):  Add missing begin (because syntax-case
+	takes `[fender] form' rather than `form ..').
+
+1999-12-27  Per Bothner  <per@bothner.com>
+
+	* files.scm (*temp-file-number*):  Define using (new) define-private.
+
+1999-12-10  Per Bothner  <per@bothner.com>
+
+	* uniform.scm:  New file.  Implements SRFI-4.
+	* lists.scm (length):  New procedure.
+
+1999-12-06  Per Bothner  <per@bothner.com>
+
+	* vectors.scm (vector-length):  Use new `::' type-specification syntax.
+	* system.scm (tokenize-string-using-shell):  Add type specification.
+
+1999-11-15  Per Bothner  <per@bothner.com>
+
+	* ports.scm (open-output-string, get-output-string):  New procedures.
+	* characters.scm, vectors.scm:  Use invoke and invoke-static.
+	* strings.scm (make-string):  Use (make <string> ...).
+
+1999-10-25  Per Bothner  <per@bothner.com>
+
+	* kawa/lib/ports.scm (open-input-string):  New procedure. 
+	* kawa/lib/thread.scm (future):  Fix typo:  delay -> future.
+
+1999-09-10  Per Bothner  <per@bothner.com>
+
+	* files.scm (*temp-file-number*):  Revert to non-private, until we
+	work out handling of private non-static variables.
+	* emacs.scm:  Update gnu.elisp.* to gnu.jemacs.lang.*.
+
+1999-09-08  Per Bothner  <per@bothner.com>
+
+	* ports.scm (transcript-on):  Use <String> as parameter type,
+	rather than <java.lang.String>, so we get the desired conversion.
+	* vectors.scm:  Extra whitespace for more discrimating line numbers.
+
+1999-09-05  Per Bothner  <per@bothner.com>
+
+	* files.scm (*temp-file-number*):  Make private.
+
+1999-08-22  Per Bothner  <per@bothner.com>
+
+	* emacs.scm (boundp):  New function.
+	* numbers.scm (sin, cos, tan):  Re-write to use invoke-static.
+	* syntax.scm (defmacro):  Re-write to use Defmacro.
+
+1999-08-06  Per Bothner  <per@bothner.com>
+
+	* characters.scm, numbers.scm, strings.scm, vectors.scm:  Add many
+ 	specifications of parameter types for better error messages.
+
+1999-07-20  Per Bothner  <per@bothner.com>
+
+	* Makefile.am, Makefile.in (list-sources):  New rule.
+
+1999-07-19  Per Bothner  <per@bothner.com>
+
+	* trace.scm:  New file.
+	* files.scm (system-tmpdir, make-temporary-file):  New procedures.
+	* Makefile.am, Makefile.in (java_SCM):  Add trace.scm.
+
+1999-04-22  Per Bothner  <bothner@Magnus.Cygnus.COM>
+
+	* reflection.scm (subtype?):  New procedure.
+	* std_syntax.scm (%let-lambda1, %et-init):  Handle :: TYPE specifier.
+	(do):  Handle type specifier - but only for one variable.
+
+Wed Apr  7 23:37:10 1999  Per Bothner  <bothner@Magnus.Cygnus.COM>
+
+	* syntax.scm (fluid-let):  Remove; replaced by kawa.standard.fluid_let.
+
+Sun Mar 21 18:14:09 1999  Per Bothner  <bothner@Magnus.Cygnus.COM>
+
+	* emacs.scm:  New, merged from ../../gnu/elisp/streams.scm.
+	* Makefile.am (java_SCM):  Add emacs.scm.
+
+Sun Mar  7 17:18:57 1999  Per Bothner  <bothner@Magnus.Cygnus.COM>
+
+	* std_syntax.scm (let):  Handle type specifier for named let.
+	(let*):  Generalize to handle named type specifiers.
+	(delay):  Promise thunk is now Procedure instead of Proceure0.
+
+Tue Feb  9 11:31:16 1999  Per Bothner  <bothner@Magnus.Cygnus.COM>
+
+	* numbers.scm (sin, cos, tan):  New procedures.
+	* misc.scm (symbol->string, string->symbol):  New procedures.
+
+Tue Oct  6 11:24:17 1998  Edouard Parmelan <EP510777@exchange.FRANCE.NCR.com>
+
+	* ports.scm: TtyInPort and Procedure classes move from package
+	kawa.lang to gnu.mapping.
+
+Fri Sep 11 22:30:25 1998  Per Bothner  <bothner@cygnus.com>
+
+	* strings.scm (string-ref, string-set!):  Added.
+	(substring, string-fill!):  Declare some parameter and result types.
+	* vectors.scm (vector-ref, vector-set!):  Declare parameter types.
+	* lists.scm (set-car!, set-cdr!):  Added.
+
+1998-08-28  Per Bothner  <bothner@cygnus.com>
+
+	* std_syntax.scm (do):  Use "magic" identifier.
+	* syntax.scm (location):  Removed - now in ../standard.
+
+Tue Jul 28 08:31:51 1998  Per Bothner  <bothner@cygnus.com>
+
+	* syntax.scm (location):  New partial implementation.
+
+Wed Jul 22 18:05:23 1998  Per Bothner  <bothner@cygnus.com>
+
+	* characters.scm (char-alphabetic?):  New function.
+	* keywords.scm (keyword->string):  Rewrite to not use removed method.
+	* misc.scm (boolean? symbol?, procedure?):  New functions.
+	* lists.scm:  New file.
+	* Makefile.am (java_SCM):  Add lists.scm.
+	* numbers.scm (negative?, odd?, even?):  New functions.
+	* ports.scm (current-input-port, current-output-port,
+	close-output-port port):  New procedures.
+	* std_syntax.scm (%make-promise):  New procedure.
+	* strings.scm (string=?):  New function.
+	* syntax.scm, others:  Update for classes moved from kawa.lang to gnu.
+	* reflection.scm:  Fix inconsistent macro names.
+	Reported by William J. Edney (bedney@firstsoft.com).
+
+Mon Jun 29 11:27:16 1998  Per Bothner  <bothner@cygnus.com>
+
+	* ports.scm:  Update for LineBufferedReader moved to gnu.text.
+	* strings.scm (string-upcase!, string-downcase!, string-capitalize!,
+	string-upcase, string-downcase, and string-capitalize):  New
+	Slib-compatible functions.
+	(string-copy!):  Fix typo - should be string-copy.
+
+Thu May 21 23:55:14 1998  Per Bothner  <bothner@cygnus.com>
+
+	* characters.scm:  Use <TYPE> rather than "TYPE" specifications.
+
+	* reflection.scm:  A Record Type Descriptor is now a ClassType,
+	rather than a Class.
+
+	* syntax.scm (defmacro):  Inline call to %defmacro.
+
+Tue Apr 28 21:53:13 1998  Per Bothner  <bothner@cygnus.com>
+
+	* ports.scm (port-line, port-column): Make port argument required.
+
+Sat Apr  4 21:10:56 1998  Per Bothner  <bothner@cygnus.com>
+
+	* misc.scm (scheme-implementation-version):  Re-implement to use
+	kawa.Version.getVersion, instead of Makefile magic.
+	* port.scm (port-line, port-column, set-port-line!):  New.
+	* std_syntax.scm (and):  New syntax (taken from R5RS).
+	* Makefile.am:  Re-write to compile all out-of-date *.java at once.
+
+Tue Mar 10 22:05:31 1998  Per Bothner  <bothner@cygnus.com>
+
+	* reflection:  Use constant-fold.  Use <String> instead of <symbol>.
+	* system.scm:  New procedures.
+	* Makefile.am, Makefile.in:  Add system.class.
+
+Tue Mar  3 17:49:13 1998  Per Bothner  <bothner@cygnus.com>
+
+	* reflection.scm (primitive-array-get, primitive-array-set,
+	primitive-array-new, primitive-array-length,
+	primitive-get-field, primitive-set-field, primitive-get-static,
+	primitive-set-static):  New procedures.
+
+Wed Feb 18 22:14:57 1998  Per Bothner  <bothner@cygnus.com>
+
+	* ports.scm (input-port-column-number):  Fix parenthesis error.
+
+Mon Feb 16 17:15:21 1998  Per Bothner  <bothner@cygnus.com>
+
+	* ports.scm (input-port?, output-port?, call-with-input-string):
+	These are now here, written in Scheme.
+	* Makefile.am, Makefile.in (SECONDARY_OBJS): Update for new procedures.
+
+Fri Feb  6 17:24:02 1998  Per Bothner  <bothner@cygnus.com>
+
+	* misc.scm (scheme-window):  New procedure.
+	* Makefile.am, Makefile.in:  Update.
+
+Tue Feb  3 16:41:25 1998  Per Bothner  <bothner@cygnus.com>
+
+	* numbers.scm:  New file with lots of procedures.
+	* characters.scm (char?):  New procedure.
+	* vectors.scm (vector?):  New procedure.
+	* Makefile.am, makefile.in:  Update for new classes.
+
+Tue Jan 27 11:22:08 1998  Per Bothner  <bothner@cygnus.com>
+
+	* port.scm, syntax.scm:  Use <TYPENAME> in place of "TYPENAME".
+	* syntax.scm (catch, error):  New procedures.
+	* Makefile.am (SECONDARY_OBJS):  Update for new procedures.
+
+Wed Jan 21 12:34:12 1998  Per Bothner  <bothner@cygnus.com>
+
+	* Makefile.am, Makefile.in (SECONDARY_OBJS):  Adding missing strings
+	classes strings$$string__copy_B and strings$$string__fill_B.
+
+Mon Jan 19 16:05:29 1998  Per Bothner  <bothner@cygnus.com>
+
+	* files.scm (copy-file):  New procedure.
+	* ports.scm (input-port-read-state):  New procedure.
+	(default-prompter):  Use input-port-read-state.
+	* Makefile.am, Makefile.in:  Update for new procedures.
+
+Sun Dec 14 16:53:58 1997  Per Bothner  <bothner@cygnus.com>
+
+	* syntax.scm (dynamic-wind):  New procedure.
+	(fluid-let):  New syntax.
+
+Sat Nov  1 23:26:45 1997  Per Bothner  <bothner@cygnus.com>
+
+	* misc.scm (scheme-implementation-version):  New procedure.
+	* Makefile.am (misc.class):  New rule to pass VERSION.
+	Also now always include reflection.class, and remove OBJ_1_1 stuff.
+
+Fri Sep 26 23:43:16 1997  Per Bothner  <bothner@cygnus.com>
+
+	* ports.scm (transcript-on, transcript-off):  Use new static
+	methods of OutPort.
+	* strings.scm (substring, string-copy!, string-fill!):  New.
+	* misc.scm, syntax.scm:  Use logical types (e.g. <symbol>).
+	* Makefile.am:  Adding missing doubling of '$'.
+
+Mon Jun 23 22:48:37 1997  Per Bothner  <bothner@deneb.cygnus.com>
+
+	* misc.scm:  New file.
+	* *.scm:  Update to (mostly) use <>-type type specifications.
+	* ports.scm:  New functions default-prompter, input-port-prompter,
+	set-input-port-prompter!, transcript-on, transcript-off,
+	input-port-line-number, set-input-port-line-number!,
+	input-port-column-number.
+	* Makefile.am, Makefile.in:  Update.
+
+Mon May 26 12:34:29 1997  Per Bothner  <bothner@deneb.cygnus.com>
+
+	* files.scm:  New file.
+	* Makefile.{am,in}:  Update for new file.
+
+Tue Apr  1 23:11:06 1997  Per Bothner  <bothner@deneb.cygnus.com>
+
+	* Makefile.am (SECONDARY_OBJS, MISC_1_1):  Use new mangling.
+	* Makefile.in:  Re-generate - requires patched automake.
+
+Mon Mar 31 17:06:25 1997  Per Bothner  <bothner@deneb.cygnus.com>
+
+	* quantities.scm: Update kawa.math -> gnu.math various places.
+
+Tue Mar 25 15:35:36 1997  Per Bothner  <bothner@kalessin.cygnus.com>
+
+	* when_unless.scm -> syntax.scm:  Rename.
+	Add gentemp and defmacro.
+	* Makefile.am:  Update.
+
+Tue Mar 18 14:05:13 1997  Per Bothner  <bothner@deneb.cygnus.com>
+
+	* keywords.scm (keyword->string):  Primitive is virtual, not static.
+
+Mon Mar 17 21:35:10 1997  Per Bothner  <bothner@deneb.cygnus.com>
+
+	* keywords.scm, port.scm, strings.scm:  New files.
+	* reflection.scm:  New file - uses JDK 1.1 java.lang.reflect.Field.
+	* quantities.scm, std_syntax.scm:  Use #!void.
+	* thread.scm:  Add exit.
+	* Makefile.am, Makefile.in:  Update for new functions.
+
+Sat Mar  8 11:18:51 1997  Per Bothner  <bothner@deneb.cygnus.com>
+
+	* quantities.scm:  New file.  Define define-unit.
+	* Makefile.{am,in}:  Update.
+
+Mon Feb  3 17:36:41 1997  Per Bothner  <bothner@kalessin.cygnus.com>
+
+	* characters.scm, vectors.scm:  New files.
+	* Makefile.am: Upadte.  Use new $KAWA.
+
+Mon Jan 20 16:45:20 1997  Per Bothner  <bothner@kalessin.cygnus.com>
+
+	* std_syntax.scm (do):  Handle sequence of exit commands.
+	* thread.scm:  new file, defines future syntax.
+	* Makefile.am, Makefile.in:  Add thread.class.
+
+Mon Jan  6 23:43:50 1997  Per Bothner  <bothner@deneb.cygnus.com>
+
+	* std_syntax.scm (cond):  Fix typo .... -> ... .
+	Reported by Harold Carr <carr@Eng.Sun.COM>.
+
+Fri Dec 13 17:02:37 1996  Per Bothner  <bothner@deneb.cygnus.com>
+
+	* Makefile.{am.in} (JAVA):  Separate out new JAVAFLAGS macro.
+
+Tue Oct 22 23:20:40 1996  Per Bothner  <bothner@deneb.cygnus.com>
+
+	* {case,cond,delay,let}.scm:  Removed, merged to std_syntax.
+	* std_syntax.scm:  New file, contains old macros and let*.
+	* Makefile.{am,in}:  Update accordingly.
+
+Sun Sep  8 21:04:30 1996  Per Bothner  <bothner@deneb.cygnus.com>
+
+	* case.scm, cond.scm, delay.scm, let.scm:  New macros.
+	* Makefile.{am,in}:  Add new classes.
+	(JAVA, JAVAC):  Fix -classpath argument.
+	(DIST_COMMON):  Add ChangeLog.	
+
+Tue Sep  3 22:11:58 1996  Per Bothner  <bothner@deneb.cygnus.com>
+
+	* do.scm:  New file - implement do macro.
+	* when_unless.scm:  Implement (non-standard) when and unless.
+	* Makefile.{am,in}:  New file.

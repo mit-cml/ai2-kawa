@@ -1,0 +1,66 @@
+2009-01-04  Per Bothner  <per@bothner.com>
+
+	* SwingDisplay.java (addText): Initialize JTextField properly.
+
+2008-10-29  Per Bothner  <per@bothner.com>
+
+	* SwingContent.java (GapPosition.<init>): Swing Position objects have
+	the 'isAfter' property, except for the case when the offset is 0.
+	This basically reverts the change from 2005-12-22 (revision 4996).
+	I'm confused - I have no idea why I made that change ...
+
+2006-01-11  Per Bothner  <per@bothner.com>
+
+	* SwingDisplay.java: New class, extends gnu.models.Display.
+	(ProcActionListener): New non-public class, extends ActionListener.
+	(SwingBox): New non-public class, extends javax.swing.Box.
+	(SwingLabel): New non-public class, extends JLabel.
+	(ComponentModule): New non-public helper class, extends Model.
+	* SwingButton.java: Nwe implement ModelListener.
+	Remove various "ButtonModel" fields and methods - just sue SwModel.
+	Add some hooks for keeping track for foreground, background, and text.
+	* SwingContainer.java: Removed interface.  Functionality is
+	now in SwingDisplay class.
+	* SwingFrame.java: Now implements gnu.kawa.models.Window.
+	(getDisplay, setContent, setMenuBar, open): New methods.
+	(addComponent): Various updates.
+	* Makefile.am: Update for new and removed java files.
+
+2005-12-22  Per Bothner  <per@bothner.com>
+
+	* SwingContent.java (createPosition): It turns out Swing is happier
+	if positions are always "before".
+	(GapPosition.<init>): Hardwire 'isAfter' to 'false'.
+
+2005-12-11  Per Bothner  <per@bothner.com>
+
+	* SwingContent.java: New class (and some non-public classes), containing
+	most of the logic moved from gnu/jemacs/swing/BufferContent.java.
+	* Makefile.am: Update accordingly.
+
+2005-11-20  Per Bothner  <per@bothner.com>
+
+	* Makefile.am: Use WITH_SWING conditional.
+
+2005-04-03  Per Bothner  <per@bothner.com>
+
+	* package.html: New file, for javadoc.
+
+2004-06-12  Per Bothner  <per@bothner.com>
+
+	* SwingFrame.java (add): Renamed to addComponent and made public.
+	(<init):  Adjust accordingly; don't call pack or show here.
+
+2004-02-13  Per Bothner  <per@bothner.com>
+
+	* SwingPaintable.java:  New class, extemds JPanel.
+	* Makefile.am (java_sources):  Add SwingPaintable.java.
+	* SwingFrame.java (add):  Wrap a Paintable in a JPanel.
+
+2003-07-21  Per Bothner  <per@bothner.com>
+
+	New package.
+	* SwingButton.java:  New class, extends JButton.
+	* SwingFrame.java:  New class, extends JFrame.
+	* SwingContainer.java:  New class, extends JContainer.
+	* Makefile.am:  New file.

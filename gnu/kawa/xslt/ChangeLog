@@ -1,0 +1,216 @@
+2010-04-05  Per Bothner  <per@bothner.com>
+
+	* XSLT.java (parse): Set compilation state to BODY_PARSED
+	to avoid confusion if Compilation.process is called.
+
+2009-09-15  Per Bothner  <per@bothner.com>
+
+	* XSLT.java (runStylesheet): Update for commandLineArgArray moved.
+	Also call new ApplicationMainSupport.processSetProperties.
+
+2009-08-27  Per Bothner  <per@bothner.com>
+
+	* XSLT.java (runStylesheet): static commandLineArgArray was moved
+	from kawa.repl to ModuleBody.
+
+2009-03-01  Per Bothner  <per@bothner.com>
+
+	* XslTranslator.java (maybeSkipWhitespace): New method.
+	(startElement, endElement): Call maybeSkipWhitespace.
+	(startElement, endElement): Add support for xsl:text.
+	(endElement): Make sure xsl:value-of yields a text node.
+	Add support for xsl:copy-of.
+	Skip version attribute for xsl:stylesheet.
+	Create fresh makeElement instance for each element constructor,
+	because XQResolveNames.walkApplyExp calls setNamespaceNodes.
+	(parseXPath): Move and modify from XSLT.java.
+	Re-use existing Compilation.
+	* XSLT.java (parseXPath): Moved to XslTranslator.java.
+	(parse): Call XQResolveNames.resolveModule, mainly for xpath.
+	(process): Fix various bugs and missing functionality.
+
+2009-03-01  Per Bothner  <per@bothner.com>
+
+	* XSLT.java (getCompilation): Remove - use inherited version.
+	(parseXPath): Change to pass Compilation.
+	* XslTranslator.java: Update accordingly.
+
+2006-12-14  Per Bothner  <per@bothner.com>
+
+	* XslTranslator.java: Update for new XMLParser API.
+
+2006-12-06  Per Bothner  <per@bothner.com>
+
+	* XslTranslator.java: Update for renamed Consumer methods.
+	* XSLT.java: Likewise.
+
+2006-12-01  Per Bothner  <per@bothner.com>
+
+	* XslTranslator.java: Fix PreProcess typo JAVA -> JAVA5.
+
+2006-11-25  Per Bothner  <per@bothner.com>
+
+	* XslTranslator.java: StringValue.stringValue now in TextUtils.
+
+2006-11-22  Per Bothner  <per@bothner.com>
+
+	* XslTranslator.java: Partially revert changes from 11-17 and 11-18.
+
+2006-11-18  Per Bothner  <per@bothner.com>
+
+	* XslTranslator.java (writeChars): Remove method.
+
+	* XslTranslator.java: Implement append methods in all cases.
+
+2006-11-17  Per Bothner  <per@bothner.com>
+
+	* XslTranslator.java: Update writeChar -> append.
+
+2006-11-16  Per Bothner  <per@bothner.com>
+
+       * XslTranslator.java (endGroup): "Inline" removed XQParser.stringValue.
+
+2006-11-09  Per Bothner  <per@bothner.com>
+
+	* XslTranslator.java: Update for Consumer changes.
+	* XSLT.java: Likewise.
+
+2006-08-22  Per Bothner  <per@bothner.com>
+
+	* XSLT.java (getCompilation): New method.
+	(parse): Use new interface, letting superclass do more work.
+
+2006-06-28  Per Bothner  <per@bothner.com>
+
+	* XslTranslator.java: Update SName -> Symbol.
+
+2006-05-25  Per Bothner  <per@bothner.com>
+
+	* XslTranslator.java (parse): Call new Compilation.pushNewModule.
+
+2006-04-11  Per Bothner  <per@bothner.com>
+
+	* XSLT.java (instance): Make public.
+
+2006-02-09  Per Bothner  <per@bothner.com>
+
+	* XslTranslator.java (parse): Use new Compilation.pushNewModule method.
+
+2006-01-04  Per Bothner  <per@bothner.com>
+
+	* XLST.java (runStylesheet): Don't use Document's removed makeURL
+	method.  The parse method now handles resolution.
+
+2005-06-04  Per Bothner  <per@bothner.com>
+
+	* XslTranslator.java (append): Add 3 methods, if JAVA5 is defined,
+
+2005-05-18  Per Bothner  <per@bothner.com>
+
+	* XSLT.java (<init>): Don't set current Environment from this.
+
+2005-02-24  Per Bothner  <per@bothner.com>
+
+	* XSLT.java (registerEnvironment): Use new setDefaults method.
+
+2005-01-27  Per Bothner  <per@bothner.com>
+
+	* XSLT.java (<init>): Move some functionality to XslTranslator.parse.
+	(parseXPath): Rename lexer variable to parser, since it is one.
+	* XlsTranslator.kava (comp): New field.
+	(elements): Remove field - use comp.exprStack instead.
+	(parse): Take Compilation rather than ModuleExp.
+
+2004-12-22  Per Bothner  <per@bothner.com>
+
+	* XslTranslator.java: Update for removing of ElementConstructor and
+	AttributeConstructor.  Likewise use of SName.  Other cleanups.
+
+2004-08-08  Per Bothner  <per@bothner.com>
+
+	* XSLT.java (process):  Use new check0 API.
+
+2004-07-20  Per Bothner  <per@bothner.com>
+
+	* TemplateTable.java:  Remove unused import statements.
+	* XSLT.java:  Likewise.
+
+2004-01-09  Per Bothner  <per@bothner.com>
+
+	* XSLT.java (registerEnvironment):  Update setCurrent to setGlobal.
+
+2004-01-04  Per Bothner  <per@bothner.com>
+
+	* XSLT.java (runStylesheet):  Document.parse now returns a KDocument.
+
+2003-11-08  Per Bothner  <per@bothner.com>
+
+	* XslTranslator.java (parse):  New method.
+	<init>(InPort,SourceMessages,ModuleExp)):  Remove.
+	(<init>(InPort,SourceMessages,XSLT)):  Allocate XMLParser.
+	* XSLT.java (parse):  Update to take a Lexer rather than an InPort.
+	Use XslTranslator's new parse method.
+
+2003-11-02  Per Bothner  <per@bothner.com>
+
+	* XSLT.java (parse, parseFile):  Combined to single 'parse' method.
+
+2003-10-29  Per Bothner  <per@bothner.com>
+
+	* XslTranslator.java (isXslTag, beginGroup, beginAttribute):
+	Handle XName.
+
+2003-10-19  Per Bothner  <per@bothner.com>
+
+	* XSLT.java (parseXPath, parse, parseFile):  Pass this to Compilation.
+
+2003-09-04  Per Bothner  <per@bothner.com>
+
+	* XSLT.java (parse, parseFile):  Change defaultCallConvention
+	to new CALL_WITH_CONSUMER.
+
+2003-05-02  Per Bothner  <per@bothner.com>
+
+	* XSLT.java (parser, parseFile):  Use new XMLParser constructors.
+
+2003-03-05  Per Bothner  <per@bothner.com>
+
+	* XSLT.java (process(String,CallContext)):  Inlined, removed.
+	(runStyleShhet):  Look up input document using getBaseUriDefault,
+	rather than base-uri of stylesheet.
+
+2003-02-01  Per Bothner  <per@bothner.com>
+
+	* Makefile.am (PACKAGE_FNAME):  Fix typo.
+
+2003-01-09  Per Bothner  <per@bothner.com>
+
+	* XSLT.java:  Update for gnu.lists changes.
+
+2002-11-16  Per Bothner  <per@bothner.com>
+
+	* TemplateTable.java, XSLT.java, XslTranslator.java:
+	Use gnu.mapping.Symbol instead of gnu.xml.QName.
+
+2002-11-05  Per Bothner  <per@bothner.com>
+
+	* XSLT.java (parseFile): Take and use new 'immediate' parameter.
+
+2002-07-24  Per Bothner  <per@bothner.com>
+
+	* XSLT.java (parseXPath, parse, parseFile):  Update for changes
+	in Interpreter and Compilation.
+
+2002-06-24  Per Bothner  <per@bothner.com>
+
+	* XSLT.java:  Update for moved/changed XMLParser class.
+	(process):  Document.document method is renamed to parse.
+
+2002-06-11  Per Bothner  <per@bothner.com>
+
+	New package - an implementation of XSLT.
+	* TemplateTable.java:  New class.
+	* XSLT.java:  New class; an Interpreter.
+	* XslTranslator.java:  New class, a parser for XSLT stylesheets.
+	* Makefile.am:  New file.
+

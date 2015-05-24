@@ -1,0 +1,1276 @@
+2010-11-06  Per Bothner  <per@bothner.com>
+
+	* DisplayFormat.java (writeObjectRaw): For readable output of enums
+	use "ClassName:enumName" format.
+
+2010-11-04  Per Bothner  <per@bothner.com>
+
+	* CompileNamedPart.java: Use new Compilation#warnUnknownMember.
+
+2010-10-28  Per Bothner  <per@bothner.com>
+
+	* CompileArith.java (compile): We can special-case the general case (any
+	rounding mode) of DIVIDE_EXACT and MODULO of IntNums.
+
+2010-10-26  Per Bothner  <per@bothner.com>
+
+	* NumberCompare.java (classify(Type)): Remove. 
+	(Unknown_KIND, ..., int_KIND): Removed constants.
+	(classify(Expression)): Re-write to use	Arithmetic.classifyType.
+	(compile): Rewrite to use Arithmetic's XXX_CODE values.
+
+2010-10-23  Per Bothner  <per@bothner.com>
+
+	* Format.java: Set validateApplyKey property.
+	(formatToWriter, formatToOutputString): New method.
+	(formatToString): Change return type to String, rather than FString,
+	and swap args to make use of varargs.
+	(formatToString(char,Object,Object[])): Rename to formatToFString.
+	(format): Generalize to take Writer.  Use formatToWriter.
+	* CompileMisc.java (validateApplyFormat): New method.
+
+2010-10-17  Per Bothner  <per@bothner.com>
+
+	* DisplayFormat.java (writeObjectRaw): For readable output of #!void
+	return "#!void".
+
+2010-10-15  Per Bothner  <per@bothner.com>
+
+	* NumberPredicate.java: New class - implements odd? and even?.
+	* Makefile.am: Update accordingly.
+	* CompileArith.java (validateApplyNumberPredicate): New method.
+
+2010-10-14  Per Bothner  <per@bothner.com>
+
+	* CompileNamedPart.java (validateSetNamedPart): Set result type to void.
+	Also copy over line-number information.
+
+	* DisplayFormat.java (writeObject): When printing XML nodes,
+	only emit initial '#' if getReadableOutput().
+
+2010-10-06  Per Bothner  <per@bothner.com>
+
+	* MakeList.java (compile): Use getType rather than getReturnType.
+	* GetModuleClass.java (compile): Likewise.
+	* CompileMisc.java (getReturnType, getReturnTypeConvert): Removed.
+	(validateApplyConstantFunction0): Visit 2nd argument in context
+ 	of type from 1st argument.
+
+2010-10-04  Per Bothner  <per@bothner.com>
+
+	* CompileArith.java (appropriateIntConstant, appropriateLongConstant):
+	Take InlineCalls parameters, so we can simplify and use the new
+	fixIntValue and fixLongValue methods - and get language-dependent types.
+	(validateApplyArithOp): Update accordingly.
+	(inRange): Remove methods moved elsewhere.
+
+	* CompileNamedPart.java (GetNamedExp.validateApply): Don't prematurely
+	call visitArgs.
+
+2010-09-17  Per Bothner  <per@bothner.com>
+
+	* CompilationHelpers.java (validateApplyToArgs): Add setLine calls.
+
+2010-09-16  Per Bothner  <per@bothner.com>
+
+	* CompilationHelpers.java: Update validateApply methods, which no longer
+	take a 'boolean argsInlined' parameter.
+	* CompileMisc.java: Likewise.
+	* CompileArith.java: Likewise.
+	* CompileNamedPart.java: Likewise.
+
+	* CompileMisc.java: Update for using VALIDATED flag instead
+	of argsInlined boolean parameter.
+	* CompileArith.java: Likewise.
+	* CompileNamedPart.java: Likewise.
+	* CompilationHelpers.java: Likewise.
+	(validateApplyToArgs): Simplify without visiting arg.
+
+2010-08-27  Per Bothner  <per@bothner.com>
+
+	* ArithOp.java (op): New field.
+	(<init>): New parameter, for setting op.
+	(DIV, REM): Remove constants.
+	(DIVIDE_GENERIC, DIVIDE_INEXACT, QUOTIENT, QUOTIENT_EXACT, MODULO):
+	New constants.
+	* DivideOp.java: Change to extend ArithOp.
+	(GENERIC, DIVIDE_INEXACT, QUOTIENT, QUOTIENT_EXACT, MODULO):
+	Remove constants - use the inherited ones instead.
+	* DivideOp.java: Remove fields - now inherited.
+	* BitwiseOp.java: Likewise.
+	* AddOp.java, MultiplyOp.java, DivideOp.java, BitwiseOp.java,
+	Not.java, Convert.java, ConstantFunction0.java
+	Update to use Procedure.validateApplyKey.
+	* CompileMisc.java: Rename inlineXxx methods to validateXxx
+	methods that take an extra required-Type parameter.
+	* CompileArith.java: Likewise.  No longer implement CanInline.
+
+2010-08-27  Per Bothner  <per@bothner.com>
+
+	* Map.java: Moved/renamed from kawa/standard/map.java.
+	* CallCC.java: Moved/renamed from kawa/standard/callcc.java.
+	* CompileMisc.java: Moved validateApply (inline) code from above here.
+	* Makefile.am: Update accordingly.
+
+	* CompilationHelpers.java, CompileMisc.java, CompileNamedPart.java:
+	Update for changes in gnu.kawa.reflect.
+
+	*  NumberCompare.java: Update to use Procedure.validateApplyKey,
+	and move inlineXxx method to CompileArith.
+	* AppendValues.java: Likewise, except moving method to CompileMisc.
+	* ValuesMap.java: Likewise.
+	* MakeProcedure.java: Likewise.
+	* CompileMisc.java: New (Moved/renamed) validateXxx methods.
+	* CompileArith.java: Likewise.
+
+2010-08-26  Per Bothner  <per@bothner.com>
+
+	* ApplyToArgs.java: Update to use Procedure.validateApplyKey.
+	* GetNamedPart.java: Likewise.
+	* SetNamedPart.java: Likewise.
+	* GetNamedInstancePart.java: Likewise.
+	* IsEqv.java: Likewise.
+	* Setter.java: Likewise.
+	* CompilationHelpers.java: Rename inlineXxx methods to validateXxx
+	methods that take an extra required-Type parameter.
+	* CompileNamedPart.java: Likewise.
+
+2010-08-19  Per Bothner  <per@bothner.com>
+
+	* CompileNamedPart.java: Update to use new Environment-setting methods.
+
+2010-05-24  Per Bothner  <per@bothner.com>
+
+	* DisplayFormat.java (writeObjectRaw): Write KNode using new
+	XML literal syntax:#<NAME ...>...</>.
+
+2010-05-23  Per Bothner  <per@bothner.com>
+
+	* DisplayFormat.java (writeSymbol): Change from 'prefix:{uri}local'
+	to 'prefix{uri}:local'.
+
+2010-05-19  Per Bothner  <per@bothner.com>
+
+	* DisplayFormat.java (writeSymbol): If the output should be readable,
+	write both prefix and uri.
+
+2010-03-17  Per Bothner  <per@bothner.com>
+
+	* CompileArith.java (inlineDiv): Fix thinko.
+
+2010-02-24  Per Bothner  <per@bothner.com>
+
+	* GetNamedPart.java (getNamedPart): Don't coerce Type to ClassTYpe,
+	since it might fail in the case of an ArrayType, for example.
+	This fixes Savannah bug #28957 "exception in inliner".
+
+2009-10-19  Per Bothner  <per@bothner.com>
+
+	* CompilationHelpers.java (inlineApplyToArgs): Use getRealType.
+	This allows optimizing (v i) where v is a LangObjType.vectorType.
+
+2009-10-18  Per Bothner  <per@bothner.com>
+
+	* BitwiseOp.java: New class, extends ArithOp.  (Re-)implements
+	bitwise-ior, bitwise-arithmetic-shift, etc.
+	* Makefile.am: Update accordingly.
+	* CompileArith.java: Optimize BitwiseOp procedures.
+	* ArithOp.java (ADD, SUB, ...): New constants, some from CompileArith.
+	* CompileArith.java: Update to use static import of ADD/....
+
+2009-10-12  Per Bothner  <per@bothner.com>
+
+	* NumberCompare.java (getReturnType): Change to Type.booleanType.
+
+2009-10-11  Per Bothner  <per@bothner.com>
+
+	* CompileArith.java (inline): Do inlineIfConstant after we've adjusted
+	the result type, so the former can make use of the latter.
+	Also set and adjust return type for unary calls, not just binary.
+
+2009-10-03  Per Bothner  <per@bothner.com>
+
+	* CompileArith.java (compile): 	If target is float/double and args
+	are int/long we still want to use int/long arithmetic and then
+	convert to float/double rather than vice versa.
+	Most important for quotient/remainder operations.
+	Also some other optimization tweaks for division.
+
+2009-10-01  Per Bothner  <per@bothner.com>
+
+	* CompileArith.java (inRange): Make public - used by Invoke.
+
+2009-09-30  Per Bothner  <per@bothner.com>
+
+	* Arithmetic.java (typeDFloNum): Use LangObjType.dflonumType.
+
+	* CompileArith.java (getReturnKind): Try again ...
+
+2009-09-26  Per Bothner  <per@bothner.com>
+
+	* CompileArith.java (inlineAdd, inlineMul, inlineDiv): Move some
+	common code to the geneic inline method.
+	(inline):  Change (OP int-expression integer-literal) to
+	(OP int-expression java.lang.Integer-literal) for better
+	type-inference and better code-generation.
+	Also, call setType on argument ApplyExp.
+	(primInline):  Remove method and its callers.  It redundant, plus
+	it prevents the iinc optimization.
+
+2009-09-20  Per Bothner  <per@bothner.com>
+
+	* CompileArith.java (getReturnKind): Fix thinko.
+
+	* DivideOp: No longer implement CanInline; inline support moved
+	to CompileArith.java.
+	(op, rounding_mode): New fields to specify more operations (including
+	MODULO/remainder) and more variants (including rounding modes).
+	(quotient, remainder, modulo, div, mod, div0, mod0): New static
+	DivideOp instances for the different Scheme division operations.
+	(applyN): Re-write to handle different variants.
+	(numArgs): New method.
+	* CompileArith.java: Add opitmization support for DivideOp.
+
+	* Arithmetic.java (asNumeric): Change to use Numeric.asNumericOrNull.
+
+	* Arithmetic.java (isExact): Consider BigDecimal as inexact.
+	(toExact, toInexact): New methods.
+
+2009-09-11  Per Bothner  <per@bothner.com>
+
+	* Arithmetic.java (asRatNum): Use new method RatNum.valueOf.
+	(typeRatNum, typeRealNum): Use new LangObjType objects.
+
+	* Arithmetic.java (isExact): New helper method, to generalize
+	definition of exact/inexact to standard Java Number classes.
+	* IsEqual.java (numberEquals): New method, to likewise generalize,
+	and better confirm with R6RS.
+	(apply): Use numberEquals.
+	* IsEqv.java (apply): Use IsEqual.numberEquals.
+
+2009-08-27  Per Bothner  <per@bothner.com>
+
+	* Not.java:  Moved/renamed from kawa/standard/not.java.
+	Move CanInline and Inlineable support to CompileMisc.java.
+	* CompileMisc.java: CanInline and Inlineable support for Not.
+	* Makefile.am: Update accordingly.
+
+	* ArithOp.java (isSideEffectFree): New method.
+
+2009-08-25  Per Bothner  <per@bothner.com>
+
+	* CompileArith.java (compileIntNum): Add new support for optimizing
+	IntNum arithmetic: Call IntNum static operations directly.
+	* AddOp.java ($Pl, $Mn): New static fields.
+	* Arithmetic.java (typeIntNum): Use LangObjType.integerType, so we
+	get desired conversions.
+	* NumberCompare.java: Need to use getMethod, since LangObjType
+	doesn't support getDeclaredMethod.
+
+2009-08-24  Per Bothner  <per@bothner.com>
+
+	* CompileArith.java: New class, provides CanInline and Inlineable
+	support for ArithOp - i.e. AddOp and MultiplyOp, so far.
+	* Makefile.am: Update accordingly.
+	* ArithOp.java: Move code to CompileArith.
+	No longer inplement CanInline and Inlineable.
+	* DivideOp.java: Update as needed.
+	* MultiplyOp.java (inline, primitiveOpcode): Moved to CompileArith.
+	* AddOp.java (inline, pairwise, primitiveOpcode, primInline): Likewise.
+
+2009-08-23  Per Bothner  <per@bothner.com>
+
+	* CompileMisc.java: New file: Implements Inlineable and CanInline
+	for Convert and ConstantFunction0 - so far,
+	* Makefile.am: Update accordingly.
+	* Convert.java: Now longer implements CanInline or Inlineable.
+	* ConstantFunction0.java: Now longer implements CanInline
+
+	* Convert.java (makeCoercion*2): Moved to Compilation.
+	(setCoercedReturnValue): Moved to LambdaExp.
+	* CompilationHelpers.java: Update accordingly.
+	* CompileNamedPart.java: Likewise.
+
+2009-08-15  Per Bothner  <per@bothner.com>
+
+	* GetNamedInstancePart.java: Move inline/expression support
+	to CompileNamedPart.
+	* CompileNamedPart.java (makeGetNamedInstancePartExp,
+	inlineGetNamedInstancePart, inlineSetNamedInstancePart): New methods.
+
+	* ArithOp.java (compile): Use implementation-type.
+	This fixes Savannah bug #27257 "non-int dim. spec. in emitNewArray".
+
+2009-08-13  Per Bothner  <per@bothner.com>
+
+	* CompileNamedPart.java: New class - compilation/optimization-related
+	methods for GetNamedPart and SetNamedPart.
+	* Makefile.am: Update accordingly.
+	* GetNamedPart.java: Keep only runtime-specific parts.
+	* SetNamedPart.java: Likewise.
+
+2009-08-12  Per Bothner  <per@bothner.com>
+
+	* CompilationHelpers.java: New class.
+	Used for inlining specific procedures.
+	* Makefile.am: Update accordingly.
+	* ApplyToArgs.java: No longer implements CanInline.
+	(inline):  Replaced by CompilationHelpers.inlineApplyToArgs.
+	* Setter.java: No longer implements CanInline.
+	(inline):  Replaced by CompilationHelpers.inlineSetter.
+	(class SetArrayExp, class SetListExp): Moved to CompilationHelpers.
+	* IsEqv.java: No longer implements CanInline.
+	(inline):  Replaced by CompilationHelpers.inlineIsEqv.
+	* AddOp.java (pairwise): Use InlineCalls.maybeInline.
+
+	* ArithOp.java (getReturnKind): New method.
+	(compile): Minor efficiency tweak.
+
+2009-06-28  Per Bothner  <per@bothner.com>
+
+	* ValuesMap.java (inline): Update for new inlining framework.
+	(compileInlined): Likewise.
+
+2009-06-02  Per Bothner  <per@bothner.com>
+
+	* UnicodeUtils.java: New helper class,
+	(isWhitespace): New method, used for char-whitespace?.
+	(capitalize): New method, used for string-titlecase.
+	(foldCase): New method, used for string-foldcase.
+	(generalCategory): New method, used for char-general-category.
+	* Makefile.am: Update according.
+
+2009-03-07  Per Bothner  <per@bothner.com>
+
+	* LispFormat.java (printChar): Using using hex rather than octal.
+
+	* DisplayFormat.java (writeReadableSymbol (overloaded x2)): Rename to -
+	(writeSymbol (overloaded x2)): and change to take 'readable' paramater.
+	Add test for language-dependent handling of Keywords.
+
+2009-02-17  Per Bothner  <per@bothner.com>
+
+	* Convert.java (compile): When the target type isn't known at
+	compile-time, coerce it to LangObjType.typeClassType so either
+	Class or Type will be allowed.
+
+2008-11-23  Per Bothner  <per@bothner.com>
+
+	* ArithOp.java: New abstract class, extends ProcedureN.
+	* Makefile.am (java_sources): Update accordingly.
+	* AddOp.java: Change to extend ArithOp.  Move useful code to ArithOp.
+	* MultiplyOp: Change to ArithOp - so we get better optimization for 
+	multiply.
+
+2008-09-05  Per Bothner  <per@bothner.com>
+
+	* AppendValues.java (compile): Remove special handling for SeriesTarget.
+	* ValuesMap.java (compile): Likewise.
+	(compileInlined): Instead of allocating a SeriesTarget, compile
+	sequence to StackTarget, and explicit loop Values using
+	nextIndex/nextValue.  Gives us the benefit of SeriesTarget in the
+	usual case without needing SeriesTarget.
+
+2008-06-01  Per Bothner  <per@bothner.com>
+
+	* MakeList.java (getReturnType): Update to use new Type fields.
+
+2008-05-18  Per Bothner  <per@bothner.com>
+
+	* Format.java (format$V): If JAVA5, rename to format, with VARARGS.
+	* Values.java (values$V): If JAVA5, rename to values, with VARARGS.
+
+2008-03-23  Per Bothner  <per@bothner.com>
+
+	* Format.java (format$V): Call closeThis rather than close on
+	temporary OutPorts.
+	This fixes Savannah bug #22665: "Format closes OutputStream".
+
+2008-01-22  Per Bothner  <per@bothner.com>
+
+	* Apply.java: Generalize to handle same kinds of "functions"
+	as ApplyToArgs does.
+	(applyToArgs): New field.
+	(getArguments): make static.
+	(doApply): Remove static method.
+
+2008-01-16  Per Bothner  <per@bothner.com>
+
+	* NumberCompare.java (inline): Handle new argsInlined parameter.
+	* DivideOp.java (inline): Likewise.
+	* GetNamedPart.java (inline): Likewise.
+	* ConstantFunction0.java (inline): Likewise.
+	* SetNamedPart.java (inline): Likewise.
+	* AppendValues.java (inline): Likewise.
+	* ValuesMap.java (inline): Likewise.
+	* GetNamedInstancePart.java (inline): Likewise.
+	* Setter.java (inline): Likewise.
+	* ChangeLog (inline): Likewise.
+	* MultiplyOp.java (inline): Likewise.
+	* Convert.java (inline): Likewise.
+	* MakeProcedure.java (inline): Likewise.
+	* IsEqv.java (inline): Likewise.
+	* AddOp.java (inline): Likewise.
+	* ApplyToArgs.java (inline): Likewise. Somewhat fancier in this case.
+
+2008-01-06  Per Bothner  <per@bothner.com>
+
+	* Convert.java (makeCoercion): Make return type more specific.
+
+2007-11-05  Per Bothner  <per@bothner.com>
+
+	* AddOp.java ($Mn): Generalize to standard java.lang.Number
+	classes, like we already do in apply2.
+
+2007-11-02  Per Bothner  <per@bothner.com>
+
+	* GetNamedPart.java (inline): Some code that used to only work
+	for ClassType now works for ObjectType (and specifically LangObjType).
+
+2007-04-03  Per Bothner  <per@bothner.com>
+
+	* GetNamedPart.java (combineName): Minor optimization.
+
+2007-04-01  Per Bothner  <per@bothner.com>
+
+	* GetNamedPart.java (getNamedPart): If container is a Package
+	get named Class in Package.
+
+2007-03-31  Per Bothner  <per@bothner.com>
+
+	* GetNamedPart.java (inline): Make sure we pass a String (rather than
+	a SimpleSymbol) to HasNamedParts.get.
+
+2007-03-06  Per Bothner  <per@bothner.com>
+
+	* Convert.java (setCoercedReturnValue): Don't coerce result
+	if function is abstract.
+
+2007-02-26  Per Bothner  <per@bothner.com>
+
+	* NumberCompare.java (inline): Update for new CanInline api.
+	* DivideOp.java (inline): Likewise.
+	* GetNamedPart.java (inline): Likewise.
+	* ConstantFunction0.java (inline): Likewise.
+	* AppendValues.java (inline): Likewise.
+	* SetNamedPart.java (inline): Likewise.
+	* ValuesMap.java (inline): Likewise.
+	* GetNamedInstancePart.java (inline): Likewise.
+	* Setter.java (inline): Likewise.
+	* MultiplyOp.java (inline): Likewise.
+	* Convert.java (inline): Likewise.
+	* MakeProcedure.java (inline): Likewise.
+	* IsEqv.java (inline): Likewise.
+	* AddOp.java (inline): Likewise.
+	* ApplyToArgs.java (inline): Likewise.  Defer walkArgs.
+	
+	* GetNamedPart.java (inline): Update to extra argsInlined parameter.
+	* Setter.java (SetArrayExp.inline): Likewise.
+	(SetListExp.inline): Likewise.
+
+2007-02-23  Per Bothner  <per@bothner.com>
+
+	* Arithmetic.java (REALNUM_CODE): New constant.
+	(classifyValue): Update appropriately.
+	(kindType, classifyType): New static methods.
+	(convert): Handle NUMERIC_CODE and REALNUM_CODE.
+	(typeDFloNum etc): Move from AddOp.java.
+	* NumberCompare.java: Update AddOp -> Arithmetic for static fields.
+	* DivideOp.java: Likewise.
+	* AddOp.java (typeDFloNum etc): Move to Arithmetic.java.
+	(compile): Make use of classifyType.
+	Make logic more generalizable - also fixing a bug relating to long.
+	(getReturnType): Make use of classifyType.
+
+2007-02-19  Per Bothner  <per@bothner.com>
+
+	* ApplyToArgs.java (applyN): Handle Class like Type.
+
+	* Convert.java (apply2): Allow Class as well as Type.
+
+	* ApplyToArgs.java (applyN): Only copy args array when needed.
+
+2007-02-18  Per Bothner  <per@bothner.com>
+
+	* GetNamedPart.java (combine, makeExp): Handle String->Symbol change.
+	* GetNamedInstancePart.java (makeExp): Likewise.
+	* MakeProcedure.java (inline): Likewise.
+	* Format.java (format$V): Likewise.
+	* DisplayFormat.java (writeObject, writeObjectRaw):
+	Handle String/Symbol rep changes.
+	(writeReadableSymbol(Symbol,Consumer)): New method.
+	* IsEqual.java (apply): Explicit recursion, since equal String
+	and FString should compare as equal? for Scheme.
+	
+2007-02-05  Per Bothner  <per@bothner.com>
+
+	* GetNamedPart.java (inline): Check if container implements
+	HasNamedParts *before* looking for field/method.
+
+2007-01-19  Per Bothner  <per@bothner.com>
+
+	* GetNamedPart.java (makeExp): Use new ClassType.getContextClass.
+
+	* GetNamedPart.java (makeExp): Don't look for class if there is
+	a binding in current environment.
+
+2007-01-02  Per Bothner  <per@bothner.com>
+
+	* GetNamedPart.java (inline): Generalize method lookup to ObjectType.
+
+2006-12-29  Per Bothner  <per@bothner.com>
+
+	* GetModuleClass.java (getModuleClassURI): Update to use URLPath
+	and ResourceStreamHandler.
+
+2006-11-22  Per Bothner  <per@bothner.com>
+
+	* ValuesMap.java (compileInlined): New method, used by ValuesFilter.
+
+	* DisplayFormat.java: Partially revert changes from 11-17 and 11-18.
+
+2006-11-20  Per Bothner  <per@bothner.com>
+
+	* IsEqv.java (apply, nonNumeric): Symbols can be eqv even if not ==.
+
+	* DisplayFormat.java (writeObjectRaw): Print now takes any Consumer.
+
+2006-11-18  Per Bothner  <per@bothner.com>
+
+	* DisplayFormat.java: Update writeChars -> append.
+
+2006-11-17  Per Bothner  <per@bothner.com>
+
+	* DisplayFormat.java (append): New method.
+	(writeChar): Keep old method to handle non-base-plane characters.
+	(writeObjectRaw): Use Char's intValue, so we can handle surrogates.
+
+2006-11-13  Per Bothner  <per@bothner.com>
+
+	* DisplayFormat.java (writeObject): Rename to writeObjectRaw.
+	(writeObject): New method calls writeObjectRaw, but adds extra
+	spaces between "words".
+
+2006-11-07  Per Bothner  <per@bothner.com>
+
+	* AppendValues.java (compile): Fix handling of SeriesTarget.
+	* ValuesMap.java (compile): Handle the case when the incoming Target
+	is a SeriesTarget.
+
+	* ValuesMap.java (<init>): New private convenience constructor.
+
+2006-10-31  Per Bothner  <per@bothner.com>
+
+	* ConstantFunction0.java (constant): New QuoteExp field.
+	(<init>): Newo constructor takes QuoteExp.
+	(inline): Return constant field.
+
+2006-10-26  Per Bothner  <per@bothner.com>
+
+	* DisplayFormat.java (writeObject): Write HTML symbol with
+	"Html:" prefix.
+
+2006-10-22  Per Bothner  <per@bothner.com>
+
+	* BaseUri.java: Remove class.
+	(baseUri(Object)): Wasn't used.
+	(baseUri()):  Replaced by calling CallContext.getBaseUri directly.
+	* Makefile.am: Update accordingly.
+
+2006-10-11  Per Bothner  <per@bothner.com>
+
+	* DisplayFormat.java (writeObject): Use escapes if readably
+	writing a CharSeq or a URI.
+
+2006-09-30  Per Bothner  <per@bothner.com>
+
+	* NumberCompare.java (checkCompareCode): New static method.
+	(applyWithPromotion): Use checkCompareCode.
+	(compare(Object,int,Object,int,boolean)): New method.
+	(compare(Object,Object,boolean): Use new method.
+	* Arithmetic.java (convert): New static method.
+
+2006-08-26  Per Bothner  <per@bothner.com>
+
+	* NumberCompare.java (compare): Add exact 'exact' parameter. Use to
+	control exact-vs-inexact conversion/promotion.
+	(apply2): Update accordingly.
+	(applyWithPromotion): New static method.
+
+2006-07-12  Per Bothner  <per@bothner.com>
+
+	* GetNamedPart.java (inline): Check that class is known.
+
+2006-06-23  Per Bothner  <per@bothner.com>
+
+	* Setter.java: Fix typo in PreProcess comment.
+
+2006-06-16  Per Bothner  <per@bothner.com>
+
+	* GetNamedPart.java (inline): If container implements HasNamedparts,
+	optimize for that case.
+
+	* GetNamedPart.java (inline): Warn if no known part.
+
+2006-06-12  Per Bothner  <per@bothner.com>
+
+	* GetNamedPart.java (inline): Update to call getTypeFor in non-lenient
+	mode, so we don't interpret a string as a class name, for example.
+	* ApplyToArgs.java (inline): Likewise.
+	Also call Invoke.checkKnownClass to catch unknown classes.
+
+	* ApplyToArgs.java (inline): Trabslate indexing a List value to call to
+	a get method.
+	(applyN): If proc is a List value, call List:get method.
+	* Setter.java (apply1): If argument is a List, create SetList instance,
+	so an application of the latter will call its set method.
+	(inline): If argument has List type, create SetListExp for same reason.
+	(class SetList): New non-public class, extends Procedure2.
+	(class SetListExp): New non-public class, extends ApplyExp.
+
+	* Setter.java (class SetArray): New elementType field.
+	(<init>): Set elementType field using langauge and component type.
+	(apply2): Coerce value to elementType.
+
+2006-06-10  Per Bothner  <per@bothner.com>
+
+	* GetNamedPart.java (getNamedPart): Move functionality to ...
+	(getTypePart, getMemberPart): ... new methods.
+	(getNamedPart): Handle container that impleemnts HasNamedParts. Remove
+	special support for Namespace - which now implements HasNamedParts.
+
+2006-05-31  Per Bothner  <per@bothner.com>
+
+	* DisplayFormat.java (writeReadableSymbol): Change comment style
+	so PreProcess doesn't break it.
+
+2006-05-25  Dean Ferreyra <dferreyra@igc.org>
+
+	* DisplayFormat.java (r5rsIdentifierMinusInteriorColons): A fix
+	for Savannah #16660: Additional fix for vertical-bar symbol quoting.
+
+2006-05-16  Per Bothner  <per@bothner.com>
+
+	* GetNamedPart.java (getNamedPart): Add missing name mangling.
+	Fixes Savannah bug@16593 Prefix-colon syntax and name manglingc problem.
+
+2006-05-11  Per Bothner  <per@bothner.com>
+
+	* DisplayFormat.java (writeReadableSymbol):  New method.
+	(writeObject): Use writeReadableSymbol if appropriate.
+
+2006-05-06  Per Bothner  <per@bothner.com>
+
+	* FileUtils.java: New class.
+	(createTempFile): New static method.
+	(Makefile.am): Update accordingly.
+
+2006-04-26  Per Bothner  <per@bothner.com>
+
+	* ApplyToArgs.java (applyN): Remove debug message print-out.
+
+2006-03-25  Per Bothner  <per@bothner.com>
+
+	* NumberCompare.java (compare): Fix case of either arg a non-number.
+
+2006-03-23  Per Bothner  <per@bothner.com>
+
+	* GetNamedPart.java (inline): Do inline new ApplyExp.
+	(NamedPart.inline): Likewise.
+	(NamedPartSetter.inline): Likewise.
+
+2006-03-20  Per Bothner  <per@bothner.com>
+
+	* ApplyToArgs.java: When creating new ApplyExp, make sure to copy
+	line number from original.
+	* GetNamedPart.java: Likewise.
+
+2006-03-07  Per Bothner  <per@bothner.com>
+
+	* Arithmetic.java (asIntNum): New overloaded static helper methods.
+	(asIntNum(value)): Handle BigDecimal.
+
+	* NumberCompare.java (compare): New method.
+	(apply2): Now just a wrapper from compare.
+
+2006-03-01  Per Bothner  <per@bothner.com>
+
+	* LispFormat.java (LispRealFormat.resolve): Set new exponentShowSign
+	field of ExponentialFormat.
+
+2006-02-19  Per Bothner  <per@bothner.com>
+
+	* GetNamedPart.java (getNamedPart): Update for
+	simplified Classmethods.{GetMethods,apply} parameter lists.
+
+	* GetNamedPart.java (inline): Update to use SlotGet.lookupMember.
+	* SetNamedPart.java (inline): Update to use SlotSet.lookupMember.
+	
+2006-02-16  Per Bothner  <per@bothner.com>
+
+	* GetNamedPart.java (GetNamedExp.inline): Re-organize to use a switch
+	statement based on 'kind' field.  Fix some buglets.
+
+	* GetNamedPart.java (GetNamedExp.side_effects): New method.
+
+	* GetNamedPart.java (inline): Fix switched arguments to getMethods.
+
+2006-02-14  Per Bothner  <per@bothner.com>
+
+	* GetNamedPart.java (combineName): New static method.
+	(makeExp): Use combineName.
+
+2006-02-13  Per Bothner  <per@bothner.com>
+
+	* GetNamedPart.java (makeExp): Calculate combined name if first operand
+	is a ReferenceExp or a nested GetNamedExp and 2nd is a constant string.
+	Change return type to Expression, since if combined name is bound in
+	lexical scope we use that. Check if 1st part matches a classname.
+	(inline): Convert '*:PART' here instead of in Translator.
+	(GetNamedExp.apply): New method - check for combinedName.
+
+2006-02-10  Per Bothner  <per@bothner.com>
+
+	* NumberCompare.java (apply2): Rewrite so we can also handle standard
+	Java Number classes, by making use of Arithmetic.classifyValue.
+
+	* Arithmetic.java (toString): New method.
+
+2006-02-09  Per Bothner  <per@bothner.com>
+
+	* AddOp.java (inline): Don't inline, unless mustCompile.
+	* MultiplyOp.java: Likewise.
+
+	* ApplyToArgs.java (match1, match2, match3, match4, matchN,
+	check1, check2, check3, check4, checkN): New methods.
+
+2006-02-07  Per Bothner  <per@bothner.com>
+
+	* GetNamedPart.java (makeExp): New convenience factory method.
+
+2006-02-06  Per Bothner  <per@bothner.com>
+
+	* ApplyToArgs.java: New class, extends ProcedureN.
+	* GetNamedInstancePart.java: New class, extends ProcedureN.
+	(SetNamedInstancePart): New non-public class, extends Procedure2.
+	* GetNamedPart.java: Major re-write, partly to handle inlining,
+	and partly to handle namespaces.
+	(GetNamedExp): New non-public class, extends ApplyExp.
+	(NamedPart: New non-public class, extends procedureN.
+	(CurriedInvoke): Remove no-longer used non-public class.
+	(NamedPartSetter): New non-public class, extends gnu.mapping.Setter.
+	* SetNamedPart.java: New class, extends Procedure3.
+	* Makefile.am: Update with new files.
+	* Setter.java (apply1): Allow argument to be an array as well.
+	(inline): Check if operand is of an array type.
+	Check if operand is a QuoteExp, as well as a ReferenceExp.
+	(SetArray): New non-public class, extends Procedure2.
+	(SetArrayExp): New non-public class, extends ApplyExp.
+
+2006-01-24  Per Bothner  <per@bothner.com>
+
+	* DisplayFormat.java (writeObject): Print contents of Java arrays.
+	(write(Array,int,int,Consumer)): Make sure space is written between
+	elements even if Consumer is not an OutPort.
+
+2006-01-11  Per Bothner  <per@bothner.com>
+
+	* GetNamedPart.java: Some cleaning up.
+
+	* GetModuleClass.java: Some cleaning up.
+
+2006-01-07  Per Bothner  <per@bothner.com>
+
+	* GetModuleClass.java: New class, extends Procedure0.
+	(getModuleClassURI): New static main public entry point.
+	* Makefile.am (java_sources): Add new file.
+
+2006-01-04  Per Bothner  <per@bothner.com>
+
+	* BaseUri.java (resolve): Remove method - using URI_utils instead.
+
+2006-01-02  Per Bothner  <per@bothner.com>
+
+	* URI_utils.java: Moved to gnu.text.
+	* Makefile.am: Update accordingly.
+
+2005-12-31  Per Bothner  <per@bothner.com>
+
+	* URI_utils.java: New class, for URI-related helper methods.
+	(toURI): Convert various values to URI - or String if URI is missing.
+	(URLtoURI, toURIString, filenameToURIString, toURIString): Static
+	help methods.
+	* Makefile.am: Update accordingly.
+
+	* DisplayFormat.java (writeObject): Use SRFI-10 notation when readably
+	writing java.net.URI objects.  This is condionally compiled.
+
+2005-12-13  Per Bothner  <per@bothner.com>
+
+	* BaseUri.java: No longer extends Procedure0or1.
+	(baseUri): Remove no-longer used static field.
+	(appl0, apply1): Remove no-longer-needed methods.
+
+2005-12-10  Per Bothner  <per@bothner.com>
+
+	* BaseUri.java (uriSchemeLength): Moved to InPort.java.
+	(hasScheme): Moved to InPort.java and renamed to uriSchemeSpecified.
+	(resolve): Update accordingly.
+
+2005-12-04  Per Bothner  <per@bothner.com>
+
+	* GetNamedPart.java: New class.
+	* Makefile.am: Update accodingly.
+
+2005-11-14  thomas kirk  <tk@research.att.com>
+
+	* Format.java (formatToString, format$V): Close OutPorts.
+	* ObjectFormat.java (format): Close OutPort.
+
+2005-07-20  Per Bothner  <per@bothner.com>
+
+	* DisplayFormat.java (outBase, outRadix): New ThreadLocation fields.
+	(writeObject): If obj is rational, use outBase and outRadix to format
+	number as specified for Common Lisp.	
+
+2005-06-29  Per Bothner  <per@bothner.com>
+
+	* NumberCompare.java (language): New field.
+	(make): Factor method now takes a Language.
+	(apply2, applyN): Convert result to language's boolean objects.
+	(TRUE_IF_XXX constants): Make public, since used externally.
+	($Eq, $Gr, $Gr$Eq, $Ls, $Ls$Eq): Remove static fields, since
+	NumberCompare objects are now Language-spacific.
+
+2005-06-26  Per Bothner  <per@bothner.com>
+
+	* DivideOp.java (asInteger): New field.
+	(idiv): New static field.
+	(applyN, inline): Check asInteger.
+
+2005-06-04  Per Bothner  <per@bothner.com>
+
+	* DisplayFormat.java: Update for AbstractFormat move to gnu.lists.
+	* ObjectFormat.java: Likewise.
+
+	* ObjectFormat.java (print): Update to match OutPort's objectFormat.: 
+
+2005-04-03  Per Bothner  <per@bothner.com>
+
+	* package.html: New file, for javadoc.
+
+2005-03-17  Per Bothner  <per@bothner.com>
+
+	* DisplayFormat.java (writeList): Use LList.checkNonList.
+	Fixes Savannah bug #12216.
+
+2005-03-04  Per Bothner  <per@bothner.com>
+
+	* Arithmetic.java: New utility class.
+	* Makefile.am: Upadte accordingly.
+	* AddOp.java (apply2): Handle operands that are of a java.Number class
+	or gnu.math.BigInteger/BigDecimal.
+	* MultiplyOp.java (applyN): Likewise.
+
+	* Convert.java: Update Interpreter->Language various places.
+	* IsEq.java: Likewise.
+	* IsEqual.java: Likewise.
+	* IsEqv.java: Likewise.
+
+2005-01-02  Per Bothner  <per@bothner.com>
+
+	* LispFormat.java <Init>: Handle ~W (Write) and ~Y (pretty-printing,
+	from SRFI-48), if not quite correctly.
+	Handle ~<...~:> (Logical Block) and I (Indent).
+	(LispIndentFormat): New non-public class, extends ReportFormat.
+	(LispPrettyFormat): New non-public class, extends ReportFormat.
+	(LispNewlineFormat.printNewline): Call writeBreak.
+
+2004-11-20  Per Bothner  <per@bothner.com>
+
+	* BaseUri.java (resolve): Fix various problems.
+
+2004-08-08  Per Bothner  <per@bothner.com>
+
+	* ValuesMap.java (apply):  Use new check1/check1 methods.
+
+2004-08-07  Per Bothner  <per@bothner.com>
+
+	* Apply.java (getArgument):  Make non-static.
+	Update WrongType construction.
+	(applyN):  Rename static to doApply.
+
+2004-08-03  Per Bothner  <per@bothner.com>
+
+	* AppendValues.java:  Extend MethodProc instead of CpsProcedure.
+	* ValuesMap.java:  Likewise.
+	
+2004-07-20  Per Bothner  <per@bothner.com>
+
+	* IsEqv.java:  Remove unused import statements.
+	* MultiplyOp.java:  Likewise.:  Likewise.
+	* ObjectFormat.java:  Likewise.:  Likewise.
+	* ParseFormat.java:  Likewise.:  Likewise.
+	* MakeList.java:  Use static syntax to access static fields.
+
+2004-05-28  Per Bothner  <per@bothner.com>
+
+	* ObjectFormat.java (format):  Check for missing argument.
+
+2003-12-14  Chris Dean <ctdean@sokitomi.com>
+
+	* DisplayFormat.java (AbstractFormat): Allow obj.toString() to
+	return null.
+
+2003-11-10  Per Bothner  <per@bothner.com>
+
+	* ParseFormat.java (parseFormat):  Allow '*' for precision.
+	Handle printf-style precision in integer formats.
+	* ObjectFormat.java (maxChar):  New defaults to PARAM_UNSPECIFIED.
+	(format - non-static):  Handle PARAM_FROM_LIST etc.
+
+2003-10-19  Per Bothner  <per@bothner.com>
+
+	* AddOp.java (classify):  Fix logic for non-float non-integer reals.
+	(compile):  Use LangPrimType.doubleType instead	Type.double_type.
+	Fix bug reported 10-17 Sven.Hartrumpf@fernuni-hagen.de.
+
+2003-10-12  Per Bothner  <per@bothner.com>
+
+	* IsEqv.java (IsEqv):  Implement CanInline instead of Inlineable.
+	(isEq):  New field.
+	(inline):  New method.
+	(compile, getReturnType):  Removed.
+
+2003-09-09  Per Bothner  <per@bothner.com>
+
+	* ValuesMap.java (startCounter):  New field.
+	(canInline):  New private helper method.
+	(apply, compile):  If startCounter is non-negative, also pass an
+	index to the mapping function.  Used for XQuery's 'at' clause.
+
+2003-08-20  Per Bothner  <per@bothner.com>
+
+	* AddOp.java (classify):  New helper function.
+	(getReturnType):  Use classify.
+	* DivideOp.java:  Now implements CanInline.
+	(inline):  New method.
+
+	* DivideOp.java ($Sl):  Fix name to "/".
+
+2003-08-03  Per Bothner  <per@bothner.com>
+
+	* ValuesMap.java (apply):  Use nextPos; don't use nextDataIndex.
+
+2003-08-01  Per Bothner  <per@bothner.com>
+
+	* Convert.java (setCoercedReturnValue):  New static helper method.
+
+2003-07-16  Per Bothner  <per@bothner.com>
+
+	* Arrays.java (effectiveIndex):  Minor optimization - I hope.
+	(shareArray):  Be careful to not call getEffectiveIndex with invalid
+	indexes.  Fixes Savannah [bug #4310] share-array edge case.
+
+	* AddOp.java (inline):  Use new inlineIfConstant method overloading.
+	Fixes bug reported 7/15 by Joerg-Cyril.Hoehle@t-systems.com.
+	* AppendValues.java (inline):  Likewise.
+	* MultiplyOp.java (inline):  Likewise.
+	* NumberCompare.java (inline):  Likewise.
+
+2003-07-14  Per Bothner  <per@bothner.com>
+
+	* AddOp.java (inline):  Call makeBuiltinUnary instead of
+	makeBuiltinBinary when appropriate fixed bug reported 7/14
+	by Joerg-Cyril.Hoehle@t-systems.com.
+
+2003-05-17  Per Bothner  <per@bothner.com>
+
+	* Convert.java (inline):  Update call to inlineClassName.
+
+2003-04-19  Per Bothner  <per@bothner.com>
+
+	* NumberCompare.java (compile):  Fix logic for swapping arguments.
+	Based on patch from Vladimir Tsichevski <wowa@jet.msk.su>.
+
+2003-04-08  Per Bothner  <per@bothner.com>
+
+	* Convert.java (compile):  Only compileFromStack if reachable.
+	Fixes bug reported 04-07 by Vladimir Tsichevski.
+
+2003-04-06  Per Bothner  <per@bothner.com>
+
+	* ObjectFormat.java (print):  New static help method.
+	(format):  Use latter instead of SFormat.
+
+2003-04-05  Per Bothner  <per@bothner.com>
+
+	* DisplayFormat.java (writeList):  Use our writeObject method.
+
+	* Format.java:  Remove some comment-out code.
+
+2003-03-13  Per Bothner  <per@bothner.com>
+
+	* Arrays.java (make):  Fix thinko - addition should be multiply.
+	Fixes bug reported 03-12 by Chris Dean <ctdean@mercedsystems.com>.
+
+2003-03-07  Ivelin Ivanov <ivelin@apache.org>
+
+	* BaseUri.java (resolve):  Remove redundant semicolon.
+
+2003-03-02  Per Bothner  <per@bothner.com>
+
+	* BaseUri.java:  Moved from gnu.kawa.xml - not XML-specific.
+	* Makefile.am:  Update accordingly.
+	* Baseuri.java:  Inherit from Procedure0or1 instead of Procedure1.
+	(apply0):  New methods.
+	(baseUri, hasScheme, resolve, uriSchemeLength): New static methods.
+
+2003-01-09  Per Bothner  <per@bothner.com>
+
+	* Arrays.java (effectiveIndex):  Optimization - use SeqPosition's next,
+	instead of nextElement which just calls next.
+	* DisplayFormat.java (writeObject):  consumeNext no longer takes xpos.
+	* ValuesMap.java (apply):  Update for gnu.lists changes.
+
+2002-11-15  Per Bothner  <per@bothner.com>
+
+	* Setter.java:  Implement HasSetter.
+	(set1):  New method.
+
+2002-08-04  Per Bothner  <per@bothner.com>
+
+	* NumberCompare.java (compile):  More complete optimization.
+
+2002-07-25  Per Bothner  <per@bothner.com>
+
+	* ConstantFunction0.java (inline):  Do check argument count.
+
+	* AddOp.java (primInlin, retType):  New static method.
+	(inline):  Call primInline.
+	* MultiplyOp.java:  Implement CanInline.
+	(inline):  New method - use AddOp.primInline.
+
+2002-07-21  Per Bothner  <per@bothner.com>
+
+	* AddOp.java, AppendValues.java, ConstantFunction0.java, Convert.java,
+	MakeProcedure.java, NumberCompare.java, Setter.java, ValuesMap.java 
+	(inline):  Add new ExpWalker parameter.
+	* AddOp.java (pairwise):  Also needs ExpWalker parameter.
+
+2002-06-10  Per Bothner  <per@bothner.com>
+
+	* Arrays.java:  Various methods for implementing SRFI-25 arrays.
+	* ArrayRef.java:  New class, extends ProcedureN.
+	* ArraySet.java:  New class, extends ProcedureN.
+	* Makefile.am:  Update accordingly.
+	* DisplayFormat.java (writeObject):  Handle printing Array objects.
+	(write(Array,int,int,Consumer)):  New recursive helper method.
+
+2002-05-06  Per Bothner  <per@bothner.com>
+
+	* AppendValues.java:  Implement CanInline.
+	(inline):  New method.
+
+2002-03-21  Per Bothner  <per@bothner.com>
+
+	* Assoc.java:  Remove class - subsumed by kawa.lib.lists.
+	* Member.java:  Remove class - subsumed by kawa.lib.lists.
+ 	* Makefile.am:  Update accordingly.
+
+2002-03-07  Per Bothner  <per@bothner.com>
+
+	* ValuesMap.java (compile):  Can now safely always pushScope/popScope.
+	Set SeriesTarget scope and param to new local.
+	Create helper ApplyExp and call compile on it.
+
+2002-03-02  Per Bothner  <per@bothner.com>
+
+	Optimize calls like (< x 10) or (> x y) if x and y are <int>.
+	* NumberCompare.java:  Implement CanInline and Inlineable.
+	(inline, compile, getReturnType):  New methods.
+	(classify):   New static helper methods.
+
+2002-02-16  Per Bothner  <per@bothner.com>
+
+	* Format.java (format$V):  Return #!void instead of #t.
+
+2002-01-31  Per Bothner  <per@bothner.com>
+
+	* Convert.java:  Implement CanInline.
+	(inline): New method calls inlineClassName
+
+2002-01-23  Per Bothner  <per@bothner.com>
+
+	* AppendValues.java:  Moved from gnu.xquery.util.
+	* Makefile.am (java_sources):  Add AppendValues.java.
+
+2002-01-19  Per Bothner  <per@bothner.com>
+
+	* WriteTo.java:  Moved to gnu.kawa.xml.
+	Otherwith --with-gcj fails building kawa1.
+	* Makefile.am:  Update accordingly.
+
+2002-01-13  Per Bothner  <per@bothner.com>
+
+	* DisplayFormat.java (getEmacsLispFormat, getCommonLispFormat,
+	getSchemeFormat):  New static functions.
+
+	* DisplayFormat.java (writeChar):  Partially support Emacs format.
+
+2001-12-24  Per Bothner  <per@bothner.com>
+
+	* CountValues.java:  New class.
+	* WriteTo.java:  New class.
+	* Makefile.am (java_sources):  Add new classes.
+
+	* IsEq.java (compile):  Use ConditionalTarget's emitGotoFirstBranch.
+
+2001-12-24  Per Bothner  <per@bothner.com>
+
+	* IntegerFormat.java:  New class, extends gnu.text.IntegerFormat.
+	* Makefile.am (java_sources):  Add IntegerFormat.java.
+
+2001-11-24  Per Bothner  <per@bothner.com>
+
+	* Convert.java:  Moved from kawa.standard.convert.java.
+	(makeCoercion):  Static methods moved from Expression.
+	* Makefile.am (java_sources);  Added Convert.java.
+
+	* ValuesMap.java (compile):  Use compileWithPosition.
+
+2001-11-18  Per Bothner  <per@bothner.com>
+
+	* ValuesMap.java (inline):  Also set returnContinuation of lambda.
+
+2001-11-05  Per Bothner  <per@bothner.com>
+
+	* NumberCompare.java (apply2):  Make public, so it can be used
+	by gnu.xquery.util.Compare.
+
+2001-11-01  Per Bothner  <per@bothner.com>
+
+	* ConstantFunction0.java:  New class, extends Procedure0.
+	* Makefile.am (java_sources);  Added ConstantFunction0.java.
+
+	* ValuesMap.java (compile):  Don't pushScope/popScope if target is
+	a SeriesTarget, as that causes register clashes due to use of jsr.
+	Call allocChildClasses to handle non-inlined inner lambda.
+	If need be, wrap target using ConsumerTarget.compileUsingConsumer.
+
+2001-10-25  Per Bothner  <per@bothner.com>
+
+	* ValuesMap.java:  Now implements CanInline, Inlineable.
+	(inline, compile, getReturnType):  New methods.
+
+2001-10-19  Per Bothner  <per@bothner.com>
+
+	* Apply.java, Assoc.java, Member.java (apply* methods):
+	Now throws Throwable.
+	* ValuesMap.java (apply):  Use CallContext's new runUntilDone method.
+	
+2001-10-05  Per Bothner  <per@bothner.com>
+
+	* DisplayFormat.java:  Update for CharSequence -> CharSeq renaming.
+
+	* LispFormat.java (ListNewlineFormat_:  New class.
+	(<init>):  New code handles "~_" (Common Lisp's conditional newline).
+
+2001-09-24  Per Bothner  <per@bothner.com>
+
+	* MultiplyOp.java:  Renamed from kawa.standard.multiply_oper.
+	* DivideOp.java:  Renamed from kawa.standard.divide_oper.
+	* NumberCompare.java:  Moved from kawa.standard.NumberCompare.
+	* Makefile.am (java_sources):  Add new classes.
+
+2001-08-24  Per Bothner  <per@bothner.com>
+
+	* AddOp.java (compile):  Optimize additions of doubles and DFloNum.
+
+2001-08-16  Per Bothner  <per@bothner.com>
+
+	* ValuesMap.java:  New procedure, extends CpsProcedure.
+	* Makefile.am:  Update accordingly.
+
+2001-07-18  Per Bothner  <per@bothner.com>
+
+	* Setter.java:  New implements CanInLine.
+	(inline):  Uncomment.
+
+	* DisplayFormat.java:  Now extends gnu.kawa.util.AbstractFormat.
+
+2001-06-17  Per Bothner  <per@bothner.com>
+
+	* DisplayFormat.java (writeObject):  Handle Binding (as symbol).
+
+2001-06-03  Per Bothner  <per@bothner.com>
+
+	* DisplayFormat.java:  New class, extends Procedure and implements
+	FormatToConsumer.  Contains code to format for Lisp-like languages.
+	* Makefile.am:  Update accordingly.
+
+	* LispFormat.java (LispFreshlineFormat.format):  Use freshLine method.
+
+2001-05-16  Per Bothner  <per@bothner.com>
+
+	* AddOp.java:  Use LangPrimType instead of plain PrimTypes.
+	Fixes bug reported 05-10 by Walter C. Pelissero <walter@pelissero.org>.
+
+2001-04-09  Per Bothner  <per@bothner.com>
+
+	* Makefile.am (SUFFIXES):  Removed redundant macro.
+
+2001-03-08  Per Bothner  <per@bothner.com>
+
+	* AddOp.java:  Implement Inlineable (in addition to CanInline).
+	If Target is expecting a primitive type(such as <int>) do the operation
+	using primitive arithmetic if safe.
+	(compile, getReturnType):  New methods.
+
+	* Apply.java, Assoc.java, Format.java, LispFormat.java, MakeList.java,
+	Member.java, ParseFormat.java:  Update LList.length->listLength,
+	elementAt->get, length->size, open.
+
+2000-10-12  Per Bothner  <per@bothner.com>
+
+	* Apply.java (apply(CallContext)):  Use CallContext's getArgs method.
+
+	* MakeProcedure.java:  New class.
+	* Makefile.am:  Update accordingly.
+
+	* AddOp.java:  Implement gnu.expr.CanInline.
+	(inline):  New method.
+	(pairwise):  New static help method.
+
+	* AddOp.java:  New class, replaces kawa.standard.plus_oper
+	and kawa.standard.minus_oper.
+	* Makefile.am:  Update accordingly.
+
+	* Apply.java (apply):  Temporarily remove use of CallCOntext's getArgs.
+	* Setter.java:  Temporarily comment out CanInline and inline method.
+
+2000-10-11  Per Bothner  <per@bothner.com>
+
+	New package, for Procedures for Scheme/Lisp.
+	* Apply.java:  Renamed from kawa/standard/apply.java.
+	(apply):  New static field.
+	* Assoc.java:  Renamed from kawa/standard/ass.java.
+	* Format.java : Renamed from kawa/standard/format.java.
+	* IsEq.java:  Renamed from kawa/standard/eq_p.java.
+	(<init>):  Add name parameter.
+	* IsEqual.java:  Renamed from kawa/standard/equal_p.java.
+	(<init>):  Add name parameter.
+	* IsEqv.java:  Renamed from kawa/standard/eqv_p.java.
+	(<init>):  Add name parameter.
+	* LispFormat.java:  Renamed from kawa/standard/LispFormat.java.
+	* MakeList.java:  Renamed from kawa/standard/list_v.java.
+	(list):  New static field.
+	* Member.java:  Renamed from kawa/standard/mem.java.
+	* ObjectFormat.java:  Renamed from kawa/standard/ObjectFormat.java.
+	* ParseFormat.java:  Renamed from kawa/standard/ParseFormat.java.
+	* Setter.java:  Renamed from kawa/standard/setter.java.
+	Now implements gnu.expr.CanInline.
+	(inline):  new method.
+	(setterProcedure):  Field renamed to setter.
+	(setter):  New static method.
+	* Makefile.am, Makefile.in:  New files.

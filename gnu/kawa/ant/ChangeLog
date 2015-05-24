@@ -1,0 +1,45 @@
+2010-11-10  Jamison Hope <jrh@theptrgroup.com>
+	    Per Bothner  <per@bothner.com>
+
+	* Kawac.java: New Ant task.
+	* Makefile.am: Update accordingly.
+
+2006-05-23  Per Bothner  <per@bothner.com>
+
+	* LineCommenterSet.java: Remove unused local variable.
+
+2005-04-03  Per Bothner  <per@bothner.com>
+
+	* Kawa.java: Remove empty javadoc @version tag.
+	* LineCommenterSet.java: Fix javadoc problems.
+	* LineStripperSet.java: Likewise.
+
+2003-05-03  Per Bothner  <per@bothner.com>
+
+	* Makefile.am (EXTRA_DIST):  Add LineCommenterSet.java.
+
+2003-04-29  Jim White  <jim@pagesmiths.com>
+
+	Support for JAVA1 <-> JAVA2 source conversion.
+	* LineCommenterSet.java:  New class, extends FilterSet.
+	* XCopy.java (createLineCommenterSet):  New method.
+
+2002-03-02  Per Bothner  <per@bothner.com>
+
+	* Makefile.am (AUTOMAKE_OPTIONS):  No longer foreign.
+	(EXTRA_DIST):  Merge in files that used to be in SOURCES.
+
+2001-11-24  Per Bothner  <per@bothner.com>
+
+	* Makefile.am (CLEANFILES):  New macro.
+
+2001-11-18  Per Bothner  <per@bothner.com>
+
+	* Makefile.am:  New file.
+
+2001-11-18  Jim White <jim@pagesmiths.com>
+
+	New directory - tools for building Kawa using Ant.
+	* Kawa.java:  New class; extends MatchingTask.
+	* XCopy.java:  New class; extends Copy.
+	* LineStripperSet.java:  New class; extends FilterSet.

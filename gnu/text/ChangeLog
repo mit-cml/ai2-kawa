@@ -1,0 +1,789 @@
+2010-11-04  Per Bothner  <per@bothner.com>
+
+	* Options.java: Modernize. to use generics and Java2 collections.
+	(OptionInfo): Change to public member class. New defaultValue field.
+	(add): Return OptionInfo.
+	(get, getBoolean): New variants that take OptionInfo as parameter.
+	Add support for defaulting to another option.
+
+2010-06-11  Per Bothner  <per@bothner.com>
+
+	* URLPath.java (classResourcePath): If we get a SecurityException,
+	try getResource(CLASSNAME+".class");
+
+2010-05-24  Per Bothner  <per@bothner.com>
+
+	* Lexer.java (readUnicodeChar): New method.
+	(readDelimited): New method, moved from QParser.java.
+
+2010-05-19  Per Bothner  <per@bothner.com>
+
+	* Lexer.java (tokenBufferString): New convenience method.
+
+2010-04-18  Per Bothner  <per@bothner.com>
+
+	* URLPath.java (getContentLength): Fix thinko.
+
+2010-04-13  Per Bothner  <per@bothner.com>
+
+	* Path.java (pathLocation): Add generic parameter.
+	(currentPath): Remove no-longer-needed cast.
+
+2010-04-10  Per Bothner  <per@bothner.com>
+
+	* PrettyWriter.java: Wrap caught exceptions in RuntimeException.
+
+2010-04-04  Per Bothner  <per@bothner.com>
+
+	* Char.java (CharMap.get): Update for changes in AbstractWeakHashTable.
+
+	* QueueReader.java (append): Fix cases where java.lang.CharSequence
+	is unavailable.
+
+2009-06-01  Per Bothner  <per@bothner.com>
+
+	* Char.java (class CharMap): New helper class for mapping Unicode
+	scalar value to Char object.
+	(hashTable): Change to use CharMap.
+	(make): Use CharMap.
+	(temp): No longer needed.
+
+2009-03-07  Per Bothner  <per@bothner.com>
+
+	* Char.java (toScmReadableString): Print hex rather than octal escapes.
+
+	* Char.java (charNames, charNameValues): Add support for R6RS
+	character names #\delete, #\alarm, and #\vtab.
+
+2009-02-17  Per Bothner  <per@bothner.com>
+
+	* URIPath.java (uri): Make final.
+	* URLPath.java (url): Make final.
+	* FilePath.java (file, path): Make final.
+
+2008-12-23  Per Bothner  <per@bothner.com>
+
+	* SourceLocator.java: Only implement javax.xml.transform.SourceLocator
+	if use:javax.xml.transform PreProcess directive is switched on.
+
+2008-11-11  Per Bothner  <per@bothner.com>
+
+	* QueueReader.java (checkAvailable): New callback "hook".
+
+2008-08-13  Per Bothner  <per@bothner.com>
+
+	* LineInputStreamReader.java (fill, fillBytes): Handle underflow
+	with CharsetDecoder by calling compact and reading more into the buffer.
+	CharsetDecoder doesn't do "partial" characters.
+
+2008-03-23  Per Bothner  <per@bothner.com>
+
+	* PrettyWriter.java (closeThis): New method.
+
+2007-12-30  Per Bothner  <per@bothner.com>
+
+	* QueueReader.java: Make implement Appendable.
+	Add new append methods, that allow more efficient inserts.
+
+2007-09-07  Per Bothner  <per@bothner.com>
+
+	* PrettyWriter.java (outputPartialLine): Fix setting of
+	bufferStartColumn - needed when not pretty-printing, since in that
+	case the buffer may contain newlines.
+
+2007-06-11  Per Bothner  <per@bothner.com>
+
+	* Path.java: Implement javax.tools.FileObject, but only #ifdef JAVA6.
+	(toUri): Rename from toURI, to be compatible with FileObject.
+	(toUri): Make final and deprecated.
+	(delete, openReader, openWriter, getCharContent, getName): New methods.
+	* FilePath.java (delete): New method.
+	(toURI): Rename 2 methods to toUri.
+	* URIPath.java: Rename toURI to toUri.
+	* URLPath.java: Likewise.
+
+2007-04-26  Per Bothner  <per@bothner.com>
+
+	* SourceMessages.java (error): New overload, takes Throwable.
+
+2007-02-23  Per Bothner  <per@bothner.com>
+
+	* SourceMessages.java (swapSourceLocator): New method.
+
+2007-01-14  Per Bothner  <per@bothner.com>
+
+	* Lexer.java (tokenBufferAppend): Fix off-by-one error.
+
+	* FilePath.java (getParent): Handle null parent.
+
+2007-01-11  Per Bothner  <per@bothner.com>
+
+	* URIPath.java (exists): New method.
+
+2007-01-09  Per Bothner  <per@bothner.com>
+
+	* URIPath.java (valueOf): Remove unused factory method.
+
+	* Path.java (userDirPath): Define as ".".
+	(getAbsolute): Special handling of userDirPath.
+	* FilePath.java (toURL, toURI): Likewise.
+
+	* FilePath.java (toURIString): Remove in use:URI case.
+	Make in-static in non-use:URI case.
+
+	* FilePath.java (static toURL(File)): Inline in ...
+	(toURL()): Also, if not absolute, make it so.
+
+	* Path.java (getDirectory, getParent, getLast, getExtension):
+	New component extraction methods.
+	* FilePath.java (getLast, getParent): New methods.
+
+	* URIPath.java (getPath): Use URL.getFile rather han URL.getPath
+	since latter requires JDK 1.3.
+
+2007-01-06  Per Bothner  <per@bothner.com>
+
+	* Path.java (isDirectory): New method.
+	* FilePath.java (isDirectory): New method.
+
+2007-01-05  Per Bothner  <per@bothner.com>
+
+	* FilePath.java (toURIString): Fix non-use:java.net.URI Preprocess case.
+	* URIPath.java (<init>): Make protected in non-use:URI case, since
+	it is needed for URLPath.	
+	(coerceToFilePathOrNull): Don't use URIStringPath in non-use:URI case.
+	(resolve, getUserInfo, getFragment): More fixes.
+
+2007-01-04  Per Bothner  <per@bothner.com>
+
+	* URI_utils.java: Remove class.  Replaced by Path and its subclasses.
+	* Makefile.am: Update accordingly.
+
+	* FilePath.java (path): New field.
+	(<init>): New and updated constructor.
+	(valueOf): Update to set path.
+	(isDirectory): New method.
+	(toString): Return path.
+	(resolve): Check if isDirectory.
+
+	* URIPath.java: Do "encoding" when converting String -> URI.
+	(URIStringPath): New class.
+	(valueOf(String)): Use it.
+	(toString): Just use toURIString.
+	(encodeForUri): New method, guts moved from StringUtils.
+	Add untested support for surrogate characters.
+
+2007-01-03  Per Bothner  <per@bothner.com>
+
+	* Path.java (setCurrentPath): New static field.
+
+	* Path.java (getCanonical): New method.
+	* URIPath.java (getCanonical): New method.
+	* FilePath.java (getCanonical): New method.
+
+2007-01-02  Per Bothner  <per@bothner.com>
+
+	* Path.java  (getScheme, getPath): New abstract methods.
+	(getAuthority, getUserInfo, getAbsolute): New default methods.
+	* FilePath.jav (getPath): New method.
+	(getScheme): Only return "file" is isAbsolute().
+	* URIPath.java (getAuthority, getUserInfo, getPath): New methods.
+
+	* LineBufferedReader.java (name): Rename and change field type to ...
+	(path): new field.
+	(getPath, setPath): New methods.
+	(getName, setName): Update
+	(getURI): Remove method.
+
+	* LineBufferedReader.java (readLine): Fix 3 little errors.
+
+	* URIPath.jva: Fix bad indenttain of PreProcess directive.
+
+2007-01-01  Per Bothner  <per@bothner.com>
+
+	* Path.java: Fix typo.
+
+2006-12-30  Per Bothner  <per@bothner.com>
+
+	* Path.java (coerceToPathOrNull): New static method.
+	(valueOf): Implement using coerceToPathOrNull.
+	* FilePath.java (coerceToFilePathOrNull): New static method.
+	(makeFilePath): Implement using coerceToFilePathOrNull.
+	* URIPath.java (coerceToURIPathOrNull): New static method.
+	(makeURI): Implement using coerceToURIPathOrNull.
+
+2006-12-29  Per Bothner  <per@bothner.com>
+
+	* URI_utils.java: Update for move of uriSchemeSpecified and
+	uriSchemeLength from InPort to Path.
+	* URIPath.java: Likewise.
+
+	* Path.java: New class.
+	* FilePath.java: New class, extends Path.
+	* URIPath.java: New class, extends Path.
+	* URLPath.java: New class, extends URIPath.
+	* ResourceStreamHandler.java: New class, extends URLStreamHandler.
+	* Makefile.am: Update accordingly.
+
+	* LineInputStreamReader.java: New class, extends LineBufferedReader.
+	* Makefile.am: Update accordingly.
+	* LineBufferedReader.java: Extend Reader rather than FilterReader.
+	This is to support LineInputStreamReader.
+	(<init>): Update accordingly.
+	(in): New field, rather than using inherited field.
+	(close): Add required method.
+
+	* LineBufferedReader.java (DONT_KEEP_FULL_LINES): New flag.
+	(setKeepFullLines): Set/clear flag.
+	(reserve): Check new flag.
+
+2006-12-18  Per Bothner  <per@bothner.com>
+
+	* URI_utils.java (exists): New static method.
+
+2006-12-14  Per Bothner  <per@bothner.com>
+
+	* LineBufferedReader.java (BUFFER_SIZE): Increase to 8192.
+
+	* LineBufferedReader.java (incrLineNumber): New method.
+
+	* SourceLocator.java: Extend org.xml.sax.Locator if SAX2 is set
+	regardless of JAXP-1.3.
+
+2006-12-12  Per Bothner  <per@bothner.com>
+
+	* WriterManager.java (WriterRef): New class extends WeakReference.
+	Use it to prefernt a strong reference from WriterManager to Writer.
+	(register, unregister): Change to return/take Object rather than index.
+	This fixes Savannah bug #15876: "Ports are not reclaimed automatically
+	when becoming inaccesible".
+
+2006-12-04  Per Bothner  <per@bothner.com>
+
+	* URI_utils.java (FiletoURL): Avoid deprecated File.toURL
+	if File.toURI is available.
+
+	* URI_utils.java (makeClassResourceURI): Use StringBuilder #ifdef JAVA5.
+
+	* URI_utils.java (relativize): New static method.
+
+2006-11-25  Per Bothner  <per@bothner.com>
+
+	* SourceMessages.java: Remove needless import.
+
+2006-11-24  Per Bothner  <per@bothner.com>
+
+	* Lexer.java (tokenBufferAppend): Implement surrogates support.
+
+2006-11-22  Per Bothner  <per@bothner.com>
+
+	* Char.java: Rename Consumer methods append->write.
+	* EnglishIntegerFormat.java: Likewise.
+	* ReportFormat.java: Likewise.
+
+2006-11-20  Per Bothner  <per@bothner.com>
+
+	* Printable.java: Moved from gnu.mapping.
+	Change parameter type to Consumer.
+	* Makefile.am: Update accordingly.
+	* ReportFormat.java (print): New static convenience method.
+
+2006-11-18  Per Bothner  <per@bothner.com>
+
+	* EnglishIntegerFormat.java: Update writeChars -> append.
+
+	* SourceError.java (toString) Add needed package prefix for the
+	PreProcess case where we don't have Throwable.getCause.
+
+2006-11-17  Per Bothner  <per@bothner.com>
+
+	* Char.java (print(Consumer)): New method.
+	(print(int,Consumer)): New static method, handles surrogates.
+
+2006-11-13  Per Bothner  <per@bothner.com>
+
+	* SourceLocator.java: New interface.
+	* Makefile.am (java_sources): Update accordingly.
+	* SourceError.java: Implement SourceLocator.
+	(<init>): New constructor.
+	* Source<Messages.java: Implement SourceLocator.
+	(locator): New field.
+	(error): New overloads.
+	(setSourceLocator, setLocation): New methods.
+
+	* PrettyWriter.java (wordEndSeen): New field.
+	(writeWordEnd, writeWordStart, clearWordEnd): New method.
+	(write*2, enqueueNewline): Clear wordEndSeen.
+
+2006-10-21  Per Bothner  <per@bothner.com>
+
+	* PrettyWriter.java (isPrettyPrinting): Replace public boolean by ...
+	(prettyPrintingMode): non-public new 3-valued int.
+	(isPrettyPrinting, setPrettyPrinting, getPrettyPrintingMode,
+	setPrettyPrintingMode):  New access functions.
+	(write, write): Only translate ' ' to NEWLINE_SPACE if
+	prettyPrintingMode == 2.
+
+	* URI_utils.java: Don't use WeakHashMap to map URI to ClassLoader.
+	Use new class table2D instead.
+
+2006-10-15  Per Bothner  <per@bothner.com>
+
+	* SourceMessages.java (error): New overloaded method.
+
+2006-09-13  Per Bothner  <per@bothner.com>
+
+	* PrettyWriter.java (maybeOutput): New parameter 'flushing'.
+	If flushing, force output, using outputPartialLine.
+	(forcePrettyOutput): Call maybeOutput in flushing mode.
+
+	* PrettyWriter.java (getColumnNumber): Fix off-by-one error.
+
+2006-09-12  Per Bothner  <per@bothner.com>
+
+	* URI_utils.java (resolve):  Make sure invalid URI characters are
+	quoted before calling URI.resolve.
+
+2006-09-11  Per Bothner  <per@bothner.com>
+
+	* SourceError.java: Remove unused import.
+	* Lexer.java: Remove unused local variable.
+
+2006-09-06  Per Bothner  <per@bothner.com>
+
+	* Char.java: Remove unused private constructor.
+	* SourceMessages.java (error): Remove unused local 'compilation'.
+	* Optiona.java (pushOptionValues): Remove unused local 'oldValue'.
+
+2006-08-26  Per Bothner  <per@bothner.com>
+
+	* PrettyWriter.java: Minor debugging+comment improvements.
+
+2006-08-08  Per Bothner  <per@bothner.com>
+
+	* URI_utils.java (lastModified): New static method.
+
+2006-05-25  Per Bothner  <per@bothner.com>
+
+	* SourceMessages.java (seenErrorsOrWarnings): New method.
+
+2006-04-10  Dean Ferreyra <dferreyra@igc.org>
+            Per Bothner  <per@bothner.com>
+
+	* SourceError.java (fakeException): New field.
+	(toString): If fakeException is non-null include stack trace in result.
+	* SourceMessages.java (debugStackTraceOnWarning,
+	debugStackTraceOnError): New static globals.
+	(error): Make fakeException if requested.
+
+2006-02-26  Per Bothner  <per@bothner.com>
+
+	* SourceError.java (code): New field.
+	(toString): If code field is non-null, display it.
+	* SourceMessages.java (error(char,String,String)): New method.
+
+2006-01-12  Per Bothner  <per@bothner.com>
+
+	* URI_utils.java (toFileOrURL): Fix some problems with File handling.
+
+2006-01-10  Per Bothner  <per@bothner.com>
+
+	* URI_utils.java (FiletoURL, toURL): New methods.
+	(FiletoURI): Use fileToURL.
+
+2006-01-07  Per Bothner  <per@bothner.com>
+
+	* URI_utils.java (makeClassResourceURI): New method.
+	(resourceURL): Largely rewrite for modified "class-resource:/"
+	uri-scheme handling.
+	(CLASS_RESOURCE_URI_SCHEME): Rename to CLASS_RESOURCE_URI_PREFIX
+	and add '/'.
+	(CLASS_RESOURCE_URI_SCHEME_LENGTH): Likewise increment and
+	rename to CLASS_RESOURCE_URI_PREFIX_LENGTH.
+	(resolve): Give more precise return type.
+
+2006-01-04  Per Bothner  <per@bothner.com>
+
+	* URI_utils.java (isAbsolute, resourceURL, toFileOrURL,
+	getInputStream, getOutputStream, nametoURI, FiletoURI, resolve,
+	getClassLoaderForURI, setClassLoaderForURI): New static methods.
+	(CLASS_RESOURCE_URI_SCHEME, CLASS_RESOURCE_URI_SCHEME_LENGTH):
+	New constants.
+	(toURI):: Changes to use new methods.
+	* LineBufferedReader.java (name): Generalize name field to Object.
+	(getName, setName): Change to match.
+	(getURI): New method.
+
+2006-01-02  Per Bothner  <per@bothner.com>
+
+	* URI_utils.java: Moved from gnu.kawa.functions.
+	* Makefile.am: Update accordingly.
+
+2005-12-21  Per Bothner  <per@bothner.com>
+
+	* WriterManager.java (register): Add one to return value, so it is
+	always positive, hence we can use zero to mean 'not registered'.
+	(unregister): If index is 0, ignore it.  Otherwise, subtract one.
+
+2005-12-10  Per Bothner  <per@bothner.com>
+
+	* LineBufferedReader.java (skipRestOfLine): New method.
+
+2005-09-07  Per Bothner  <per@bothner.com>
+
+	* SourceError.java (totring): Check that line is non-zero.
+
+2005-07-21  Per Bothner  <per@bothner.com>
+
+	* PrettyWriter.java (lineLengthLoc, miserWidthLoc, indentLoc):
+	New fields contains fluids for controlling output.
+	(startLogicalBlock): If queue is empty, check width etc.
+	(getMiserWidth): Use parameter instead of hard-wired.
+
+2005-05-17  Per Bothner  <per@bothner.com>
+
+	* SourceError.java (message): Can contain muliple lines.
+	(println(PrintStream), println(PrintWriter)): New methods.
+	* SourceMessages.java (printAll): Use new println methods.
+
+2005-04-03  Per Bothner  <per@bothner.com>
+
+	* Lexer.java: Fix a javadoc typo.
+	* Options.java: Likewise.
+	* SourceMessages.java: Likewise.
+
+2005-03-17  Per Bothner  <per@bothner.com>
+
+	* SourceMessages.java (sortMessages): New boolean field.
+	(error): Only sort if sortMessages, which now defaults to false.
+
+2005-01-30  Per Bothner  <per@bothner.com>
+
+	* SourceMessages.java (error): Put fatal errors at the end.
+
+2005-01-28  Per Bothner  <per@bothner.com>
+
+	* Char.java ($Eq, $Ls, $Gr, $Ls$Eq, $Gr$Eq): Remove now-unused methods.
+
+2005-01-19  Per Bothner  <per@bothner.com>
+
+	* LineBufferedReader.java (read): Return before buffer full if
+	input buffer exhausted and we got at least one char.
+
+2005-01-02  Per Bothner  <per@bothner.com>
+
+	* PrettyWriter.java (NEWLINE_SPACE): New newline-kind.
+	(write [3 variants]): Maybe enqueue a NEWLINE_SPACE.
+
+	* PrettyWriter.java: Some more normally-commented-out debug stuff.
+
+	* Char.java: Change "select" (preprocessor) syntax.
+
+2005-01-01  Per Bothner  <per@bothner.com>
+
+	* LiteralFormat.java (content): New method.
+
+2004-08-05  Per Bothner  <per@bothner.com>
+
+	* PrettyWriter.java (endLogicalBlock):  Fix "dangling pointer" bug.
+
+	* PrettyWriter.java (check):  New debugging method.
+
+	* PrettyWriter.java:  Renamed QUEUED_OP_XXX to short QITEM_XXX.
+	Renamed QUEUED_OP_SIZE TO QITEM_BASE_SIZE.
+	Renamed QUEUED_OP_TYPE to QITEM_TYPE_AND_SIZE.
+
+2004-07-28  Per Bothner  <per@bothner.com>
+
+	* Options.java (keys):  Make non-recursive.
+
+2004-07-27  Chris Dean  <ctdean@sokitomi.com>
+
+	* Options.java:  Add keys() function.
+
+2004-07-20  Per Bothner  <per@bothner.com>
+
+	* IntegerFormat.java:  Remove useless import statements.
+	* LiteralFormat.java (toString):  Adding a String and a char[]
+	doesn't behave as expected.
+
+2004-06-12  Per Bothner  <per@bothner.com>
+
+	* Lexer.java (pushNesting, popNesting):  Moved from XQParser.
+	* LineBufferedReader.java (readState, getReadState):
+	Moved from gnu.mapping.InPort.
+
+2004-06-07  Per Bothner  <per@bothner.com>
+
+	* PrettyWriter.java (maybeOutput):  Clear currentBlock if needed.
+
+2004-05-28  Per Bothner  <per@bothner.com>
+
+	* CompoundFormat.java (format):  Check for missing argument.
+	* IntegerFormat.java (format):  Check for missing argument.
+
+2004-05-22  Per Bothner  <per@bothner.com>
+
+	* PrettyWriter.java (currentBlock):  -1 now means none.
+	(startLogicalBlock, endLogicalBlock):  Update accordinly.
+	(endLogicalBlock):  Simplify and correct test.
+
+	* PrettyWriter.java
+	(QUEUED_OP_BLOCK_PREFIX): Renamed to QUEUED_OP_BLOCK_START_SUFFIX.
+	Fix value of this and QUEUED_OP_BLOCK_START_SUFFIX to avoid conflict.
+	(QUEUED_OP_BLOCK_START_SIZE):  Adjust accordingly.
+
+	* PrettyWriter.java:  Improved commented-out debugging tools.
+
+2004-03-08  Per Bothner  <per@bothner.com>
+
+	* Text.java:  Implement Comparable, and Map.Entry, if JAVA2.
+	(compareTo):   New method.
+
+2003-11-20  Per Bothner  <per@bothner.com>
+
+	* Lexer.java, SourceError.java, SourceMessages.java,
+	SyntaxException.java:  Improved Javadoc comments.
+
+2003-11-10  Per Bothner  <per@bothner.com>
+
+	* IntegerFormat.java (MIN_DIGITS):  New flag.
+	(format):  Handle new flag.
+
+2003-10-20  Per Bothner  <per@bothner.com>
+
+	* Options.java (valueOf):  Allow "on"/"off" for boolean options.
+
+2003-10-19  Per Bothner  <per@bothner.com>
+
+	* Options.java (valueTable, infoTable):  Only allocate when needed.
+	(reset, getLocal, getBoolean(String, boolean), pushOptionValues,
+	popOptionValues):  New methods.
+
+2003-10-16  Per Bothner  <per@bothner.com>
+
+	* Options.java:  New class.
+	* Makefile.am:  Update accordingly.
+
+2003-09-04  Per Bothner  <per@bothner.com>
+
+	* PrettyWriter.java (<init>):  Fix thinko in parameter name.
+
+2003-05-10  Per Bothner  <per@bothner.com>
+
+	* Lexer.java (checkNext):  Moved from XQParser.java.  Re-written.
+
+2003-05-02  Per Bothner  <per@bothner.com>
+
+	* SyntaxException.java (SyntaxException):  New constructor.
+	(maxToPrint):  New field.
+	(getMessage):  New method.
+
+2003-04-18  Per Bothner  <per@bothner.com>
+
+	* Lexer.java (mark, reset):  New methods.
+
+2002-12-11  Per Bothner  <per@bothner.com>
+
+	* PrettyWriter.java (QUEUED_OP_DUMMY_TYPE):
+	Rename constant to QUEUED_OP_NOP_TYPE.
+	(indexColumn, dumpQueue, outputPartialLine):  If queued op is
+	QUEUED_OP_NOP_TYPE, there is no posn, so skip it.
+	(forcePrettyOutput):  Clear queueSize.  This avoids a future
+	ArrayIndexOutOfBoundsException.
+
+2002-07-21  Per Bothner  <per@bothner.com>
+
+	* SourceMessages.java (getFile, getLine, getColumn, setFile, setLine,
+	setLine, error):  New messages.
+	(current_filename, current_line, current_column):  New fields.
+
+2002-06-26  Per Bothner  <per@bothner.com>
+
+	* LineBufferedReader.java (skip):  More robust newline handling.
+	The old implementation got line numbers off.
+	(read(char[],int,int)):  Likewise.
+
+2002-06-18  Per Bothner  <per@bothner.com>
+
+	* LineBufferedReader.java (reserve):  Fix logic error.
+	(countLines):  Change 2nd parameter from length to limit.
+
+2002-06-02  Per Bothner  <per@bothner.com>
+
+	* PrettyWriter.java (outputLine):  Copy prefix to new buffer, not
+	original one.  Fixes bug reported by Mirko.Luedde@Computer.Org.
+
+2002-02-13  Per Bothner  <per@bothner.com>
+
+	* Char.java (toString):  Print char in Java format, e.g. "'\t'".
+
+	* Char.java:  No longer implements Printable.
+	Thus no gnu.text no longer depends on gnu.mapping.
+	(print):  Remove method.
+
+2002-01-29  Per Bothner  <per@bothner.com>
+
+	* SyntaxException.java (header):  New field.
+	(getHeader, setHeader):  New methods.
+	(printAll):  First print header, if non-null.
+
+2002-01-23  Per Bothner  <per@bothner.com>
+
+	* Lexer.java (interactive):  New field.
+	(isInteractive, setInteractive):  New methods.
+
+	* Lexer.java (eofError):  New method.
+
+2001-12-24  Per Bothner  <per@bothner.com>
+
+	* IntegerFormat.java:  Remove dependencies on gnu.math.
+	Move them to new class gnu.kawa.functions.IntegerFormat.
+	(base, minWidth, padChar, commaChar, commaInterval, flags): Now public.
+	(plainDecimalFormat, getInstance):  Move to new class.
+	(asInteger):  Remove method.
+	(convertToIntegerString):  New method.
+
+2001-11-12  Per Bothner  <per@bothner.com>
+
+	* Lexer.java (unread):  Only unread if character is not eof.
+
+2001-10-02  Per Bothner  <per@bothner.com>
+
+	* PrettyWriter.java (isPrettyPrinting):  Set in constructors only.
+
+2001-08-23  Per Bothner  <per@bothner.com>
+
+	* PrettyWriter.java (setIndentation):  Fix handling of 'prefix' local
+	cache for 'prefix' field.
+	Fixes bug reported by Felix S Klock II <pnkfelix@MIT.EDU>.
+
+2001-08-16  Per Bothner  <per@bothner.com>
+
+	* SourceMessages.java (printAll):  Make public.
+
+	* SourceMessages.java (clear): New method.
+	* SyntaxException.java (clear): New method.
+
+2001-07-17  Per Bothner  <per@bothner.com>
+
+	* EnglishIntegerFormat.java:  For now disable FormatToConsumer support.
+
+2001-07-06  Thomas Kirk  <tk@research.att.com>
+
+	* PrettyWriter.java(ensureSpaceInBuffer): Don't call
+	outputPartialLine when isPrettyPrinting is false (e.g. when
+	printing to a CharArrayOutPort).	
+
+2001-06-03  Per Bothner  <per@bothner.com>
+
+	* PrettyWriter.java: New class, extends Writer.
+
+	* WriterManager.java:  New class.
+	* Makefile.am (java_sources):  Add new classes.
+
+	* EnglishIntegerFormat.java:  Experimental FormatConsumer support.
+
+2001-04-22  Per Bothner  <per@bothner.com>
+
+	* Char.java (nameToChar):  Try looking for named char, ignoring case.
+	If we see C-X (for any X), return the corresponding control character.
+
+	* Lexer.java (getName, getLineNumber, getColumnNumber):  New methods.
+
+	* Lexer.java (tokenBuffer, tokenBufferLength):  New public fields.
+	(tokenBufferAppend):  New method.
+
+2000-08-16  Per Bothner  <per@bothner.com>
+
+	* ReportFormat.java (getParam):  If no args passed return defaultValue.
+
+	* ReportFormat.java (format(Object,int,Writer,FieldPosition)):  New
+	method overloading - a convenience method.
+	* IntegerFormat.java (format):  New overload.  The perpose is to allow
+	format to be called with a single argument, and not require an array.
+
+2000-06-19  Per Bothner  <per@bothner.com>
+
+	* Char.java:  New file, moved from gnu.kawa.util.
+	($Eq, $Ls, $Gt, $Ls$Eq, $Ls$gr):  New static methods.
+
+	* IntegerFormat.java:  New class, bases on old LispIntegerFormat
+	from kawa/standard/LispFormat.java.
+	* ReportFormat.java (PARAM_FROM_LIST, PARAM_FROM_COUNT,
+	PARAM_UNSPECIFIED):  Moved from kawa/standard/LispFormat.
+	(getFormat):  Static methods moved from LispFormat.
+
+2000-05-28  Per Bothner  <per@bothner.com>
+
+	* CharArrayInPort.java:  Moved to gnu.mapping.
+	* LispReader.java:  Moved to new package gnu.kawa.lispexpr.
+	* Makefile.am (java_JAVA):  Updated accordingly.
+
+2000-03-17  Per Bothner  <per@bothner.com>
+
+	* LispReader.java (readEscape):  Split into two overloaded methods.
+	(Mainly so `?\ ' in ELisp can be treated as space.)
+
+2000-02-27  Per Bothner  <per@bothner.com>
+
+	Various tweaks for better javadoc processing.
+	* overview.html:  Renamed to package.html.
+
+2000-02-19  Per Bothner  <per@bothner.com>
+
+	* LineBufferedReader.java (fill):  Change parameters.
+
+2000-01-24  Per Bothner  <per@bothner.com>
+
+	* QueueReader.java:  New classes, moved from kawa/lang.
+	* Makefile.am, Makefile.in (java_JAVA):  Add QueueReader.java.
+
+2000-01-23  Per Bothner  <per@bothner.com>
+
+	* SourceMessages.java (errorCount):  Make private.
+	* Lexer.java (clearErrors):  Use SourceMessages.errorCount method.
+
+1999-12-10  Per Bothner  <per@bothner.com>
+
+	* NullReader.java, CharArrayInPort.java:  Moved from kawa/lang.
+	* Makefile.am, Makefile.in (java_JAVA):  Add new files.
+
+1999-10-20  Bruce Lewis  <brlewis@alum.mit.edu>
+
+	* gnu/text/LispReader.java: readListBody now takes an int
+	argument for endDelimiter; -1 means read to EOF.  This facilitates
+	reading an entire file with line/column info.
+
+1999-09-05  Per Bothner  <per@bothner.com>
+
+	* LineBufferedReader.java (readLine):  New overloaded version.
+
+	* SourceMessages.java (checkErrors):  New method overloading.
+	For both versions, do not return true if only warnings were seen.
+
+	* LispReader.java (readEscape):  Move here from ELispReader.
+
+1999-06-30  Per Bothner  <per@bothner.com>
+
+	* PadFormat.java (format):  Trivial optimization.
+
+1999-04-22  Per Bothner  <bothner@Magnus.Cygnus.COM>
+
+	* SourceMessages.java:  New class (collection of SourceError).
+	* Makefile.am, Makefile.in (java_JAVA):  Add SourceMessages.java.
+	* Lexer.java:  Re-written - error handling now using SourceMessages.
+	* LispReader.java (readlistBody, readList):  New overloads that
+	take an explicit end delimiter, not just ')'.
+	* SourceError.java (printAll):  Replaced by SourceMessages.printAll.
+	* SyntaxException.java (lexer):  Lexer field replaced by ...
+	(messages):  ... new SourceMessages field.  Change methods to match.
+
+Thu Mar 11 11:14:49 1999  Per Bothner  <bothner@Magnus.Cygnus.COM>
+
+	* LispReader.java:  New class.
+	* Makefile.am (java_JAVA), Makefile.in:  Add LispReader.java.
+
+Thu Jun 25 22:36:19 1998  Per Bothner  <bothner@cygnus.com>
+
+	New directory.

@@ -1,0 +1,1113 @@
+2010-11-04  Per Bothner  <per@bothner.com>
+
+	* repl.java: Update for new Options#keys which now returns ArrayList.
+
+2010-10-28  Per Bothner  <per@bothner.com>
+
+	* Shell.java (runFileOrClass): Print stack trace if running class
+	throws exception.
+
+	* standard/Scheme.java (initScheme): Declare 'define-enum'.
+
+	* standard/object.java (rewriteInit): Explicitly set return type of
+	initMethod to null.
+
+	* standard/object.java (addAccessFlags): New convenience method.
+	(scanClassDef): Make use of it for class and field access flags.
+	(matchAccess): Check for SyntaxForm.
+	(matchAccess1): Update to handle "enum" and "final".
+
+2010-10-24  Per Bothner  <per@bothner.com>
+
+	* standard/require.java (featureMap): Add "syntax-utils".
+
+2010-10-15  Per Bothner  <per@bothner.com>
+
+	* standard/Scheme.java (isOdd, isEven): New static fields.
+	(initScheme): Change definitions of odd? and even?.
+
+2010-10-10  Per Bothner  <per@bothner.com>
+
+	* lang/Eval.java (evalBody): Change the initial Compilation 'state'
+	so require#importDefinitions does the right thing.
+
+2010-10-09  Per Bothner  <per@bothner.com>
+
+	* standard/requires.java (importDefinitions): Update
+	pushPendingImport call.
+
+	* lang/Eval.java (evalBody): Do setSharedModuleDefs, like
+	other interfactive evaluations.
+
+2010-10-08  Per Bothner  <per@bothner.com>
+
+	* standard/require.java (importDefinitions): Partly refer 2010-09-30
+	change.  However, check Compilation#sharedModuleDefs rather than
+	immediate.
+
+2010-10-04  Per Bothner  <per@bothner.com>
+
+	* standard/Scheme.java (getTypeMap): Remove redundant (over-written)
+	setting for "string".
+
+2010-09-30  Per Bothner  <per@bothner.com>
+
+	* Shell.java (compileSource): Pass PARSE_IMMEDIATE only to parse;
+	don't pass PARSE_CURRENT_NAMES (which is part of PARSE_FOR_EVAL).
+	* standard/define.java (scanForm): Only set CAN_WRITE if
+	sharedModuleDefs(), not for all immediate compilations.
+	* standard/require.java (importDefinitions):  Always make alias
+	declarations private, regardless of Compilation#immediate.
+
+2010-09-29  Per Bothner  <per@bothner.com>
+
+	* standard/module_implements.java: Move logic from rewriteForm to
+	scanFrom, for same reason as 2008-12-23 change to module_extends.java.
+	Fixes bug reported 2010-09-13 by Jamison Hope <jrh@theptrgroup.com>.
+
+2010-09-20  Per Bothner  <per@bothner.com>
+
+	* standard/define.java (rewriteForm):  Don't prematurely getTypeExp
+	unless TYPE_SPECIFIED, since doing so forces type to Object.
+
+	* standard/object.java (scanClassDef): Use new ClassExp#addMethoda.
+
+2010-09-17  Per Bothner  <per@bothner.com>
+
+	* lang/Translator.java (rewrite): Pass SourceLocator when
+	creating QuoteExp.
+
+2010-09-15  Per Bothner  <per@bothner.com>
+
+	* standard/Scheme.java (formatType): New method.
+	(typeToStringMap): New static HashMap.
+
+2010-08-31  Per Bothner  <per@bothner.com>
+
+	* repl.java (processArgs): Remove unused --fewer-classes option.
+
+2010-08-27  Per Bothner  <per@bothner.com>
+
+	* standard/map.java: Oved/renamed to gnu/kawa/functions/Map.java.
+	* standard/callcc.java: Moved/renamed to gnu/kawa/functions/CallCC.java.
+	* standard/Makefile.am: Update accordingly.
+	* standard/Scheme.java: Update accordingly.
+
+2010-08-26  Per Bothner  <per@bothner.com>
+
+	* lang/Translator.java (rewrite): Use new ClassExp#getClassType.
+
+2010-08-20  Per Bothner  <per@bothner.com>
+
+	* standard/TracedProcedure.java (applyN): Update since
+	setWithSave/setRestore no longer take CallContext argument.
+
+2010-08-19  Per Bothner  <per@bothner.com>
+
+	* kawa/standard/fluid_let.java: Call setFLuid on lexical base.
+	* TelnetRepl.java: No longer pass current environment to Future.
+	* ReplDocument.java: Various Environment/Fuure updates.
+
+2010-08-17  Per Bothner  <per@bothner.com>
+
+	* lang/Translator.java (isLexical): Remove method.  Moved logic to
+	FindCapturedvars.walkReferenceExp.
+	(rewrite): Don't call isLexical to check for fluid-variable - it
+	causes false postives for --warn-undefined-variable.
+
+2010-08-16  Per Bothner  <per@bothner.com>
+
+	* lang/Translator.java (rewriteBody): Change to take an LList.
+	This allows using the incoming Pairs for position information.
+
+2010-08-15  Per Bothner  <per@bothner.com>
+
+	* standard/syntax_case.java (rewriteClauses): Check for
+	missing output expression.
+
+	* repl.java: Fix tab/space problem, which broke PreProcess.
+
+2010-08-06  Per Bothner  <per@bothner.com>
+
+	* lang/Lambda.java (rewriteAttrs): The classes of the throws specifier
+	may evaluate to a QuoteExp as well as a ReferenceExp.  Defer
+	error-checking and resolution to LambdaExp.addMethodFor.
+
+2010-08-01  Per Bothner  <per@bothner.com>
+
+	* standard/callcc.java (CompileTimeContinuation.compile): Use
+	AppendValues when we need to deal with multiple values,
+	rather than (incorrectly) Values.make.
+	* lang/Translator.java (rewrite): Don't set IS_SINGLE_VALUE in
+	Declarations - among other problems it causes a (probably-harmless)
+	race condition.
+	* lang/Lambda.java (rewriteFormals): Set IS_SINGLE_VALUE on formals.
+	* standard/let.java (rewrite): Set IS_SINGLE_VALUE on variables.
+	* standard/define.java (scanForm): Likewise.
+	* standard/define_variable.java (scanForDefinitions): Likewise.
+
+	* repl.java: Update Language setting calls.
+	* Shell.java: Likewise.
+
+	* lang/Eval.java (evalBody): Use new Compilation convenience methods.
+	* lang/Translator.java (resolveModule): Likewise.
+
+2010-07-31  Per Bothner  <per@bothner.com>
+
+	* standard/set_b.java (rewriteForm): Don't complain about assigning
+	to imported variable it it is dynamic.
+
+2010-07-17  Per Bothner  <per@bothner.com>
+
+	* repl.java:  Remove unneeded package prefixes.
+
+2010-07-07  Per Bothner  <per@bothner.com>
+
+	* repl.java (processArgs): The --servlet flag also sets the
+	HttpRequestContext.importServletDefinitions static field.
+	* standard/Scheme.java (<clinit>): Import HTTP or servlet library class
+	if HttpRequestContext.importServletDefinitions is non-zero.
+
+2010-06-29  Mario Domenech Goulart <mario.goulart@gmail.com>
+
+	* repl.java: Fix typo.
+
+2010-06-21  Per Bothner  <per@bothner.com>
+
+	* lang/Translator.java (rewrite_pair): Check for literal Syntax *after*
+	rewrite_pair.  This is needed for macro that returns an xml literal.
+
+2010-06-14  Per Bothner  <per@bothner.com>
+
+	* standard/Scheme.java (initScheme): Fix typo for symbol=?.
+	Declare new functions namespace-uri and namespace-prefix.
+
+2010-05-31  Per Bothner  <per@bothner.com>
+
+	* standard/Scheme.java (initScheme): Declare new functions symbol=?,
+	symbol-local-name, symbol-namespace, symbol-namespace-uri,
+	symbol-prefix.
+
+2010-05-24  Per Bothner  <per@bothner.com>
+
+	* lang/Translator.java (xmlElementNamespaces): New field.
+
+	* standard/Scheme.java (createReadTable): Add "symbol".
+
+2010-05-19  Per Bothner  <per@bothner.com>
+
+	* standard/Scheme.java (initScheme): Remove "namespace" function.
+	(getNamedType): Add "namespace" type instead.
+	(unitNamespace): Update Namespace.make -> valueOf.
+
+2010-05-07  Per Bothner  <per@bothner.com>
+
+	* repl.java: Also pass PARSE_EXPLICIT to parse when compiling.
+	* standard/require.java (importDefinitions): Check that compilation
+	is null before checkCurrent, since the latter no longer does.
+
+2010-05-06  Per Bothner  <per@bothner.com>
+
+	Fix issue where required modules inherit --aplet and --servlet options.
+	* repl.java (defaultParseOptions): New field.
+	(processArgs): Change --applet and --servlet to just
+	set bits in defaultParseOptions.
+	(compileFiles): Pass defaultParseOptions to Language.parse.
+
+2010-04-18  Per Bothner  <per@bothner.com>
+
+	* repl.java (processArgs): Add new options --http-auto-handler and 
+	--http-start to start web server.
+	* standard/IfFeature.java: New features in-http-server and in-servlet.
+	* standard/require.java: New servlets module.
+
+2010-04-13  Per Bothner  <per@bothner.com>
+
+	* lang/Macro.java (expand):   Remove bad debugging print-out.
+
+2010-04-10  Per Bothner  <per@bothner.com>
+
+	* standard/IfFeature.java (hasFeature): If JAVA6COMPAT5 then
+	use reflection to test for feature string-normalize-unicode.
+
+	* lang/Promise.java (force): New static method, used to implement
+	Scheme 'force' method.  Condtionally handle java.util.concurrent.Future.
+
+2010-04-07  Per Bothner  <per@bothner.com>
+
+	* standard/Scheme.java: Fix name of class implementing "resolve-uri".
+
+2010-04-05  Per Bothner  <per@bothner.com>
+
+	* lang/Eval.java (evalBody): Set compilation state to BODY_PARSED
+	to avoid confusion if Compilation.process is called.
+
+2010-04-04  Per Bothner  <per@bothner.com>
+
+	* ReplDocument.java: Change call to QueueReader.append so it also works
+	for version compiled when java.lang.CharSequence is unavailable.
+	* ReplPane.java: Likewise.
+
+	* standard/object.java (rewriteClassDef): Handle the case when
+	java.lang.CharSequence is unavailable - i.e. pre-Java4.
+	Also, improve location for an error message.
+
+2010-04-02  Per Bothner  <per@bothner.com>
+
+	* standard/require.java (importDefinitions): Don't call
+	mustCompileHere, since import/require usually works when interpreting.
+
+2010-02-23  Per Bothner  <per@bothner.com>
+
+	Re-write of "runFile", load, and interfaces for running/loading files
+	and modules from the command line or the Scheme load function.
+	Most importantly, handle running a class name on the command line,
+	and handle mutually-referring source files from command line.
+	* Shell.java: Bunch of stuff was moved here from load.java.
+	(checkCompiledZip, runFileOrClass, compileSource): New methods.
+	(runFile): Re-organized and changed interfaces.
+	* repl.java: Change calls to runFile to call runFileOrClass.
+	* standard/load.java: Move most of the logic to Shell.java.
+
+	* GuiConsole.java: Remove unneeded import.
+
+2010-02-21  Per Bothner  <per@bothner.com>
+
+	* standard/require.java (importDefinitions): Get module classname
+	from the module ClassType, which is more robust.
+
+2010-02-10  Per Bothner  <per@bothner.com>
+
+	* standard/let.java (rewrite): No longer allow a java.lang.String
+	as an identifier.
+	This fixes Savannah bug #28860 "Strings as identifiers".
+	* standard/define.java (scanForm): Likewise.
+
+2009-12-25  root  <per@bothner.com>
+
+	* standard/Scheme.java (begin-for-syntax, define-for-syntax): New and
+	updated syntax.
+
+2009-12-13  Per Bothner  <per@bothner.com>
+
+	* standard/define_class.java (scanForDefinitions):  Set EARLY_INIT
+	on class Declaration.
+
+	* lang/Translator.java (exp2Type): If getTypeFor doesn't work,
+	try evaluating the type expression.  The goal is handle
+	PACKAGE:TYPE, where PACKAGE may be an alias.
+
+2009-12-07  Per Bothner  <per@bothner.com>
+
+	Change SyntaxForm to an interface, and use accessor methods.
+	A primary goal is to create a PairSyntaxForm class that is both a
+	Pair (so car and cdr work as in SRFI-72) and a SyntaxForm.
+	* lang/SyntaxForm.java: Change to an interface.
+	Most actual code moved to SyntaxForms.
+	(getDatum, getScope): New accessor methods.
+	* lang/SyntaxForms.java: New helper class containing static methods
+	and member classes.
+	Note the new classes are no longer Externalizable.
+	(class SimpleSyntaxForm): New member class, replaces old SyntaxForm.
+	Note the 'form' field was renamed to 'datum'.
+	(class PairSyntaxForm): New member class, for when the datum is a Pair.
+	* Makefile.am: Update according.
+	* lang/SyntaxRules.java: Update to use new accessors andstatic methods.
+	* lang/Lambda.java
+	* lang/SyntaxTemplate.java: Likewise.
+	* lang/SyntaxPattern.java: Likewise.
+	* lang/Makefile.am: Likewise.
+	* lang/Translator.java: Likewise.
+	* lang/Quote.java: Likewise.
+	* standard/define_syntax.java: Likewise.
+	* standard/IfFeature.java: Likewise.
+	* standard/export.java: Likewise.
+	* standard/syntax_case.java: Likewise.
+	* standard/let.java: Likewise.
+	* standard/module_name.java: Likewise.
+	* standard/define.java: Likewise.
+	* standard/define_alias.java: Likewise.
+	* standard/object.java: Likewise.
+	* standard/fluid_let.java: Likewise.
+	* standard/define_class.java: Likewise.
+	* standard/let_syntax.java: Likewise.
+	* standard/set_b.java: Likewise.
+	* standard/with_compile_options.java: Likewise.
+
+2009-12-04  Per Bothner  <per@bothner.com>
+
+	* lang/Lambda.java (rewriteAttr): Fix processing of SyntaxForms.
+	This fixes Savannah bug #27042: "Bad interaction between syntax-rules
+	and call-with-values".
+
+2009-12-04  Per Bothner  <per@bothner.com>
+
+	* lang/SyntaxForm.java (toString): Better debugging output.
+	* lang/TemplateScope.java (toString): Also print Syntax object.
+
+2009-12-02  Per Bothner  <per@bothner.com>
+
+	* standard/object.java (rewriteClassDef): Fix previous change so we
+	don't get a NullPointerException on an unknown super-type.
+
+2009-12-01  Per Bothner  <per@bothner.com>
+
+	* standard/Scheme.java (getNamedType): Change 'document' type.
+
+	* standard/define.java (scanForm): Don't setCanRead.
+	* standard/object.java (rewriteClassDef): Set HAS_SUBCLASS
+	on super-classes.
+	(rewriteClassDef): Move move error about *init* method in non-simple
+	classes to later, since we might optimize define-class to simple class.
+
+2009-11-25  Per Bothner  <per@bothner.com>
+
+	* Shell.java (runFile): Better handlng of FileNotFoundException -
+	if it happens at run-tie at least we're only *somewhat* misleading.
+
+2009-11-04  Per Bothner  <per@bothner.com>
+
+	* standard/thisRef.java (rewriteForm): Call different Declaration
+	constructor, for cleanliness.  (It no longer makes a difference.)
+
+	* lang/Translator.java (scanForm): Set line-number if not yet set.
+
+2009-11-01  Per Bothner  <per@bothner.com>
+
+	* standard/object.java (matchAccess): Re-write to support
+	volatile and transient flags, and also a list of multiple flags.
+	(scanClassDef): Update accordingly.
+	* lang/Translator.java (matchQuoted): New helper method.
+
+	* standard/define.java: Defer processing of type-specifier from
+	scanForm to rewriteForm.
+
+2009-10-31  Per Bothner  <per@bothner.com>
+
+	* repl.java (processArgs): Use new Compile.MODULE_XXX flags.
+	Add new --module-nonstatic or --no-module-static to explicitly
+	set moduleStatic to Compilation.MODULE_NONSTATIC.
+
+	* standard/module_static.java( scanForDefinitions): Minor cleanup.
+	Add error if inconsistent module-static specifiers.
+
+2009-10-27  Per Bothner  <per@bothner.com>
+
+	* standard/object.java (rewriteClassDef): Allow *init* methods for
+	non-simple class if CLASS_SPECIFIED.
+
+2009-10-18  Per Bothner  <per@bothner.com>
+
+	* standard/Scheme.java (initScheme): Many bitwise-* functions
+	are now implemented by gnu.kawa.functions.BitwiseOp.
+
+2009-10-17  Per Bothner  <per@bothner.com>
+
+	* Quote.java:  Use statically-looked-up helper Methods, rather than
+	using Invoke.makeInvokeStatic, does does undesirable early getType().
+	Also, don't call kawa.lib.vector.$make$vactor$; call new
+	FVector.make.
+
+2009-10-09  Per Bothner  <per@bothner.com>
+
+	* lang/Translator.java (rewrite): Handle ambiguity of 'object'
+	as both anonymous-class-constructor macro and type-specifier.
+	* standard/Scheme.java (checkDefaultBinding): When checking for array
+	type use rewrite so we find lexically-defined class.
+
+	* lang/Lambda.java: Defer from rewriteFormals and rewriteAttrs to
+	rewriteBody the exp2Type/getTypeFor calls for parameter and returns
+	types, allowing lexical lookkup and forward references of ClassExps.
+
+2009-09-30  Per Bothner  <per@bothner.com>
+
+	* standard/location.java (rewrite): Use new maybeIndirectBinding method.
+	* standard/fluid_let.java (rewrite): Likewise.
+	* standard/define.java (scanForm): Only setCanWrite if immediate.
+	* standard/require.java (importDefinitions): Don't set no-longer-used
+	CREATE_FIELD_REFERENCE.
+	* standard/set_b.java (rewriteForm): Warn if setting imported variable.
+
+	* standard/Scheme.java (getTypeFor): Map gnu.math.DFloNum to
+	LangObjType.dflonumType.
+
+2009-09-29  Per Bothner  <per@bothner.com>
+
+	* standard/Scheme.java (initScheme):  Declare disassemble function.
+
+	* standard/Scheme.java (initScheme): resource-url is in
+	kawa.lib.misc_syntax, not kawa.lib.files.
+
+2009-09-26  Per Bothner  <per@bothner.com>
+
+	* lang/Translator.java (finishModule): If generateMain when compiling a
+	module without an explicit EXPORT_SPECIFIED, assume nothing is exported.
+
+2009-09-20  Per Bothner  <per@bothner.com>
+
+	* standard/IfFeature.java: Define string-normalize-unicode feature
+	if PreProcess name use:java.text.Normalizer enabled.
+
+	* standard/Scheme.java (initScheme): Update quotient, remainder, and
+	modulo, which are now implemented by DivideOp.
+	Add R6RS functions div, mod, div0, mod0, div-and-mod, div0-and-mod0.
+
+	* standard/Scheme.java: Map "number" to LangObjType.numericType.
+
+	* standard/Scheme.java: Define R6RS functions exact and inexact.
+
+2009-09-15  Per Bothner  <per@bothner.com>
+
+	* repl.java (processArgs): Some code moved to ApplicationMainSupport.
+	(propertyFields): Moved to ApplicationMainSupport.
+	* standard/Scheme.java: Define process-command-line-assignments.
+
+2009-09-11  Per Bothner  <per@bothner.com>
+
+	* standard/Scheme.java: Map "real" and "rational" types to new
+	LangObjType objects.
+
+2009-08-30  Per Bothner  <per@bothner.com>
+
+	* standard/require.scm (featureMap): Update for SRFI-2.
+	* standard/ImportFromLibrary.java (SRFI97Map): Likewise.
+
+2009-08-27  Per Bothner  <per@bothner.com>
+
+	* repl.java (exitIncrement, exitDecrement, exitCounter):
+	Move to gnu/expr/ModuleBody.java.
+	* ReplDecument.java: Update accordingly.
+
+	* repl.java (commandLineArgArray, commandLineArguments,
+	main body of setArgs): Move to gnu/expr/ModuleBody.java.
+
+	* standard/Scheme.java: Declare "command-line" and update "exit".
+
+	* standard/not.java:  Moved/renamed to gnu/kawa/functions/Not.java.
+	* standard/Makefile.am: Update accordingly.
+	* standard/Scheme.java: Update accordingly.
+
+	* standard/Scheme.java: Update for some functions moved
+	to new file kawa/lib/misc_syntax.scm.
+
+	* standard/define_syntax.java (<clinit>): Declare that makeHygienic
+	and makeNonHygienic are side-effect-free.
+
+2009-08-23  Per Bothner  <per@bothner.com>
+
+	* standard/object.java: Update for makeCoercion moved to Compilation
+	* lang/Lambda.java: Update for setCoercedReturnValue moved to LambdaExp.
+
+2009-08-13  Per Bothner  <per@bothner.com>
+
+	* standard/require.java (featureMap): Add mappings for SRFI-13.
+	* standard/ImportFromLibrary.java (SRFI97Map): Likewise.
+
+	* standard/define.java (scanForm, rewriteForm): If --no-inline flag
+	is specified (i.e. if ! Compilation.inlineOk), treat
+	"(define (foo args) body)" same as
+	"(define foo (lambda (args) name: 'foo body)".
+
+	* standard/Scheme.java: Various functions in kawa/lib were moved around.
+
+	* lang/Translator.java: Update GetNamedPart -> CompileNamedPart.
+	* lang/Quote.java: Likewise.
+
+2009-08-12  Per Bothner  <per@bothner.com>
+
+	* standard/set_b (rewriteForm): Update Setter.setterDecl.
+
+2009-08-10  Per Bothner  <per@bothner.com>
+
+	One step in separating compilation from run-time classes.
+	* standard/SchemeCompilation.java: New class.
+	* standard/Makefile.am: Update accordingly.
+	* standard/Scheme.java (lambda, repl): Move to SchemeCompilation.
+	(initScheme): Bind LispLanguage.getNamedPartLocation, but don't
+	reference Translator fields while doing so.
+	* standard/try_catch.java: Update accordingly.
+	* standard/define.java: Likewise.
+	* standard/object.java: Likewise.
+	* lang/Translator.java (getNamedPartLocation): Remove field - it's
+	now in LispLanguage.
+
+2009-08-07  Per Bothner  <per@bothner.com>
+
+	* lang/Translator.java (resolveModule): Move the forms resulting from
+	in import into their proper place.
+	(vectorReverse): New helper method.
+	* standard/require.java (importDefinitions): Also remember
+	size of forms stack.
+
+	* repl.java (processArgs): Update copyright year printed by --version.
+
+2009-07-10  Per Bothner  <per@bothner.com>
+
+	* kawa/SyntaxPattern.java (literalIdentifierEq): Use equals,
+	not identity to compare literals.
+	Fixes Savannah bug #26993 "String literals in syntax-rules don't match".
+
+2009-07-04  Per Bothner  <per@bothner.com>
+
+	* standard/Scheme.java (initScheme): Update for letrec.
+
+2009-06-28  Per Bothner  <per@bothner.com>
+
+	* standard/callcc.java (inline): Update for new inlining framework.
+
+2009-06-02  Per Bothner  <per@bothner.com>
+
+	* standard/Scheme.java (initScheme): Update for (rnrs unicode)
+	functions - add new methods, and move old functions to new library.
+
+2009-05-31  Per Bothner  <per@bothner.com>
+
+	* standard/Scheme.java (initScheme): Add "regex" type name.
+	* standard/require.scm (featureMap): Add 'regex and 'pregexp.
+
+2009-05-22  Per Bothner  <per@bothner.com>
+
+	* kawa/SyntaxPattern.java (translate, match, literalIdentifierEq):
+	More correct handling of syntactic hygiene for literals.
+	(literalIdentifierEq): Remove one method.
+
+2009-05-17  Per Bothner  <per@bothner.com>
+
+	* lang/Eval.java (evalBody): Give module a unique name.
+	* standard/SchemeScriptEngineFactory.java: New class.
+	* standard/Makefile.am: Update accordingly.
+
+2009-05-15  Per Bothner  <per@bothner.com>
+
+	* Shell.java (run): Use PARSE_FOR_EVAL rather than PARSE_IMMEDIATE.
+	* standard/load.java (loadSource): Likewise.
+	* standard/require.java (importDefinitions): Make sure to set
+	PARSE_IMMEDIATE (and hence Compilation.immediate) before we parse.
+	This is needed if there are cycles.
+
+2009-04-21  Per Bothner  <per@bothner.com>
+
+	* kawa/require.java (importDefinitions): Don't call run on new
+	module if we're not makeRunnable on it.
+
+	* standard/module_name.java (scanForm): Change the value of the
+	module-name Declaration to be mainClass with type=java.lang.Class.
+	* standard/module_name.java (scanForm): If the module-name is a String,
+	treat it the same as FString, rather than the same a Symbol.
+
+	* standard/require.java (importDefinitions): Imported variable
+	should be read-only.
+
+2009-04-20  Per Bothner  <per@bothner.com>
+
+	* lang/Translator.java (scanForm): Push and pop source position.
+
+2009-04-18  Per Bothner  <per@bothner.com>
+
+	* standard/module_name.java (scanForm): Type of module name is now
+	Class, not ClassType.
+	* standard/define_alias.java (scanForDefinitions): If the aliasee
+	is a name for a ModuleExp or ClassExp, don't indirect.
+
+2009-03-15  Per Bothner  <per@bothner.com>
+
+	* standard/export.java (export): New field.
+	* standard/Scheme.java: Allow 'export' as synonym for 'module-export'.
+
+	* standard/object.java (classNameKeyword): New constant.
+	(scanClassDef): Recognize class-name: specifier.
+	(rewriteClassDef): If class-name: was seen, set classNameSpecifier
+	in ClassExp.
+
+2009-03-13  Per Bothner  <per@bothner.com>
+
+	* standard/ImportFromLibrary.java (SRFI97Map): New table.
+	(scanForDefinitions): Process SRFI-97-style SRFI library references.
+
+	* standard/ImportFromLibrary.java: New class, implements R6RS
+	import keyword.
+	*  standard/Makefile.am: Update accordingly.
+	* standard/Scheme.java: Update - the implementations of various macros
+	were moved to different classes.
+	Add definition of 'import' keyword.
+	* standard/require.java (featureMap): Various updates.
+	(scanForDefinitions): Error if class not found.
+	(importDefinitions): Drop unused 'uri' parameter.
+	Add 'renamer' parameter.
+
+	* repl.java (processArgs): Don't run interactive shell if there are
+	command-line arguments after doing "something" (such as -f).
+
+	* lang/Translator.java (scanForm):  If seeing (PART1:PART2 ...)
+	check if PART2 is a static Syntax object in class PART1.
+	This allows invoking Syntax/Macro objects without putting them
+	in the Scheme namespace.
+
+2009-03-10  Per Bothner  <per@bothner.com>
+
+	* standard/Scheme.java (createReadTable): Do setFinalColonIsKeyword()
+	here, rather than in getLexer, since former was moved to ReadTable.
+	(getLexer): Can now be removed.
+
+2009-03-07  Per Bothner  <per@bothner.com>
+
+	* lang/Scheme.java (getLexer): New method - call
+	setInitialColonIsKeyword.
+
+2009-03-01  Per Bothner  <per@bothner.com>
+
+	* lang/Translator.java (<init>): Also pass NameLookup.
+	(resolveModule): Don't pop in immediate mode.
+	(check_if_Syntax): Generalize.
+	(exp2Type): Don't InlineCalls twice.
+	(rewrite_body): We skip dynamic declarations when creating body.
+	* lang/Eval.java (evalBody): Update for new Translator constructor.
+
+2009-02-06  Per Bothner  <per@bothner.com>
+
+	* standard/Scheme.java: New function resource-url; removed resource-uri.
+
+2009-01-14  Per Bothner  <per@bothner.com>
+
+	* standard/require.java (feature-map): Add 'android-defs.
+
+2008-12-29  Per Bothner  <per@bothner.com>
+
+	* standard/callcc.java: Optimization to avoid temporary variable
+	if calling the continuation doesn't need to call a finally-clause.
+	(ExitThroughFinallyChecker): New helper class, extends ExpWalker.
+
+2008-12-27  Per Bothner  <per@bothner.com>
+
+	* standard/callcc.java: Optimize the case when calls to the
+	continuation are lexically known and exits to the same uninlined
+	function.  In this case we essentially make it a goto.
+
+2008-12-23  Per Bothner  <per@bothner.com>
+
+	* standard/module_extends.java: Move setting of module's super-type
+	from rewriteForm to scanFrom, because if it is done in rewriteForm
+	it happens too late for Compilation's addMainClass.
+
+	* standard/module_name.java (scanForm): Allow plain name
+	without angle-brackets.
+
+2008-12-09  Per Bothner  <per@bothner.com>
+
+	* repl.java (processArgs): Handle --target/-target arg.
+
+2008-11-21  Per Bothner  <per@bothner.com>
+
+	* ReplDocument.java (class DocumentCloseListener):  Add a listener
+	class so classes can get notified when document "closes".
+	This allowed us to close a window by typing #!eof in it.
+	(<init>): Call fireDocumentClosed when repl thread finishes.
+	(close): Do fireDocumentClosed.
+	* GuiConsole.java: Request notification when document is closed.
+	* ReplPane.java (removeNotify): New method.
+	* GuiConsole.java (main): Also do some initialization so it works
+	to call GuiConsole directly as an application or class.
+
+2008-11-11  Per Bothner  <per@bothner.com>
+
+	More rebust support for multi-line input and type-ahead in GuiConsole.
+	* ReplDocument.java (write): Protect using SwingUtilities.invokeLater.
+	(checkingPendingInput) New method, to actually send pending input
+	to inferior reader.
+	(<init>): Have our QueueReader invoke checkingPendingInput.
+	* ReplPane.java (enter): Don't send entered text (if at end)
+	to inferior, instead let checkingPendingInput do it.
+	* GuiInPort.java (lineStart): Remove method.
+
+2008-11-10  Per Bothner  <per@bothner.com>
+
+	* repl.java: If we have no Console, and no "active" arguments
+	were specified, default to a repl in a GuiConsole, just as we normally
+	default to a tty-based repl.  We check using either the --no-console
+	flag (passed in by kawa.c) or the Java 6 System.console method.
+	* Shell.java (dontPrompt): Remove static.
+	(run): Don't use dontPrompt to determine interactivity.
+
+	* ReplDocument.java (deleteOldText): Don't redundantly adjust
+	outputMark and endMark.  This fixes an IllegalArgumentException.
+
+2008-10-29  Per Bothner  <per@bothner.com>
+
+	* ReplPane.java (enter): Minor simplification *and* optimization.
+
+2008-10-26  Per Bothner  <per@bothner.com>
+
+	Inline call/cc (more coming).
+	* lang/CalledContinuation.java (ctx): Extra field.
+	(<init>): Pass and set ctx field.
+	* lang/Continuation.java (apply): Update accordingly.
+	(handleException, handleException$X): New methods, with logic taken
+	from callcc.apply.
+	* standard/callcc.java: Implement CanInline and Inlineable.
+	(apply): Use Continuation.handleException$X.
+	(canInline, inline, compile, getReturnType): New methods.
+	(class CompileTimeContinuation): New class - currently unused.
+
+	* lang/Translator.java (rewrite): Note that a variable reference
+	IS_SINGLE_VALUE.
+
+2008-09-08  Per Bothner  <per@bothner.com>
+
+	* lang/Translator.java (finishModule): Don't call declareThis here,
+	since that creates a Scope and Variable before we even create the
+	corresponding CodeAttr, which if nothing else is ugly and confusing.
+
+2008-09-06  Per Bothner  <per@bothner.com>
+
+	* lang/SyntaxForm.java (formDatum): Just use 'make' method.
+
+2008-07-17  Per Bothner  <per@bothner.com>
+
+	* standard/Scheme.java (initScheme): Declare the various R6RS
+	bitwise- functions.
+
+2008-06-08  Per Bothner  <per@bothner.com>
+
+	* lang/SyntaxTemplate.java: Use Pair.setCdrBackdoor, since the
+	pairs may be PairWithPosition.
+	* lang/Translator.java: Likewise.
+	* lang/Quote.java: Same issue, but instead create the list
+	back-to-front so we don't have to use setCdr.
+
+2008-06-01  Per Bothner  <per@bothner.com>
+
+	* standard/Scheme.java: The standard functions string, vector, and list
+	are now LangObjType objects.
+	* lang/Lambda.java: Update to use new LangObjType.listType.
+	* lang/QuoteExp.java (makeInvokeMakeVector): New helper method.
+	Use renamed vector method.
+
+2008-05-20  Per Bothner  <per@bothner.com>
+
+	* standard/map.java: Generalize so the 'procedure' can be any valid
+	argument to ApplyToArgs, not just a Procedure.
+	* standard/Scheme.java: Adjust for extra constructor args to map.
+
+2008-05-11  Per Bothner  <per@bothner.com>
+
+	* standard/require.java (importDefinitions): Don't need to check
+	for non-null sourceName - that is now handled by checkCurrent.
+
+	* standard/require.java (importDefinitions): If private, continue
+	earlier - before checking to see if we need an instance handle.
+
+2008-04-30  Per Bothner  <per@bothner.com>
+
+	* lang/Lambda.java (rewriteBody): Use new setCoercedReturnType
+	method in LambdaExp.java.
+
+2008-02-17  Per Bothner  <per@bothner.com>
+
+	* lang/Translator.java (rewrite): If the location is in a field
+	loaded using a ZipLoader or ArrayClassLoader, we don't safely
+	generate code to reference it, except in immediate mode.
+	Fixes Bugzilla #22299: "function misnaming with moduleStatic > 0".
+
+2008-01-22  Per Bothner  <per@bothner.com>
+
+	* standard/Scheme.java (apply): New static field.  The "apply"
+	method now depends on applyToArgs.
+
+2008-01-16  Per Bothner  <per@bothner.com>
+
+	* standard/map.java (inline): Handle new argsInlined parameter.
+
+2007-12-30  Per Bothner  <per@bothner.com>
+
+	Move code out of ReplPane and GuiConsole, until ReplDocument.
+	This allows (in theory) the same repl to be viewed in multiple panes.
+	Also, use a custom ViewFactory to handle Viewable and Paintable,
+	so these can be displayed multiple times.
+	* ReplDocument.java: New class, extends DefaultStyledDocument.
+	* Makefile.am: Update accordingly.
+	* ReplPaneOutPort.java: Write to ReplDocument, with new handling
+	of Viewable and Paintable.
+	* GuiConsole.java" Move fields and methods to ReplDocument.
+	* ReplPane.java: Likewise.
+	(class ReplEditorKit): New class.
+	* GuiInPort.java: Update for moved fields and methods.
+
+	* standard/define_variable.java (scanForDefinitions): There doesn't
+	seem to be any reason to restrict define-variable to module-level.
+
+2007-11-05  Per Bothner  <per@bothner.com>
+
+	* lang/Translator.java (rewrite): If we're not in immediate mode,
+	don't create the dummy '(module-instance)' variable.  Fixes Savannah
+	bug 19725:" compile problems appearing in latest svn version".
+
+2007-11-04  Per Bothner  <per@bothner.com>
+
+	* kawa/Shell.java (run): Create "session" ClassLoader.
+
+2007-11-02  Per Bothner  <per@bothner.com>
+
+	* standard/Scheme.java (getNamedType, getType): The <integer> type
+	is handled by LangObjType.integerType.
+
+2007-09-08  Per Bothner  <per@bothner.com>
+
+	* ReplPane.java (write): Move to ReplPaneOutPort.
+	* ReplPaneOutPort.java (area): Rename field to pane.
+	(print): Add support for Viewable and Paintable.
+
+	* MessageArea.java: Rename to ReplPane.java.
+	* TextAreaWriter.java: Rename to ReplPaneOutPort.java.
+	* GuiConsole.java, GuiInPort.java, Makefile.am: Update accordingly.
+
+	Convent -w flag to create Swing JTextPane rather than AWT TextArea.
+	* GuiConsole.java: Change to extend JFrame rather than Frame.
+	* TextAreaWriter.java: Extend OutPort rather than Writer.
+	(print): New method, to handle "writing" Components.
+	(class TextPaneWriter): New class, extends Writer.
+	* MessageArea.java: Extend JTextPane rather than TextArea.
+	Use various styles.
+	* GuiInPort.java (emitPrompt): New method.
+
+2007-09-02  Per Bothner  <per@bothner.com>
+
+	* lang/AutoloadProcedure.java (load): Restore and fix support for
+	class naming a ModuleBody - needed for elisp autoloads.
+
+2007-06-10  Per Bothner  <per@bothner.com>
+
+	* standard/Scheme.java (checkDefaultBinding): Fix infinite loop
+	when looking for missing unit.
+	Fixes Savannah bug #19991: '1_' causes OutOfMemoryError in interpreter.
+
+2007-06-10  Per Bothner  <per@bothner.com>
+
+	Fix Savannah bug #19996 "load-relative trouble".
+	* standard/load.java (currentLoadPath): New ThreadLocal.
+	(apply): New overload to handle relative paths.
+	Make old method private.
+	(apply2): Update to use new apply.
+	* Shell.java (runFile): Likewise.
+
+	* standard/load.java (apply2): Better error message.
+
+2007-06-10  Per Bothner  <per@bothner.com>
+
+	* standard/require.java: Update PreProcess state.
+
+2007-04-27  Per Bothner  <per@bothner.com>
+
+	* standard/load.java (loadClassFile): Use Language.loadClass.
+	(loadCompiled): Update ClassMemberLocation.defineAll call.
+
+2007-04-26  Per Bothner  <per@bothner.com>
+
+	* lang/Langda (rewriteFormals): Call namespaceResolve, twice.
+
+2007-04-25  Per Bothner  <per@bothner.com>
+
+	* standard/require.java (scanForDefinitions): Update to pass ClassType
+	to ModuleInfo.find.
+
+2007-04-23  Per Bothner  <per@bothner.com>
+
+	* standard/require.java (find(String)): Inline call to ModuleInfo's
+	find method - which has been removed.
+
+2007-04-19  Per Bothner  <per@bothner.com>
+
+	* lang/Quote.java (expand_pair): Obvious trivial optimization.
+
+2007-04-03  Per Bothner  <per@bothner.com>
+
+	* Translator.java (namespaceResolvePrefix): New method.
+	(namespaceResolve(Expression,Expresion)): Use it.
+	(namespaceResolve(Namespace,Expresion)): New method.
+	* Quote.java (makeSymbol): New static method.
+	(expand_pair): Handle `PREFIX:,EXPR.
+
+2007-04-01  Per Bothner  <per@bothner.com>
+
+	* standard/Scheme.java (checkDefaultBinding): If name matches a
+	known package, return that Package.
+
+2007-03-31  Per Bothner  <per@bothner.com>
+
+	* standard/Scheme.java (unitNamespace): New constant field.
+	(initScheme): Declare 'unit'.
+	(checkDefaultBinding): Check for symbol whose namespace
+	is XmlNamespace or unitNamespace.
+	Check for simple symbol matching quantity syntax.
+	(lookupBuiltin): Remove method.
+	* standard/let.java (rewrite): Do namespaceResolve.
+	* standard/define_unit.java (rewriteForm): Unit symbol now uses
+	Scheme.unitNamespace, rather than "$unit" suffix.
+
+	* lang/Translator.java (getNamedPartDecl): Moved from Scheme.java.
+	(getNamedPartLocation): New field.
+	(rewrite_pair): Handle getNamedPartDecl here.  Most important change
+	is that we also do namespaceResolve.
+	* standard/Scheme.java (getNamedPartDecl): Moved to Translator.
+	(checkDefaultBinding): Handle symbols in XmlNamespace.
+	(makeApply): Don't handle getNamedPartDecl here.
+
+2007-03-19  Per Bothner  <per@bothner.com>
+
+	* standard/object.java (scanClassDef): If interface:#f is specified
+	set CLASS_SPECIFIED flag.
+	(rewriteClassDef): ClassExp.setClassName was merged into setTypes.
+
+	* standard/Scheme.java (checkDefaultBinding): Demangle possible class
+	name if there is no '.' in name.
+	* standard/require.java (scanForDefinitions): Delegate class-name
+	lookup to Translator.require.
+	* lang/Translator.java (selfEvaluatingSymbol): Make public.
+
+2007-03-14  Per Bothner  <per@bothner.com>
+
+	* standard/Scheme.java (lookupBuiltin): Remove handling of '<TYPE>'
+	here, since we want it handled by checkDefaultBinding.
+	(checkDefaultBinding): Use getNamedType rather than lookupType.
+	
+2007-03-13  Per Bothner  <per@bothner.com>
+
+	* lang/Translator.java (rewrite): Only call checkDefaultBinding
+	if there is no binidng in the dynamic Environment.
+
+	* Shell.java (printError): New static method.
+	(run, runString, runFile): Change return type to boolean
+	or Throwable to allow better error handling.  Use printError.
+	* repl.java (processArgs): If error and not interactive, exit(-1).
+	* standard/load.java (loadSource): Change to new run API.
+
+	* standard/object.java (matchAccess, accessString): New static methods.
+	(scanClassDef): Handle interface: and access: class properties.
+	(rewriteClassDef): Skip over class-level keyword specifier pairs.
+	* standard/define_class.java (scanForDefinitions): Immediate error
+	is name missing or invalid.  Resolve qualified (colon) names.
+
+	* Record.java (makeRecordType): Don't access acces_flags directly.
+
+2007-03-06  Per Bothner  <per@bothner.com>
+
+	* lang/Lambda.java (rewriteBody): Canonicale BeginExp.
+	Don't coerce body if isAbstract().
+	* lang/Translator.java (rewrite): Handle literal #!abstract.
+
+2007-02-28  Per Bothner  <per@bothner.com>
+
+	* Shell.java (dontPrompt): New global flag.
+	(run): Don't set inport's prompter if dontPrompt flag is set.
+	* repl.java (processArgs): Set Shell.dontPrompt if "--no-prompt".
+
+	* repl.java (internalError): New static method.
+	(processArgs): Use it in two places.
+
+2007-02-27  Per Bothner  <per@bothner.com>
+
+	* standard/fluid_let.java (rewrite): Invoke Declaration.setCanWrite.
+	* standard/set_b.java (rewriteForm): Likewise.
+
+2007-02-26  Per Bothner  <per@bothner.com>
+
+	* standard/map.java (inline): Update for new CanInline api.
+
+2007-02-25  Per Bothner  <per@bothner.com>
+
+	* standard/Scheme.java (checkDefaultBinding): Map 'NAME?' to
+	'(lambda (x) (instance? x NAME)'.
+
+	* standard/Scheme.java (getNamedType): Remove redundant efinition
+	of 'java.lang.Object'.
+
+	* lang/Lambda.java (rewriteBody): Allow constant Type or Class in
+	deprecated '<TYPE> BODY' syntax.
+
+2007-02-19  Per Bothner  <per@bothner.com>
+
+	* standard/define_class.java (scanForDefinitions): We now return
+	Class, rather than Type, in the define-simple-class case.
+
+2007-02-18  Per Bothner  <per@bothner.com>
+
+	* lang/NamedException.java: Use Symbol rather than String for name.
+	* lang/Lambda.java: Names are now Symbol, not String.
+	Strings are now CharSequence rather than only FString.
+	* standard/define_autoload.java: Likewise.
+	* standard/define_unit.java: Likewise.
+	* lang/SyntaxPattern.java: Likewise.
+	* standard/require.java: Likewise.  Assume fdecl's name is Symbol.
+	* lang/Translator.java: Likewise.
+	(matches): New method, handles Symbols.
+	* lang/SyntaxTemplate.java: Names are now Symbol, not String.
+	* lang/Record.java (typeFieldNames): Likewise.
+	* standard/define_syntax.java: Likewise.
+	* standard/throw_name.java: Likewise.
+	* standard/IfFeature.java: Likewise.
+	* standard/module_static.java: Likewise.
+	* standard/object.java: Likewise.
+	* standard/Scheme.java: Update for new type scheme.
+
+	* lang/Translator.java (rewrite): Handle rewriting class name to class
+	by calling checkDefaultBinding.
+	* standard/Scheme.java (initScheme, getType): Define class and type
+	types.
+	(checkDefaultBinding): New method.
+	(exp2Type): Simplify to use getTypeFor.
+	* standard/prim_method.java (rewrite): Use implemetation type.
+	* standard/define_alias.java (scanForDefinitions): \
+	Handle aliasing to a constant.
+
+2007-02-08  Per Bothner  <per@bothner.com>
+
+	* standard/Scheme.java (getTypeFor): New method.
+
+2007-02-05  Per Bothner  <per@bothner.com>
+
+	* standard/Scheme.java (initScheme): Declare define-syntax-case.
+
+	* lang/Translator.java (setCurrentScope): Change needed to handle
+	macros that generate macros.  Not quite right, but an improvement.
+
+2007-01-31  Per Bothner  <per@bothner.com>
+
+	* MessageArea.java (enter): Fix osme off-by-one issues.
+	Fixes (hopefully) Savannah bug #16313.
+
+2007-01-14  Per Bothner  <per@bothner.com>
+
+	* lang/Record.java (makeRecordType): Use one-argument version of
+	loadClass, since 2-argument version is now protected.
+
+2007-01-09  Per Bothner  <per@bothner.com>
+
+	* standard/Scheme.java: Add new path functions.
+
+2007-01-04  Per Bothner  <per@bothner.com>
+
+	* standard/load.java (apply): Use Path's openInputStream.
+	* standard/require.java (lookupModuleFromSourcePath): Use Path's
+	resolve method, rather than URI_utils's.
+
+2007-01-03  Per Bothner  <per@bothner.com>
+
+	* standard/require.java: Use ModuleInfo's new
+	getSourceAbsPathname method.
+
+2007-01-02  Per Bothner  <per@bothner.com>
+
+	* standard/load.java (apply): Take Path parameter.
+	Simplify resolving to URL - let Path.toURL handle it.
+	(apply2): Update accordingly.
+	(loadCompiled): Take Path parameter.
+	* Shell.java (runFile): Update accordingly.
+
+	* standard/Scheme.java (initScheme): Change URI from function to type.
+	Other new types: path, filepath
+	New functions: path?, filepath?, URI?, absolute-path? path-scheme,
+	path-authority, path-user-info, path-host, path-port, path-path,
+	path-fragment, path-query.
+	(getNamedType): Remove URI - now "URI" rather than "<URI>".
+	(getTypeFor): Handle path, filepath, uri.
+	(createReadTable): URI is now define in LangObjType.
+	Add path and filepath.

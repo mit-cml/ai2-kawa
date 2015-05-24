@@ -1,0 +1,135 @@
+This is kawa.info, produced by makeinfo version 4.13 from kawa.texi.
+
+
+Indirect:
+kawa.info-1: 163
+kawa.info-2: 302254
+
+Tag Table:
+(Indirect)
+Node: Top163
+Node: Installation4009
+Node: Getting Kawa4386
+Node: Running Java5962
+Node: Binary distribution7121
+Node: Source distribution8656
+Node: Running18162
+Node: Options19635
+Node: Scripts30475
+Node: New-Window33452
+Node: Exiting33955
+Node: Compiling34704
+Node: Archive compilation36739
+Node: Files compilation37536
+Node: Compilation options39761
+Node: Compiling using Ant43125
+Node: Application compilation43606
+Node: Applet compilation44844
+Node: Compiling to executable47454
+Node: Features48467
+Node: Implemented SRFIs50747
+Node: Restrictions54003
+Node: Syntax55710
+Node: Syntax notation55972
+Node: Lexical and datum syntax56827
+Node: Lexical syntax59254
+Node: Datum syntax67237
+Node: Hash-prefixed forms68748
+Node: Syntax and conditional compilation71267
+Ref: include75125
+Ref: include-relative75304
+Node: Multiple values75903
+Node: Symbols and namespaces79930
+Node: Simple symbols80722
+Node: Namespaces82303
+Node: Keywords92477
+Node: Special named constants93388
+Node: Procedures94537
+Node: Procedure properties95691
+Node: Generic procedures97556
+Node: Extended formals99297
+Node: Numbers105313
+Node: Arithmetic operations105737
+Node: Quantities118154
+Node: Logical Number Operations120204
+Node: Performance of numeric operations128649
+Node: Characters and text131136
+Node: Characters131406
+Node: Strings134257
+Node: Unicode137948
+Node: Regular expressions149320
+Node: Data structures159470
+Node: Lists159702
+Node: Arrays160378
+Node: Uniform vectors166253
+Node: Hash tables173268
+Node: Exceptions191316
+Node: Eval and Environments194558
+Node: Locations197626
+Node: Parameter objects200572
+Node: Debugging205645
+Node: Threads206935
+Node: Processes207996
+Node: Miscellaneous211372
+Node: Input-Output212948
+Node: Named output formats213417
+Node: Paths216293
+Node: Resources222994
+Node: Files224704
+Node: Ports226799
+Node: Format234754
+Node: Types243561
+Node: Standard Types245803
+Node: Declaring Types of Variables249753
+Node: Type tests and conversions250528
+Node: Objects Classes and Modules251556
+Node: Defining new classes252965
+Node: Anonymous classes264981
+Ref: SAM-conversion266588
+Node: Enumerations267536
+Node: Module classes269775
+Node: Record types283345
+Node: Dynamic records287038
+Node: Method operations291293
+Node: Allocating objects302254
+Node: Field operations308401
+Node: Mangling312057
+Node: Scheme types in Java315572
+Node: Array operations317297
+Ref: Creating-new-Java-arrays317563
+Node: Loading Java functions into Scheme320085
+Node: Evaluating Scheme expressions from Java324906
+Node: XML tools326679
+Node: Formatting XML328671
+Node: Creating HTML nodes330945
+Node: Creating XML nodes332790
+Node: XML literals335220
+Node: Server-side scripts342569
+Node: Self-configuring page scripts346064
+Node: Servlets353393
+Node: CGI scripts360403
+Node: HTTP requests362309
+Node: HTTP response369927
+Node: XML beyond Scheme371939
+Node: KRL372970
+Node: Low-level functions375449
+Node: Low-level Method invocation375825
+Node: Low-level Field operations377516
+Node: Low-level array macros379488
+Node: FAQs381121
+Node: Community382149
+Node: Reporting bugs382478
+Node: Mailing lists383143
+Node: Support384120
+Node: Projects385197
+Node: License388847
+Node: Software-License389075
+Node: Manual-License392536
+Node: Overall Index398770
+
+End Tag Table
+
+
+Local Variables:
+coding: utf-8
+End:

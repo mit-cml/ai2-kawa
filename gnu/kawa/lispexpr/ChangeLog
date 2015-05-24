@@ -1,0 +1,904 @@
+2010-10-21  Per Bothner  <per@bothner.com>
+
+	* LispReader.java (makePair): New overloaded method.
+
+2010-10-15  Per Bothner  <per@bothner.com>
+
+	* LangObjType.java (convertValue): Just return null for 'integer',
+	to avoid some hiding of static type mismatches.
+
+2010-10-05  Per Bothner  <per@bothner.com>
+
+	* LangPrimType.java (convertValue): New method.
+	* LangObjType.java (coercionMethod, convertValue): New methods.
+	(emitCoerceFromObject): Make use of coercionMethod.
+
+2010-09-17  Per Bothner  <per@bothner.com>
+
+	* LangPrimType.java (compare): Return -1 for (char,gnu.text.Char).
+
+2010-08-01  Per Bothner  <per@bothner.com>
+
+	* DefineNamespace.java (scanForDefinitions): Set IS_SINGLE_VALUE
+	on namespace variable.
+
+	* LispLanguage.java (parse): Use new Compilation convenience methods.
+
+2010-06-27  Per Bothner  <per@bothner.com>
+
+	* ReaderXmlElement.java (readContent): Need to reset tokenBufferLength
+	before reading escaped expression.
+
+2010-06-18  Per Bothner  <per@bothner.com>
+
+	* ReadTable.java (hexEscapeAfterBackslash): New field.
+	* LispReader.java (readToken): Possibly handle R6RS inline hex escape.
+
+2010-05-31  Per Bothner  <per@bothner.com>
+
+	Add support for xmlsns="xxx" - i.e. default namespace declarations.
+	* ReaderXmlElement.java (DEFAULT_ELEMENT_NAMESPACE): New constant.
+	(readQNameExpression): Extra parameter forElement, in which case
+	use DEFAULT_ELEMENT_NAMESPACE if there is no prefix.
+	(readElementConstructor): Update calls to readQNameExpression.
+	* ResolveNamespace.java (rewriteForm): If DEFAULT_ELEMENT_NAMESPACE
+	default to EmptyNamespace.
+	* MakeXmlElement.java (rewriteForm): If prefix is empty,
+	declare namespace declaration using DEFAULT_ELEMENT_NAMESPACE.
+
+2010-05-24  Per Bothner  <per@bothner.com>
+
+	* ReaderXmlElement.java: New class, extends ReadTableEntry.
+	Implements XML literals: #<NAME ...>...</>.
+	* MakeXmlElement.java: New Syntax helper class used by the above to
+	handle and declare namespace attributes during the re-write phase.
+	* ResolveNamespace.java: New Syntax helper class to resolve QName
+	literals after namespace declarations are added.
+	* Makefile.am: Update accordingly.
+	* ReaderDispatch.java (create): Map '<' to ReaderXmlElement.
+	* LispReader.java (readToken): Add special handling of '{' and'}'.
+	* ReadTable.java (initialize): Set up above handling.
+	* ReadTableEntry.java (brace): New final field.
+
+	*  ReadTableEntry.java (illegal): New final field.
+	(getIllegalInstance): New method.
+	* ReadTable.java (lookup): If no entry, default to illegal instance.
+	* LispReader.java: Allows minor simplifications.
+	* ReaderParens.java: Likewise.
+	* ReaderTypespec.java: Likewise.
+
+	* LispReader.java (makePair): Change to more precise return type.
+	(setCdr): Change to more lenient cast.
+
+	* LispLanguage.java (parse): If we've seen errors in single-line-mode
+	then skip to end of line.
+
+2010-05-23  Per Bothner  <per@bothner.com>
+
+	* LispReader.java: Change syntax for literal uri in symbols
+	from 'prefix:{uri}local' (incomplete) to 'prefix{uri}:local'.
+	(returnSymbol, handleToken): Remove and merge into readAndHandleToken.
+	(readToken): Remove redundant case-folding.
+	Instead, do it only in readAndHandleToken.
+
+2010-05-19  Per Bothner  <per@bothner.com>
+
+	* DefineNamespace.java: Update Namespace.getInstance -> valueOf.
+	* ReadTable.java (putReaderCtor(String,Type)): New overloaded method.
+
+	* LispReader.java (handlePostfix): Handle extended syntax
+	for a compound symbol: PREFIX:{URI}NAME
+
+	* ReaderDispatchMisc.java (read): Fix broken handling of #,(NAME ...).
+	The symbol NAME is no longer implemented by a String, but by a Symbol.
+
+2010-04-01  Per Bothner  <per@bothner.com>
+
+	* LispLanguage.java (bracket_list_sym, bracket_apply_sym):
+	New constants.
+	* ReaderParens.java (command): New hook for creating an application
+	with a fixed "function".  Future use for square brackets.
+
+2010-04-04  Per Bothner  <per@bothner.com>
+
+	* LangObjType.java (stringType): If java.lang.CharSequence is
+	unavailable, define string as gnu.lists.CharSeq rather than FString.
+	* ReaderString.java (readString): If java.lang.CharSequence is
+	unavailable, return type should be FString, not String.
+	* ReaderDispatchMisc.java: Fixi handling of the case when
+	java.util.regex is unavailable.
+
+2010-02-24  Per Bothner  <per@bothner.com>
+
+	* ReaderString.java (readString): Check poer.getConvertCR() before
+	doing CR-conversion.
+	This fixes Savavvah bug #28926 "EOL conversion in READ".
+
+2010-01-06  Per Bothner  <per@bothner.com>
+
+	Make space be options before and after :: in type specifier.
+	* ReaderColon.java:  New class, extends ReadTableEntry.
+	* Makefile.am: Update accordingly.
+	* ReadTable.java (initialize): Enter ReaderColon.
+	* LispReader.java (readToken): Check for '::'.
+
+2009-11-03  Per Bothner  <per@bothner.com>
+
+	* COPYING: Removed obsolete file.
+
+2009-10-19  Per Bothner  <per@bothner.com>
+
+	* LangObjType.java (getRealType): New method.
+
+2009-10-17  Per Bothner  <per@bothner.com>
+
+	* LangObjType.java (getConstructor): Update to use FVector.make.
+
+2009-09-30  Per Bothner  <per@bothner.com>
+
+	* LispReader.java (parseNumber): Map 2f2 to java.lang.Float etc.
+
+	* LangObjType.java (dflonumType): New static.
+	(DFLONUM_TYPE_CODE): New type code constant.
+	(coerceDFloNum): New method.
+	(coercionOrNullMethod, coerceFromObject, emitConvertFromPrimitive,
+	emitCoerceFromObject): Implement support for numericType.
+
+2009-09-20  Per Bothner  <per@bothner.com>
+
+	* LangObjType.java (numericType): New static.
+	(NUMERIC_TYPE_CODE): New type code constant.
+	(coerceToNumeric): New method.
+	(coercionOrNullMethod, coerceFromObject, emitConvertFromPrimitive,
+	emitCoerceFromObject): Implement support for numericType.
+
+2009-09-19  Per Bothner  <per@bothner.com>
+
+	* LispReader.java (parseNumber): Parse R6RS +nan.0, +inf.0, and -inf.0.
+
+2009-09-15  Per Bothner  <per@bothner.com>
+
+	* LangPrimType.java (byteType, shortType, intType, longType, floatType,
+	doubleType): Semi-depecate - use gnu.bytecode.PrimType objects.
+	(emitCoerceToObject): Remove special-handling for
+	byteType/... - use default PrimType handling.
+	(coerceToObject): Likewise.
+	* LangObjType.java (emitConvertFromPrimitive): New method.
+
+2009-09-11  Per Bothner  <per@bothner.com>
+
+	* LangObjType.java (realType, rationalType): New static objects.
+	(coerceRealNum, coerceRatNum): New methods.
+	* LangObjType.java (getDeclaredMethod): New method.
+
+2009-08-31  Per Bothner  <per@bothner.com>
+
+	* LispReader.java (sharedStructureTable): New field.
+	* ReaderDispatchMisc.java: Add support for #n#= and #n# as in
+	CommonLisp and SRFI-38.
+	* ReaderDispatch.java: Update accordingly.
+
+2009-08-29  Per Bothner  <per@bothner.com>
+
+	Allow ||: as a keyword, as recommended by SRFI-88.
+	* LispReader.java (readToken): Set seenEscapes on a MULTIPLE_ESCAPE.
+	(returnSymbol): Allow zero-length keyword if seenEscapes.
+
+2009-08-10  Per Bothner  <per@bothner.com>
+
+	* LispLanguage.java (getNamedPartLocation): New static, moved from
+	kawa.lang.Translator.
+
+2009-08-05  Per Bothner  <per@bothner.com>
+
+	* LangObjType.java (getMethods): Update for new API.
+
+2009-07-29  Per Bothner  <per@bothner.com>
+
+	* LangObjType.java (getMethods(Filter,int,Vector,String)): Generalize
+	Vector argument to List<Method>, as in superclass.
+
+2009-07-10  Per Bothner  <per@bothner.com>
+
+	* ReaderString.java (readString): Intern the result string.
+	This is an alternative/additional fix for Savannah bug #26993
+	"String literals in syntax-rules don't match".
+
+2009-06-01  Per Bothner  <per@bothner.com>
+
+	* LispReader.java (readCharacter): Fix two bugs so we can
+	read "long" hex character constants, such as #\x10ffff. 
+
+2009-05-30  Per Bothner  <per@bothner.com>
+
+	New support for regex Pattern types and literal syntax.
+	* LangObjType.java (regexType): New static LangObjType, bound to
+	java.util.regex.Pattern.
+	* ReaderString.java (readString): New static method.
+	* LispReader.java (readEscape): Handle backslash-newline also
+	for other whitespace after the backslash.
+	* ReaderDispatchMisc.java (readRegex): New method.
+	(read): On '/' call readRegex.
+	* ReaderDispatch.java (create):  Map '/' to ReaderDispatchMisc.
+
+2009-04-21  Per Bothner  <per@bothner.com>
+
+	* LispReader.java (parseNumber): Translate 'd'/'s'/... exponent
+	marker to the standard 'e' before calling parseDouble.
+
+2009-03-10  Per Bothner  <per@bothner.com>
+
+	* LispReader.java (initialColonIsKeyword, finalColonIsKeyword,
+	setInitialColonIsKeyword, setFinalColonIsKeyword): Move to ...
+	* ReadTable.java: ... here.
+	* LispLanguage.java (getLexer): Revert 03-07 change.
+
+2009-03-08  Per Bothner  <per@bothner.com>
+
+	* ReaderDispatchMisc.java (read): Support SRFI-62 S-expression comments.
+	* ReaderDispatch.java (create): Likewise.
+
+2009-03-07  Per Bothner  <per@bothner.com>
+
+	* LispReader.java (readEscape): Implement R6RS behavior for
+	backslash-whitespace - i.e. skip initial whitespace on next line.
+
+	* LispReader.java (readCharacter): Handle hex escapes.
+
+	* LispReader.java (initialColonIsKeyword, finalColonIsKeyword):
+	Change defaults to false.
+	(setInitialColonIsKeyword,setFinalColonIsKeyword): New methods.
+	* LispLanguage.java (getLexer): Remove method - now in subclasses.
+
+2009-03-01  Per Bothner  <per@bothner.com>
+
+	* LispLanguage.java (getCompilation): Update to pass NameLookup.
+
+2008-11-13  Per Bothner  <per@bothner.com>
+
+	* LangPrimType.java: Update to use Type.byteType instead of
+	semi-deprecated Type.byte_type.
+
+2008-06-08  Per Bothner  <per@bothner.com>
+
+	* LispReader.java (makePair): Remove unused method.
+	(setCdr): Use setCdrBackdoor, since pairs may be PairWithPosition.
+
+2008-06-01  Per Bothner  <per@bothner.com>
+
+	* LangObjType.java (vectorType, stringType, listType): New Type statics.
+	(emitIsInstance): Optimize cases that are a plain Java type.
+
+2007-11-02  Per Bothner  <per@bothner.com>
+
+	* LangObjType.java (integerType): New field, represents the
+	"integer" type, using gnu.math.IntNum, but with conversions.
+	* LangObjType.java (getField, getMethod): New methods.
+	* LangPrimType.java (compare): If other is LangObjType,
+	let it handle the compare.
+
+2007-03-31  Per Bothner  <per@bothner.com>
+
+	* LispReader.java (parseNumber): Don't try to parse quantities.
+	Because unit names are context-dependent, better to parse quantities
+	at name-resolution-time.
+	(lookupUnit): Remove method.
+	(handleToken): Don't check for potentialNumber, since it doesn't
+	recognize quantities.
+
+2007-03-06  Per Bothner  <per@bothner.com>
+
+	* LispReader.java (readSpecial): Handle #!abstract.
+
+2007-02-18  Per Bothner  <per@bothner.com>
+
+	* DefineNamespace.java: Update for symbol representation changing
+	from String to Symbol and strings changing tO CharSequence.
+	* LispReader.java: Likewise.
+	* ReaderDispatch.java: Likewise: Pass Symbol to ReaderQuote.
+	* ReadTable.java: Likewise.
+	(makeSymbol): Change to return SimpleSymbol.
+	* ReaderString.java (read): Change to return String rather
+	than FString, assuming we're using CharSequence.
+	* LispLanguage.java (lookup_sym): Change type to Symbol.
+	* LispReader.java (parseNumber(CharSequence,int)): New method.
+
+	* LispReader.java (validPostfixLookupStart): Allow unquote.
+
+	* LispLanguage.java (checkDefaultBinding): New method.
+	* LangObjType.java (typeClass, typeType, typeClassType): New constants.
+	(compare, emitTestIf, emitCoerceFromObject): Handle new types.
+	(coerceToClassOrNull. coerceToClass, coerceToClassTypeOrNull,
+	coerceToClassType, coerceToTypeOrNull, coerceToType): New statics.
+
+2007-01-02  Per Bothner  <per@bothner.com>
+
+	* LangObjType.java: Extends ObjectType rather than ClassType.
+	(compare, getMethod): New methods.
+
+	* ReadTable.java (getReaderCtor): Generalize from Procedure to Object.
+	* ReaderDispatchMisc.java (read): For "#," allow Type for
+	constructor function.
+
+	* LispReader.java (makePair): Create regular Pair if filename unknown.
+
+2006-12-30  Per Bothner  <per@bothner.com>
+
+	* LangObjType.java: New class.
+	* Makefile.am: Update accordingly.
+
+2006-11-19  Per Bothner  <per@bothner.com>
+
+	* LispReader.java: Update Undefined.undefined -> Special.undefined.
+
+2006-10-26  Per Bothner  <per@bothner.com>
+
+	* XmlNamespace.java: MOved to gnu.kawa.xml.XmlNamespace.
+	* Makefile.am: Update accordingly.
+	* DefineNamespace.java: Likewise.
+
+2006-08-22  Per Bothner  <per@bothner.com>
+
+	* LispLanguage.java (getCompilation): New method.
+	(parse): Remove method - use now-final method in superclass.
+
+2006-06-28  Per Bothner  <per@bothner.com>
+
+	* XmlNamespace.java (prefix): Remove field, since now in parent class.
+	(get) Simplify - can now just use getSymbol.
+	* LispPackage.java (lookup): Update to use new Symbol constructor.
+
+2006-06-27  Per Bothner  <per@bothner.com>
+
+	* LangPrimType.java (getConstructor): New method.
+
+2006-06-16  Per Bothner  <per@bothner.com>
+
+	* XmlNamespace.java: New class, extends Namespace.
+	* Makefile.am: Update accordingly.
+	* DefineNamespace.java (scanForDefinitions): Re-implement makeXML
+	handling to create an XmlNamespace..
+
+	* ClassNamespace.java (getClassType): New method.
+
+2006-06-10  Per Bothner  <per@bothner.com>
+
+	* ClassNamespace.java: New class, extends Namespace.
+	* Makefile.am: Update accordingly.
+	* DefineNamespace.java (scanForDefinitions): Creat a ClassNamespace
+	rather than a plain Namespace if uri starts with "class:".
+
+2006-05-25  Per Bothner  <per@bothner.com>
+
+	Handle module dependencies and cycles.
+	* LispLanguage.java (parse): New method overloading.
+
+2006-05-01  Per Bothner  <per@bothner.com>
+
+	* LispLanguage.java (getLexer): Since all subclasses except BRL and Q2
+	use the standard LispReader, provide an implementation.
+	(makeSymbol): Move method to ReadTable.
+	(handleToken, returnSymbol, readToken): Take and pass a ReadTable
+	parameter.
+	* ReaderDispatchMisc.java: Update readToken call.
+	* ReadTable.java (initialize): New method.
+	(getInitial): Rename to createInitial and use new initialize method.
+	(makeSymbol): New method.
+	* ScmRead.java: Remove pointless sub-class of LispReader.
+	* Makefile.am: Update accordingly.
+
+	* LispReader.java (getReadCase): Make static and non-public.
+
+2006-03-03  Per Bothner  <per@bothner.com>
+
+	* LispReader.java (readNestedComment): On unexpected eof, print
+	the starting rather than ending position.
+
+2006-03-01  Per Bothner  <per@bothner.com>
+
+	* DefineNamespace.java: Use new SetExp.makeDefinition factory method.
+
+2006-02-19  Per Bothner  <per@bothner.com>
+
+	* LangPrimType.java (coerceToObject): Handle "coercing to void".
+
+2006-02-13  Per Bothner  <per@bothner.com>
+
+	* LispLanguage.java (makeApply): Change return type to Expression.
+
+	* LispReader.java (readToken): Don't check postfixMode parameter.
+	(readToken, readValues): Hence remove the postfixMode parameter.
+	* ReaderDispatchMisc.java: Update accordingly.
+	* ReaderParens.java: Likewise.
+
+2006-02-09  Per Bothner  <per@bothner.com>
+
+	* LispLanguage.java (parse): Use new Compilation.pushNewModule method.
+
+2006-02-06  Per Bothner  <per@bothner.com>
+
+	* DefineNamespace.java (scanForDefinitions): A namespace declaration
+	is now essentially an alias declaration, except that if the bound
+	value is a String literal then lookup the corresponding Namespace.
+	* LispLanguage.java (lookup_syn): Update comment.
+	* LispReader.java (readValues): Hack to force initial ':' to be
+	treated as CONSTITUENT.
+
+	* LispLanguage.java (lookup_sym): New static final.
+	* LispReader.java (readValues): Take some extra parameters.
+	If seeing SINGLE_ESCAPE or MULTIPLE_ESCAPE, just defer handling
+	to readToken (which it used to do anyway), instead of duplicating work.
+	(readToken): Take an extra postfixMode parameter.
+	(handlePostfix): Set line+column on resulting $lookup$ form.
+	(readObject): Pass line and column to handlePostfix.
+	(validPostfixLookupStart): Readtable is passed in to look up
+	class of following character - not just a letter.
+	* ReaderParens.java: Pass extra argumenta to modified methods.
+	* ReaderVector.java: Likewise.
+
+2005-12-30  Per Bothner  <per@bothner.com>
+
+	* ReadTable.java (ctorTable): New field.
+	(initCtorTable, putReaderCtor, putReaderCtorFld, getReaderCtor):
+	New methods.
+	* ReaderDispatchMisc.java (read): Implement SRFI-10 for #,(TAG ....).
+
+2005-12-22  Per Bothner  <per@bothner.com>
+
+	* ReaderQuote.java (read): Set line/column numbers on returned list.
+	Especially important for quasiquote and quasisyntax.
+
+	* LispReader.java (makePair): Fix unknown line number to -1,
+	which then gets increment to 1.
+
+2005-12-05  Per Bothner  <per@bothner.com>
+
+	* LispReader.java (readToken): Move ReadTable.getCurrent() out of loop.
+	* LispReader.java (validPostfixLookupStart): New method.
+	Requires following character to be letter, rather than any CONSTITUENT.
+	We may extend it later - but we want to not conflict with existing
+	useful uses of '\\' for SINGLE_ESCAPE.
+	(handlePostfix): Use validPostfixLookupStart
+	(readoken): Check if a character is postfixLookupOperator,
+	and if validPostfixLookupStart then treat it as TERMINATING_MACRO.
+
+2005-12-04  Per Bothner  <per@bothner.com>
+
+	Handle syntax ObjectOpName as sugar for ($lookup$ Object 'Name).
+	* ReadTable.java (postfixLookupOperator): New field.
+	* LispReader.java (handlePostfix): New function.
+	(readObject): Call handlePostfix after readValues.
+	* ReaderParens.java (readList): Call handlePostfix after each car.
+
+	* DefineNamespace.java (makeXML): New option.
+	(define_xml_namespace): New constant field.
+	(scanForDefinitions): Handle makeXML - i.e. "define-xml-namespace",.
+
+2005-10-27  Per Bothner  <per@bothner.com>
+
+	* LispLanguage.java (resolve): New methods.
+	(parse): Modify since some actions have been moved to resolve.
+
+2005-08-03  Per Bothner  <per@bothner.com>
+
+	* DefineNamespace.java (scanForDefinitions): Fix bad error message.
+
+	* LispLanguage.java (makeApply): Return more specific ApplyExp type.
+
+2005-08-03  Chris Dean  <ctdean@sokitomi.com>
+	    Per Bothner  <per@bothner.com>
+
+	* DefineNamespace.java: Implement define-private-namespace.
+	(makePrivate): New field.
+	(define_private_namespace): New static field.
+	(scanForDefinitions): Check makePrivate field.
+
+2005-07-05  Per Bothner  <per@bothner.com>
+
+	* DefineNamespace.java (scanForDefinitions): Set IS_NAMESPACE_PREFIX
+	flag on namespace declaration.
+
+2005-06-03  Per Bothner  <per@bothner.com>
+
+	* LispLanguage.java (declFromField): New method, refines method
+	in Language by checking for Syntax.
+
+2005-05-06  Per Bothner  <per@bothner.com>
+
+	* ReadTable.java (current): Update ThreadLocation constructor call.
+
+2005-04-18  Per Bothner  <per@bothner.com>
+
+	* ReadTable.java (current): Make non-public.
+
+2005-04-03  Per Bothner  <per@bothner.com>
+
+	* package.html: New file, for javadoc.
+
+2005-03-29  Per Bothner  <per@bothner.com>
+
+	* LispLanguage.java (parse): Save/set/restore current Compilation.
+
+2005-03-20  Per Bothner  <per@bothner.com>
+
+	* DefineNamespace.java (define_namespace): New static "instance" field.
+
+2005-03-17  Per Bothner  <per@bothner.com>
+
+	* ReadTable.java (current): Change to fluid.
+	(getCurrent): Rewrite to use current and default to using Language's.
+	(setCurent): New method.
+
+	* LispLanguage.java (defaultReadTable): New field.
+	(createReadTable): New abstract method.
+	* LispReader.java (getReadTable): Remove method.
+	(readValues, readToken):  Use current ReadTable.
+	* ReaderParens.java (readList): Likewise.
+	* ReaderTypespec.java (read): Likewise.
+	* ReaderDispatch.java (getInitial): Rename to create.
+	(read): Fix call to error so we get correct column number.
+	* ReadTable (getInitial): Update ReaderDispatch.getInitial->create.
+	* ScmRead.java (getReadTable): Remove method.
+	(readtable, makeSchemeReadTable): Remove members - handle by
+	new createReadTable method in Scheme.
+
+2005-03-11  Per Bothner  <per@bothner.com>
+
+	* LispLanguage.java (defSntxStFld): Call FieldLocation's setSyntax.
+
+2005-03-07  Per Bothner  <per@bothner.com>
+
+	* DefineNamespace.java: Update Interpreter -> Language.
+	* LangPrimType.java: Likewise.
+
+2005-03-06  Per Bothner  <per@bothner.com>
+
+	* DefineNamespace.java: Moved here from gnu.kawa.xml.
+	The reason is so namespaces can work even when --disable-xml.
+
+2005-01-29  Per Bothner  <per@bothner.com>
+
+	* LispLanguage.java: New class, renamed from ...
+	* LispInterpreter.java: ... removed class.
+	* Makefile.am (java_sources): Update accordingly.
+	* ReadTable.java: Update LispInterpreter -> LispLanguage.
+
+	* LispLanguage.java (langSymbolToSymbol): New staic method.
+	(fromLangSymbol): New protected method.
+	
+2005-01-21  Per Bothner  <per@bothner.com>
+
+	* LispInterpreter.java: Inherit from Language rather than Interpreter.
+
+2004-12-20  Per Bothner  <per@bothner.com>
+
+	* LispInterpreter.java: New method.
+	* LispPackage.kava (lookup): Use new add method.
+
+2004-12-05  Per Bothner  <per@bothner.com>
+
+	* LispInterpreter.java (defSntxStFld): New methods.
+	* LispPackage.java: New class extends Namespace.
+	* Makefile.am: Update accordingly.
+	* LispReader.java: Update for new Location handling.
+
+2004-11-08  Per Bothner  <per@bothner.com>
+
+	* LispInterpreter.java (parse): Update for new scanning api.
+
+2004-10-26  Per Bothner  <per@bothner.com>
+
+	* ScmRead.java (makeSchemeReadTable): New static method.
+	(schemeReadTable): New static field, set using makeSchemeReadTable.
+	(getReadTable): New methods override, returns schemeReadTable.
+
+2004-08-05  Per Bothner  <per@bothner.com>
+
+	* LangPrimType.java:  Now implement TypeValue.
+	(emitTestIf, emitIsInstance):  New methods.
+	(emitIsInstance(CodeAttr)): New method.
+
+2004-07-20  Per Bothner  <per@bothner.com>
+
+	* LispInterpreter.java:  Remove unused import statements.
+	* ReadTable.java:  Likewise.
+	* ReadTableEntry.java:  Likewise.
+	* ReaderDispatchMisc.java:  Likewise.
+	* ReaderParens.java:  Likewise.
+
+2004-06-12  Per Bothner  <per@bothner.com>
+
+	* LispReader.java (readValues):  Fatal on invalid char if interactive.
+
+	* LispReader.java (readCommand):  New method.
+	* LispInterpreter.java (parse):  Use readCommand instead of readObject.
+
+	* ReaderParens (readList):  Use new pushNesting/popNesting methods.
+
+2004-05-09  Per Bothner  <per@bothner.com>
+
+	* ReaderParens.java (readList):  For list as a whole, set line/column
+	to that of the initial paren, not the first car.
+
+2004-05-04  Per Bothner  <per@bothner.com>
+
+	* LispReader.java (readSimpleVector): Allow zero-length
+	uniform/simple vectors.
+
+	* LispReader.java (isPotentialNumber):  Minor cleanup.
+
+2004-04-20  Per Bothner  <per@bothner.com>
+
+	* LispReader.java (isPotentialNumber):  Allow initial '_' for symbols.
+
+2004-02-13  Per Bothner  <per@bothner.com>
+
+	* LispInterpreter.java (makeApply):  New method - used by Translator.
+
+2004-02-12  Per Bothner  <per@bothner.com>
+
+	* ReadTable.java (lookup):  Unknown characters are "constituent".
+
+2003-12-20  Per Bothner  <per@bothner.com>
+
+	* LispInterpreter.java (quote_sym, unquote_sym, unquotesplicing_sym,
+	quasiquote_sym):  Move constants here from gnu.expr.Interpreter.
+	* ReadTable.java (getInitial):  Update accordingly.
+
+2003-11-08  Per Bothner  <per@bothner.com>
+
+	* LispInterpreter.java (parse):  Update to take a Lexer rather than
+	an InPort.
+
+2003-11-02  Per Bothner  <per@bothner.com>
+
+	* LispInterpreter.java (parse, parseFile):  Combined to single
+	'parse' method.
+
+2003-10-19  Per Bothner  <per@bothner.com>
+
+	* LispInterpreter.java (parse, parseFile):  Pass this to Translator.
+
+2003-10-02  Per Bothner  <per@bothner.com>
+
+	* LangPrimType.java (byteType, shortType, intType, longType, floatType,
+	doubleType, charType, voidType):  Make final.
+	* ReaderDispatchMisc.java:  Use Boolean FALSE/TRUE directly instead
+	of via Interpreter falseObject/trueObject field.
+	* LispReader.java:  Likewise use Undefined.undefined directly.
+
+2003-09-04  Per Bothner  <per@bothner.com>
+
+	* LispReader.java (parseNumber):  Handle multi-unit products.
+
+2003-08-23  Per Bothner  <per@bothner.com>
+
+	* LispReader.java (parseNumber):  Fix bug reported by Aubrey Jaffer.
+
+2003-08-20  Per Bothner  <per@bothner.com>
+
+	* LispReader.java (parseNumber):  Unit.mul has been renamed to times.
+
+	* LispReader.java (isPotentialNumber):  New method.
+	(checkNumber):  Inlined in handleToken and removed.
+	(parseNumber):  New extra 'exactness' parameter.
+	Return error strings on all errors.
+	Fix handling of #i-1/0 with new numeratorNegative variable.
+	(handleToken):  Use isPotentialNumber to distinguish symbols
+	from malformed numbers, and emit error in latter case.
+
+2003-08-14  Per Bothner  <per@bothner.com>
+
+	* LispReader.java (parseNumber):  Move duplicated code to ...
+	(valueOf):  New method for parsing integer strings.
+	Fix logic for testing fits-in-long to account for radix.
+
+2003-04-05  Per Bothner  <per@bothner.com>
+
+	* LangPrimType.java (compare):  Fix thinko.
+	Fixes bug reported by Vladimir Tsichevski <wowa1@online.ru>.
+
+	* LispReader.java (readToken):  Allow "illegal" character if escaped.
+
+2003-02-23  Per Bothner  <per@bothner.com>
+
+	* ScmRead.java (scmReadTable):  Remove static field.
+	(getReadTable):  Remove method
+	* ReadTable.java (defaultBracketMode):  Move earlier, so it's set
+	before call to getInitial.
+
+2002-11-05  Per Bothner  <per@bothner.com>
+
+	* LispInterpreter.java (parseFile): Take and use new 'immediate'
+	parameter.
+
+2002-07-24  Per Bothner  <per@bothner.com>
+
+	* LispInterpreter.java (makeModuleExp):  Moved from Scheme.java.
+	(parse, parseFile):  Update to new Interpreter API.
+
+2002-06-05  Per Bothner  <per@bothner.com>
+
+	* LangPrimType.java (emitCoerceToObject):  Combine similar code.
+
+2002-03-02  Per Bothner  <per@bothner.com>
+
+	* LispInterpreter.java (parseFile):  Now throws IOException and
+	SyntaxException.
+
+2002-02-13  Per Bothner  <per@bothner.com>
+
+	* LispReader.java:  Make non-abstract.
+
+2002-01-23  Per Bothner  <per@bothner.com>
+
+	* LispInterpreter.java (makeBody):  New method.
+
+	* ReaderParens.java (readList):  Use Lexer's new eofError method.
+
+	* ScmRead.java:  Remove some unused import declarations.
+
+2002-01-13  Per Bothner  <per@bothner.com>
+
+	* LispReader.java (readSpecial):  Skip Unix script header #!/PROGRAM.
+
+2001-11-24  Per Bothner  <per@bothner.com>
+
+	* ReadTable.java (setBracketMode):  New methods.
+	(defaultBracketMode):  New static field
+	(<init>):  Use new method.
+
+2001-11-24  Bruce Lewis  <brlewis@users.sourceforge.net>
+
+	* ReaderTypespec.java:	New class, extends ReadTableEntry
+	* Makefile.am (java_sources):  Added ReaderTypespec.java
+
+2001-11-24  Per Bothner  <per@bothner.com>
+	
+	* ScmRead.scm (<init>):  Revert change of 11-19.
+
+2001-11-18  Per Bothner  <per@bothner.com>
+
+	* LispReader.scm (initialColonIsKeyword, finalColonIsKeyword):  New.
+	(returnSymbol):  Use new flags.
+	* ScmRead.scm (<init>):  Set initialColonIsKeyword to false.
+	
+2001-11-14  Per Bothner  <per@bothner.com>
+
+	* LangPrimType.java (compare):  Boolean is less specific than
+	other types.
+
+2001-10-19  Per Bothner  <per@bothner.com>
+
+	* ReaderDispatchMacro.java (read):  Since apply3 now throws Throwable,
+	we must catch it.
+	* ReaderMacro.java (read)  Likewise, for apply2 call.
+
+2001-09-21  Per Bothner  <per@bothner.com>
+
+	* LangPrimType.java (compare):  Any type can be converted to
+	boolean and vice versa, so return 0.
+
+2001-08-23  Per Bothner  <per@bothner.com>
+
+	* LangPrimType.java (implementationType):  New field.
+	(<init>):  Set implementationType.
+	(getImplementationType):  New method.
+
+2001-08-16  Per Bothner  <per@bothner.com>
+
+	Handle Guile-style keyword syntax '#:KEYWORD'.
+	* ReaderDispatchMisc.java (read):  On ':', read a keyword.
+	* ReaderDispatch.java (getInitial):  Register ':' dispatch syntax.
+
+2001-07-18  Per Bothner  <per@bothner.com>
+
+	* LispInterpreter.java:  If --applet was specified on command line,
+	note that supertype was specified,
+
+2001-07-17  Per Bothner  <per@bothner.com>
+
+	* LispInterpreter.java:  New class, extends Interpreter.
+	* Makefile.am (java_sourceses):  Added LispInterpreter.java.
+
+2001-06-17  Per Bothner  <per@bothner.com>
+
+	* ReaderParens.java (readList):  Fix handling of bad syntax.
+
+2001-06-05  Per Bothner  <per@bothner.com>
+
+	* ReaderParens.java (readList):  After seeing '.' that starts a token,
+	set ch to '.'.  Fixes bug report of Thomas Kirk <tk@research.att.com>.
+
+2001-06-03  Per Bothner  <per@bothner.com>
+
+	* ReaderDispatch.java (read):  Better error message.
+
+2001-05-16  Per Bothner  <per@bothner.com>
+
+	* LangPrimType.java (compare):  New method, handles <boolean>.
+	Fixes bug reported 05-11 by Allan Erskine <a.erskine@cs.ucl.ac.uk>.
+
+	* LangPrimType.java:  New class, renamed from kawa.lang.SpecialType.
+	* Makefile.am (java_sources):  Update accordingly.
+
+2001-05-09  Per Bothner  <per@bothner.com>
+
+	* LispReader.java (readValues):  Add missing read().
+
+2001-04-26  Per Bothner  <per@bothner.com>
+
+	* ReaderParens.java (readList):  Re-order tests so that the case
+	that there is no closing delimiter (ch==-1).  Fixes Scheme.eval.
+
+	* LispReader.java (makePair):  Don't used to-be-removed
+	PairWithPosition constructor; use static make method instead.
+
+2001-04-24  Per Bothner  <per@bothner.com>
+
+	* LispReader.java (parseNumber):  Use new Convert.parseDouble.
+
+2001-04-23  Per Bothner  <per@bothner.com>
+
+	* LispReader.java (parseNumber):  Set decimal_point correct.
+	If no digits before decimal_point adjust digits_start to include point.
+
+	* LispReader.java (makeSymbol):  New method.
+	(returnSymbol):  Call makeSymbol.
+
+	* LispReader.java (makeNil, makePair, setCdr):  Add implementations.
+	* ScmRead.java (makeNil, makePair, setCdr):  Remove implementations.
+
+	* LispReader.java (isDelimiter):  Remove - not used.
+	* ScmRead.java (numError):  Likewise.
+
+	* ReaderDispatch.java (kind):  New field.
+	(getKind):  Return kind instead of hardwired value.
+	Change constructors to set kind.
+	* ReaderMacro.java:  New class, extends ReaderMisc.
+	* ReaderDispatchMacro.java:  New class, extends ReaderMisc.
+	* Makefile.am:  Update for new classes.
+
+2001-04-22  Per Bothner  <per@bothner.com>
+
+	* LispReader.java:  Complete re-write, having the reader be
+	table-driven in the manner of Common Lisp readtables.
+	* ScmRead.java:  Likewise.
+	* ReadTable.java:  New class, extends gnu.kawa.util.RangeTable.
+	* ReadTableEntry.java:  New class.
+	* ReaderDispatch.java:  New class, extends ReadTableEntry.
+	* ReaderDispatchMisc.java:  New class, extends ReadTableEntry.
+	* ReaderIgnoreRestOfLine.java:  New class, extends ReadTableEntry.
+	* ReaderMisc.java:  New class, extends ReadTableEntry.
+	* ReaderParens.java:  New class, extends ReadTableEntry.
+	* ReaderQuote.java:  New class, extends ReadTableEntry.
+	* ReaderString.java:  New class, extends ReadTableEntry.
+	* ReaderVector.java:  New class, extends ReadTableEntry.
+	* Makefile.am:  Update for new classes.
+	* COPYING:  New file.
+
+2001-03-08  Per Bothner  <per@bothner.com>
+
+	* ScmRead.java:  Various fixes to use new gnu.lists package,
+	and name change UniformVector -> SimpleVector.
+
+2000-06-17  Per Bothner  <per@bothner.com>
+
+	* ScmRead.java (readString):  Avoid some code duplication.
+	Fix so line number get updated correctly on line-continuation escape.
+
+2000-06-10  Per Bothner  <per@bothner.com>
+
+	* ScmRead.java (lookupUnit):  New method.
+	(readNumber):  If units are literal Units, handle * and ^ now.
+
+2000-06-09  Per Bothner  <per@bothner.com>
+
+	* ScmRead.java (readSymbol):  Intern Keyword names.
+	(readNumber):  Handle '^' and '*' in units.
+
+2000-05-28  Per Bothner  <per@bothner.com>
+
+	New package.
+	* LispReader.java:  Moved from gnu.text.
+	* ScmReader.java:  Moved from kawa.lang.

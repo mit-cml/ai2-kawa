@@ -1,0 +1,1285 @@
+2010-06-30  Per Bothner  <per@bothner.com>
+
+	* FilterConsumer.java: Change to implement XConsumer.
+	(writeComment, writeCDATA, writeProcessingInstruction,
+	beginEntity, endEntity): New methods.
+	(before): New empty method to provide override hook.
+
+	* FilterConsumer.java: (append(CharSequence,int,int),
+	append(CharSequence)):  Re-implement to call write method.
+
+2010-06-21  Per Bothner  <per@bothner.com>
+
+	* ByteVector.java: New abstract class, extends SimpleVector.
+	* S8Vector.java: Change to extend ByteVector.
+	* U8Vector.java: Likewise.
+	* Makefile.am: Update accordingly.
+
+2010-06-18  Per Bothner  <per@bothner.com>
+
+	* TreeList.java (nextMatching, nextDataIndex): Add missing
+	FLOAT_FOLLOWS cases.
+
+2009-11-19  Per Bothner  <per@bothner.com>
+
+	* StableVector.java (adjustPositions, removePosRange): Fix thinkos.
+	(checkInvariants): New commented-out test method.
+
+2009-10-17  Per Bothner  <per@bothner.com>
+
+	* FVector.java (make): New helper method.
+
+2009-08-06  Per Bothner  <per@bothner.com>
+
+	Fix for Savannah bug #27188 "Sequence printing".
+	* SubSequence.java (startPos, endPos): New methods.
+
+	* SubSequence.java (subSequencePos): New optimized method.
+	* AbstractSequence.java (subList): Use subSequencePos.
+
+2009-05-12  Per Bothner  <per@bothner.com>
+
+	* UnescapedData.java: Make UnescapedData implement CharSequence.
+
+2009-03-13  Per Bothner  <per@bothner.com>
+
+	* FString.java:  Optimize by copying data field to local before loops.
+	* FVector.java:  Likewise.
+
+2009-03-07  Per Bothner  <per@bothner.com>
+
+	* Strings.java (printQuoted): Also use R6RS escapes \a, \b, \v, and \f.
+
+2008-11-10  Per Bothner  <per@bothner.com>
+
+	* SimpleVector.java (resizeShift): New internal method.
+	* GapVector.java (gapReserve(int,int)): Optimize so we don't
+	copy twice when doing gapReserve(int) followed by shiftGap.
+	* StableVector.java: Similar optimization.
+
+	* CharBuffer.java (indexOf): Fix thinko.
+
+2008-10-29  Per Bothner  <per@bothner.com>
+
+	* SeqPosition.java (toString): Also write nextIndex().
+
+2008-06-08  Per Bothner  <per@bothner.com>
+
+	* ImmutablePair.java: New class, extends Pair.
+	(setCar, setCdr): Throw exception.
+	* Makefile.am: Update accordingly.
+	* PairWithPosition.java: New extends ImmutableList.
+	* Pair.java (car, cdr): Make protected.
+	(setCdrBackdoor): New method.
+
+2008-06-03  Per Bothner  <per@bothner.com>
+
+	* Pair.java (car, cdr): Make non-public.
+	(getCar, getCdr, setCar, setCdr): New public accessor methods.
+
+2008-03-23  Per Bothner  <per@bothner.com>
+
+	* EofClass.java (eofValue): Fix type of literal.  This fixes
+	code-generator to #!eof.
+	Fixes Savannah bug #22703 "Wrong type inferred for #!eof".
+
+2007-12-30  Per Bothner  <per@bothner.com>
+
+	* FString.java (append(CharSequence,int,int)): Optimize.
+
+	* CharBuffer.java (indexOf, lastIndexOf, substring): New methods.
+
+2007-02-18  Per Bothner  <per@bothner.com>
+
+	* FString.java (<init>(CharSeq)): Change implementation.
+	(<init>(CharSequence), <init>CharSequence,int,int)): New methods.
+	(addAll(CharSequence)): New method.
+	(addAllString): Generalize to CharSequence and String.
+	* Strings.java (printQuoted): Change non-use:CharSequence type.
+
+2007-01-20  Per Bothner  <per@bothner.com>
+
+	* TreeList.java (writeComment, writeProcessingInstruction):
+	New overloaded methods.
+
+2007-01-17  Per Bothner  <per@bothner.com>
+
+	* TreeList.java (beginEntity, endEntity): Ignore if not at top level.
+	(stringValue): Fix END_ENTITY handling.
+	(nextNodeIndex, nextDataIndex): Handle END_ENTITY.
+
+2007-01-02  Per Bothner  <per@bothner.com>
+
+	* AbstractFormat.java (writeObject): Leave file path null.
+
+2006-12-14  Per Bothner  <per@bothner.com>
+
+	* TreeList.java (nextDataIndex): Handle BEGIN_ENTITY.
+
+2006-12-06  Per Bothner  <per@bothner.com>
+
+	* Consumer.java (beginDocument): Renamed to startDocument.
+	(beginGroup): Renamed to startElement.
+	(endGroup): Renamed to endElement.
+	(beginAttribute): Renamed to startAttribute.
+	* TreeList.java (BEGIN_GROUP_SHORT): Renamed to BEGIN_ELEMENT_SHORT.
+	(BEGIN_GROUP_SHORT_INDEX_MAX): Renamed to BEGIN_ELEMENT_SHORT_INDEX_MAX.
+	(END_GROUP_SHORT): Renamed to END_ELEMENT_SHORT.
+	(BEGIN_GROUP_LONG): Renamed to BEGIN_ELEMENT_LONG.
+	(END_GROUP_LONG): Renamed to END_ELEMENT_LONG.
+	* Sequence.java (GROUP_VALUE): Renamed to ELEMENT_VALUE.
+	* FilterConsumer.java: Update accordingly.
+	* AbstractFormat.java: Likewise.
+	* LList.java: Likewise.
+	* PrintConsumer.java: Likewise.
+	* FVector.java: Likewise.
+	* AbstractSequence.java: Likewise.
+
+	* ElementPredicate.java: Renamed to ItemPredicate.
+	* GroupPredicate.java: Renamed to ElementPredicate.
+	* Makefile.am: Update accordingly.
+	* NodePredicate.java: Likewise.
+	* TreeList.java: Likewise.
+	* AbstractSequence.java: Likewise.
+
+2006-11-25  Per Bothner  <per@bothner.com>
+
+	* AbstractSdequence.java (unsupportedException): New static method.
+	(unsupported): Use it.
+
+2006-11-22  Per Bothner  <per@bothner.com>
+
+	Partially revert changes from 11-17 and 11-18.
+	However, we've renamed writeChar and writeChars to write,
+	* Consumer.java (append*3): Only define in JAVA5 case.
+	(write): New/renamed methods.
+	* FilterConsumer.java: Rename Consumer methods append->write.
+	* PrintConsumer.java: Likewise.
+	* TreeList.java: Likewise.
+	* FString.java: Update accordingly.
+	* AbstractFormat.java: Likewise.
+	* LList.java: Likewise.
+
+2006-11-18  Per Bothner  <per@bothner.com>
+
+	* Consumer.java (writeChars): Remove method.
+	* PrintConsumer.java (writeChars): Likewise.
+	* TreeList.java (writeChars): Likewise.
+	* FilterConsumer.java (writeChars): Likewise.
+	(append(CharSequence)): Just call the general case.
+	* AbstractFormat.java: Update writeChars -> append.
+	* LList.java: Likewise.
+
+
+	* Consumer.java (append): Make append methods conditional on
+	CharSequence (which is Java4), rather than JAVA5.
+	Add fallback case that takes a String.
+	* FilterConsumer.java: Always implement some append method.
+	* FString.java: If JAVA5, implement Appendable.
+	(ensureBufferLength): New method.
+	(append): Implement methods.
+	* PrintConsumer.java: Implement append methods.
+	* TreeList.java: Implement append methods.
+	* AbstractSequence.java: Remove append methods.
+
+2006-11-17  Per Bothner  <per@bothner.com>
+
+	* Consumer.java (append): Make unconditional, rather than JAVA5-only.
+	(writeChar): Remove, replaced by append.
+	* PrintConsumer.java: Also rename writeChar to append, but return void.
+	* AbstractFormat.java: Update writeChar -> append.
+	* AbstractSequence.java: Likewise.
+	* FilterConsumer.java: Likewise.
+	* LLIst.java: Likewise.
+	* TreeList.java: Likewise.
+	(CHAR_PAIR_FOLLOWS): Remove code - doesn't really work.
+	Use a surrugate pair instead.
+
+2006-11-15  Per Bothner  <per@bothner.com>
+
+	* TreeList.java (dump): Check for out-of-range object index.
+
+2006-11-14  Per Bothner  <per@bothner.com>
+
+	* TreeList.java (writeJoiner): Make public.
+
+	* TreeList.java (dump): Write identityHashCode in hex.
+
+2006-11-13  Per Bothner  <per@bothner.com>
+
+	* PairWithPosition.java: Implement SourceLocation.
+	(position): Change interpretation.
+
+	* PrintConsumer.java (endNumber): New method, to be overridden.
+	(writeFloat, writeDouble, writeInt, writeLong): Call endNumber.
+
+2006-11-09  Per Bothner  <per@bothner.com>
+
+	* Consumer.java (beginGroup, endGroup): Remove typeName parameter.
+	(beginAttribute): Remove attrName parameter.
+	* PrintConsumer.java: Update for Consumer changes
+	* TreeList.java: Likewise.
+	(find(Object,Object)): Removed.
+	*getNextTypeName): Since we don't store group/attribute String names
+	any more, change to just do toString of getNextTypeObject.
+	(getNextTypeIndex): Now just inline in getNextTypeObject.
+	* AbstractFormat.java: Update for Consumer changes
+	* LList.java: Likewise.
+	* FVector.java: Likewise.
+	* NamedChildrenFilter.java: Likewise.
+	* FilterConsumer.java: Likewise.
+	(attributeName): Remove no-longer-needed field.
+
+2006-11-05  Per Bothner  <per@bothner.com>
+
+	* TreeList.java (MAX_CHAR_SHORT): Make public.
+	(stringValue):  New method.
+
+2006-10-26  Per Bothner  <per@bothner.com>
+
+	* TreeList.java (setGroupName): Now also works when the gruupIndex
+	is a BEGIN_GROUP_LONG, as it is when called from NodeTree.
+	(BEGIN_ATTRIBUTE_LONG_SIZE, END_ATTRIBUTE_SIZE): New fields.
+
+2006-10-24  Per Bothner  <per@bothner.com>
+
+	* TreeList.java (currentParent): Initial value should be -1,
+	(BEGIN_ENTITY, BEGIN_DOCUMEMT): Clarify parent_offset semantics.
+	(beginEntity, endEntity, beginDocument, endDocument, parentOrEntityI):
+	Fix accordingly.
+	(endDocument, endEntity): Add sanity checks.
+	(posToDataIndex): Fix ipos/index confusion and lack of updating.
+	(dump): Print raw parent offset for BEGIN_DOCUMENT/BEGIN_ENTITY.
+
+2006-10-22  Per Bothner  <per@bothner.com>
+
+	* XConsumer.java (writeBaseUri): Remove method.
+	(beginEntity, endEntity): New methods.
+	* TreeList.java (BASE_URI): Removed constant.
+	(BEGIN_ENTITY, BEGIN_ENTITY_SIZE, END_ENITY): New constants.
+	(BEGIN_DOCUMENT): Now also includes parent_offset operand.
+	(beginDocument): Also store parent offset.
+	(writeBaseUri): Removed method.
+	(beginEntity, endEntity): New methods.
+	(parentOrEntityPos, parentOrEntityI, getNextKindI): New methods.
+	(parentPos): Use new methods.
+	* AbstractSequence.java (baseUriOfPos): Remove method.
+
+2006-09-28  Per Bothner  <per@bothner.com>
+
+	* TreeList.java (DOCUMENT_URI): New constant.
+	(writeDocumentUri): New method.
+	(documentUriOfPos): New method.
+	(gotoChildrenStart, consumeIRange, toString, getNextKind, stringValue,
+	nextNodeIndex, nextMatching, baseUriOfPos, dump): Handle DOCUMENT_URI.
+
+	* TreeList.java (dump, baseUriOfPos): Fix bugs in handling of
+	PROCESSING_INSTRUCTION.
+
+2006-09-26  Per Bothner  <per@bothner.com>
+
+	* TreeList.java (clear): Also reset oindex field.
+
+	* TreeList.java (dump): Print hash code in hex.
+
+	* TreeList.java (dump): Normally suppress printing follow-on words.
+
+	* TreeList.java (setGroupName, setAttributeName): New methods
+
+2006-09-14  Per Bothner  <per@bothner.com>
+
+	* TreeList.java (getAttributeCount): New method.
+
+	* TreeList.java (nextMatching): Allow -1 for 'limit'.
+
+	* AbstractSequence.java (firstChildPos(int,ElementPredicate)): New.
+
+2006-09-11  Per Bothner  <per@bothner.com>
+
+	* TreeList.java: Remove unused local variables.
+
+2006-09-06  Per Bothner  <per@bothner.com>
+
+	* SimpleVector.java (remove): Remove unused local 'result'.
+	* TreeList.java (nextMatching): Removed unused locals 'j' and checkAll.
+
+2006-06-16  Per Bothner  <per@bothner.com>
+	
+	* Consumer.java (endAttribute): Note we allow unmatched endAttribute,
+	to indicate end of a parameter in a function parameter list.
+	* TreeList.java (endAttribute): Handle unmatched endAttribute.
+
+	* TreeList.java (writeObject): No special handling of SeqPosition.
+	It is not needed, and is wrong if given a JEmacs marker.
+
+2006-06-12  Per Bothner  <per@bothner.com>
+
+	* LList.java (get): Throw IndexOutOfBoundsException rather than
+	ArrayIndexOutOfBoundsException since we're not an array.
+
+	* Sequence.java (set): Declare new method.
+
+2006-06-04  Per Bothner  <per@bothner.com>
+
+	* TreeList.java (JOINER): New constant.
+	(writeJoiner): New method.
+	(writeChars, write): Call writeJoiner if no characters.
+	(gotoChildrenStart): Skip bogus/pointless initial JOINER.
+	(stringValue): Add spaces between atomic items.
+	(nextNodeIndex, nextMatching): Skip JOINER.
+	(nextDataIndex, dump): Handle JOINER.
+
+2006-04-13  Per Bothner  <per@bothner.com>
+
+	* TreeList.java (beginGroup):  Fix error in "popping" currentParent.
+
+	* TreeList.java (dump): New debug helper method.
+
+2006-03-15  Per Bothner  <per@bothner.com>
+
+	* FilterConsumer.java (beforeContent): New sub-class hook.
+	Call it before the various writeXxx methods.
+	(inAttribute, attributeName, attributeType): New convience
+	fields for sub-class use.
+
+	* TreeList.java (getNextTypeIndex): Take extra parameter to indicate
+	if we want type-name or type-object.  This is needed to make it work
+	for processing-instructions, whihc only have one objects array entry.	
+
+2005-12-30  Per Bothner  <per@bothner.com>
+
+	* Strings.java (printQuoted): Allow any CharSequence, not just
+	CharSeq, if java.lang.CharSequence is available - e.g. JDK 1.4 or later.
+
+2005-12-18  Per Bothner  <per@bothner.com>
+
+	* GapVector.java: Add protected no-arg constructor, for serialization.
+	* StableVector.java: Likewise.
+	* CharBuffer.java: Likewise.  Also implement java.io.Serializable.
+
+	* StableVector.java (remove): Fix buggy position adjustment.
+
+	* CharBuffer.java (dump): Suppress printing unused positions.
+
+2005-12-11  Per Bothner  <per@bothner.com>
+
+	* GapVector.java (getSegment): New method, based on old getChars
+	method in gnu.jemacs.swing.BufferContent.
+	(removePosRange): Fix thinko in calculating where to shiftGap.
+	* StableVector.java (chainFreelist): Fix two thinkos.
+	(removePosRange): We have to unchainFreelist before we can
+	loop over the positions.
+	* CharBuffer.java (toString): Use new getSegment method.
+	(dump): Moved from gnu.jemacs.swing.BufferContent.
+
+2005-12-05  Per Bothner  <per@bothner.com>
+
+	* AbstractFormat.java (beginGroup): Emit a space after the typename.
+	(beginAttribute): Don't need an initial space.
+
+2005-12-03  Per Bothner  <per@bothner.com>
+
+	* AbstractSequence.java (consumePosRange): Add missing nextPos call.
+	Ooops.
+	* GeneralArray1.java (createPos, nextPos): Need to define these,
+	since the ones in AbstractSequence are mutually dependent, and it
+	matters since GeneralArray1 but not GeneralArray implements Sequence.
+	(consumePosRange): Optimization.
+
+2005-11-29  Per Bothner  <per@bothner.com>
+
+	* LList.java (consX): New method.
+
+2005-11-14  thomas kirk  <tk@research.att.com>
+
+	* AbstractFormat.java (format): Close OutPort.
+
+2005-11-03  Per Bothner  <per@bothner.com>
+
+	* AbstractFormat.java (beginAttribute, endAttribute): New methods.
+
+2005-08-16  Per Bothner  <per@bothner.com>
+
+	* PositionConsumer.java (consume) Change return type to void.
+	(writePosition): Likewise.
+	* TreeList.java (consume, writePosition): Update accordingly.
+
+2005-07-21  Per Bothner  <per@bothner.com>
+
+	* AbstractFormat.java (writeBoolean): Use target's writeBoolean.
+
+2005-06-15  Per Bothner  <per@bothner.com>
+
+	* SeqPosition.java (nextElement): Remove redundant throws specifier.
+
+2005-06-04  Per Bothner  <per@bothner.com>
+
+	* AbstractFormat.java: Moved from gnu.kawa.util.
+	* Makefile.am: Update accordingly.
+
+	* FormatToConsumer.java: Remove interface.  Use AbstractFormat instead.
+	* Makefile.am: Update accordingly.
+
+	* Consumer.java: If JAVA5 is defined, extend Appendable.
+	(append): Add 3 methods, if JAVA5 is defined,
+	* String.java: Remove now-redundant implements of Appendable.
+	* FilterConsumer.java (append): Add 3 methods, if JAVA5 is defined,
+
+2005-04-18  Per Bothner  <per@bothner.com>
+
+	* CharSeq.java:	Use use:java.lang.CharSequence conditional instead
+	of JAVA5, where appropriate.  Make it the default.
+	* FString.java: Likewise.
+	* CharBuffer.java: Likewise.
+	* SubCharSeq.java: Likewise.
+	(subCharSeq): New provate helper method - not needed if JAVA 5.
+
+2005-04-03  Per Bothner  <per@bothner.com>
+
+	* AbstractSequence.java: Fix two javadoc typos.
+
+2005-03-17  Per Bothner  <per@bothner.com>
+
+	* LList.java (checkNonList): New static helper function.
+	(consume, toString): Use checkNonList.
+	Fixes Savannah bug #12216.
+
+2005-01-07  Per Bothner  <per@bothner.com>
+
+	* CharSeq.java: #ifdef JAVA5 also extend CharSequence.
+	(writeTo): If Java 5, output is Appendable, not Writer.
+	* SubCharSeq.java: New class extends SubSequence implements CharSeq.
+	* Makefile.am: Update accordingly.
+	* AbstractSequence.java (append): New Java5 methods.
+	* CharBuffer.java (subSequence, writeTo): New Java 5 methods.
+	* FString.java: #ifdfe JAVA5, implement Appendable.
+	(subSequence, append, writeTo): New Java 5 methods.
+	* PrintConsumer.java: #ifdef JAVA5, implement Appendable.
+	(append): New Jav5 methods.
+	* TreeList.java (append): Make methods return more specific TreeList.
+
+	* LList.java: Partially de-tabify.
+	* SimpleVector.java: Likewise.
+	* SubSequence.java (get): Check index in range.
+
+2005-01-02  Per Bothner  <per@bothner.com>
+
+	* AbstractSequence.java, Convert.java, EofClass.java, F32Vector.java,
+	F64Vector.java, FString.java, FVector.java, LList.java, Pair.java,
+	S16Vector.java, S32Vector.java, S64Vector.java, S8Vector.java,
+	SeqPosition.java, Sequence.java, SimpleVector.java, TreeList.java,
+	U16Vector.java, U32Vector.java, U64Vector.java, U8Vector.java:
+	Change "select" (preprocessor) syntax.
+
+2004-11-06  Per Bothner  <per@bothner.com>
+
+	* LList.java (compareTo):  Move comment, so it doesn't get
+	removed by select-java1.
+	* TreeList.java:  If JAVA5 is selected, implement Appendable.
+
+2004-08-31  Per Bothner  <per@bothner.com>
+
+	* AbstractSequence.java (getIterator(int)): New overloaded method.
+	(getIterator(), listIterator): Define in terms of new method.
+	* LList.java (getIterator(int)): New method replaces getIterator().
+
+	* ExtPosition.java (finalize): Rename to release.
+	Just use the inherited finalize.
+	* TreePosition.java (clear): Rename to release.
+	(set): Change to use clear.
+	(finalize): Remove as being redundant.
+
+	* LListPosition.java (set): Clear xpos if we're not setting it.
+	(set):  New overloaded method, to override inherited method.
+	(gotoPrevious):  Add cast to pick specific method.
+
+	* LListPosition.java (hasPrevious): New method.
+
+	* LListPosition.java (getNextPair): Take cdr of result.
+
+	* LListPosition.java (getNextPair): Take cdr of result.
+
+	* PositionManager.java (getPositionObject, register, release):
+	Add synchronization.
+
+	* SeqPosition.java (previous): Use getPrevious method.
+
+2004-08-04  Christian Surlykke <christian@surlykke.dk>
+
+	* GapVector.java: (GapVector) Initialization of gapStart and gapEnd.
+
+2004-08-19  Per Bothner  <per@bothner.com>
+
+	* GapVector.java (gapReserve):  Use setSize to change base.size,
+	rather than setBufferLength, which doesn't update size.
+	(size, hasNext, fill, gapReserve, nextIndex):  Use base.size
+	rather than getBufferLength for performance and consistency.
+
+2004-08-08  Chris Dean  <ctdean@sokitomi.com>
+
+	* FString.java (addAllStrings):  Only grow the internal buffer.
+
+2004-07-20  Per Bothner  <per@bothner.com>
+
+	* LList.java:  Remove useless import statements.
+	* Sequence.java:  Likewise.
+
+2004-05-29  Per Bothner  <per@bothner.com>
+
+	* TreeList.java (nextDataIndex):  Fix thinko.
+
+2004-05-20  Per Bothner  <per@bothner.com>
+
+	* TreeList.java (PROCESSING_INSTRUCTION):  Make protected.
+
+	* Sequence.java (CDATA_VALUE):  New constant.
+	* TreeList.java (getNextKind):  Return CDATA_VALUE if CDATA_SECTION.
+
+	* AbstractSequence.java (getIteratorAtPos):  Add a copyPos.
+	* TreeList.java (consumeIRange):  Use getIteratorAtPos.
+	(toString):  Likewise.
+
+	* TreeList.java (toString):  Print separator.
+
+2004-05-18  Per Bothner  <per@bothner.com>
+
+	* TreeList.java (statistics):  New methods.
+
+2004-05-05  Per Bothner  <per@bothner.com>
+
+	* XConsumer.java (writeCDATA):  New method.
+	* TreeList.java (CDATA_SECTION):  New constant.
+	(writeCData):  New method.
+	(consumeIRange, toString, getNextKind, stringValue, nextNodeIndex,
+	nextMatching, nextDataIndex, dump):  Handle CDATA_SECTION.
+
+2004-05-04  Per Bothner  <per@bothner.com>
+
+	* SimpleVector.java (compareToInt, compareToLong):  New helper methods.
+	* F32Vector.java:  Implement Comparable, if JAVA2..
+	(compareTo):  New method.
+	* F64Vector.java:  Likewise.
+	* FVector.java:  Likewise.
+	* U64Vector.java:  Likewise.
+	* S8Vector.java:  Likewise - using compareToInt.
+	* S16Vector.java:  Likewise.
+	* S32Vector.java:  Likewise.
+	* U8Vector.java:  Likewise.
+	* U16Vector.java:  Likewise.
+	* S64Vector.java:  Likewise - using compareToLong.
+	* U32Vector.java:  Likewise.
+	
+	* LList.java:  Implement Comparable, if JAVA2.
+	(compareTo):  New method.
+	* Pair.java (compareTo):  Two new methods.
+
+2004-04-22  Per Bothner  <per@bothner.com>
+
+	* FString.java:  Implement Comparable, if JAVA2.
+	(compareTo):  New method.
+
+2004-04-18  Per Bothner  <per@bothner.com>
+
+	* XConsumer.java (XConsumer):  New interface, extends Consumer.
+	* Makefile.am:  Update accordingly.
+	* Sequence.java (COMMENT_VALUE, PROCESSING_INSTRUCTION_VALUE):  New
+	constants.
+	* TreeList.java:  Implement XConsumer.
+	(COMMENT, PROCESSING_INSTRUCTION):  New contants.
+	(writeComment,  writeProcessingInstruction):  New methods.
+	(consumeIRange, toString, getNextKind, stringValue, nextNodeIndex,
+	nextMatching, nextDataIndex, dump):  Handle new node kinds.
+
+2004-01-27  Rafael Jesus Alcantara Perez <rafa@dedaloingenieros.com>
+
+	* Pair.java (lastPair):  Fix thinko.
+
+2004-01-12  Per Bothner  <per@bothner.com>
+
+	* TreeList.java (parentPos):  The begin-offset is just one word.
+	Fixes bug reported 2003-11-29 by sascha_opletal@web.de.
+
+2004-01-04  Per Bothner  <per@bothner.com>
+
+	* AbstractSequence.java (getIteratorAtPos):  New method.
+	* TreeList.java (getPosNext):  Use getIteratorAtPos method, which
+	is overridden by NodeTree to return a KNode.
+	* TreeList.java (BEGIN_ATTRIBUTE_LONG, BEGIN_DOCUMENT, END_DOCUMENT,
+	END_GROUP_SHORT, END_GROUP_LONG):  Make protected.
+
+2003-11-16  Per Bothner  <per@bothner.com>
+
+	* Pair.java (readResolve):  New method.
+	* PairWithPosition.java (<init>):  New default constructor.
+
+2003-11-09  Chris Dean  <Chris.Dean@sokitomi.com>
+
+	* FString.java (addAll): New method to add an FString directly.
+	* FString.java (addAllStrings): New method to add an array of
+	FStrings. 
+
+2003-11-09  Per Bothner  <per@bothner.com>
+
+	* SeqPosition.java (toString):  Rename to toInfo, and add new toString.
+
+2003-11-03  Per Bothner  <per@bothner.com>
+
+	* UnescapedData.java:  New longer implement Consumable.
+	(consume):  Remove method.
+
+2003-10-07  Per Bothner  <per@bothner.com>
+
+	* AbstractSequence.java (equals):  If either operand is non-List
+	or non-Sequence, just compare using identity.
+
+2003-10-02  Per Bothner  <per@bothner.com>
+
+	* Sequence.java:  Move class EofClass to separate file.
+	* Makefile.am:  Update accordingly.
+	* EofClass.java:  Make class public.
+	(eofValue):  New public field.
+	* Sequence.java (eofValue):  Make same as EofClass.eofValue.
+
+2003-09-30  Per Bothner  <per@bothner.com>
+
+	* TreeList.java (INT_FOLLOWS):  Make public - used by CallContext.
+
+	* TreeList.java (getPosNextInt):  New method.
+
+2003-09-24  Per Bothner  <per@bothner.com>
+
+	* TreeList.java (copyToList):  Revert use of gnu.xml.NodeTree.
+
+2003-09-23  Per Bothner  <per@bothner.com>
+
+	* LList.java (makeList):  Generalize parameter to java.util.List,
+	but only if JAVA2.
+	* FVector.java (<init>)(Sequence)):  Likewise.
+
+2003-09-14  Per Bothner  <per@bothner.com>
+
+	* AbstractSequence.java (nextMatching):  New method.
+	* TreeList.java (newMatching):  New method, based on nextMatchingChild.
+	(nextMatchingChild):  Remove.
+
+2003-09-09  Per Bothner  <per@bothner.com>
+
+	* AbstractSequence.java (nextIndex):  Use getIndexDifference.
+	* TreeList.java (getIndexDifference):  New method.
+
+2003-09-04  Per Bothner  <per@bothner.com>
+
+	* TreeList.java (dump):  Print attribute type as well as name.
+
+2003-08-02  Per Bothner  <per@bothner.com>
+
+	* AbstractSequence.java (firstAttributePos):  New method.
+	* TreeList.java (firstAttributePos):  New method.
+
+	* AttributePredicate.java (isInstance):  Remove xpos parameter.
+
+	* TreeList.java (createPos):  Just call createRelativePos.
+	(createRelativePos):  Fix some corner cases.
+
+	* TreeList.java (posToDataIndex):  Fix some corner cases.
+
+	* TreeList.java (copyToList):  New method.
+	This is a kludge, since it creates a gnu.xml.NodeTree.
+	(getPosNext):  Use use copyToList when copying to new TreeList.
+
+	* TreeList.java (compare):  Simplify and fix using posToDataIndex.
+
+2003-07-26  Per Bothner  <per@bothner.com>
+
+	* TreeList.java (POSITION_PAIR_FOLLOWS):  Make protected.
+
+	* TreeList.java (dump):  Also print identityHashCode.
+
+2003-07-23  Per Bothner  <per@bothner.com>
+
+	* AbstractSequence.java (stableCompare):  New method.
+	(compare):  New static 4-argument method.
+
+2003-07-10  Per Bothner  <per@bothner.com>
+
+	* AbstractSequence.java (consumeNext):  Hopefully more efficient.
+
+	* TreeList.java (dump):  Write out class name.
+
+2003-05-09  Per Bothner  <per@bothner.com>
+
+	* AbstractSequence.java.in, Convert.java.in, SeqPosition.java.in,
+	Sequence.java.in, SimpleVector.java.in:  Renamed to ...
+	* AbstractSequence.java, Convert.java, SeqPosition.java, Sequence.java,
+	SimpleVector.java:  New files, using new JAVA1/JAVA2 framework.
+	* Makefile.am:  Updated accordingly.
+	Various cleanups followed.
+
+	* LList.java (class LListPostion):  Moved to ...
+	* LListPosition.java:  .. new file, as it is also used by Pair.java.
+
+2003-05-03  Per Bothner  <per@bothner.com>
+
+	* AbstractSequence.java.in (addAll):  Fix typo in non-collections case.
+
+2003-04-08  Per Bothner  <per@bothner.com>
+
+	* Sequence.java.in (EofClass): New non-public class.
+	(eofValue):  Use EofClass instance.
+
+2003-04-05  Per Bothner  <per@bothner.com>
+
+	* GeneralArray.java (toString):  Two new methods.
+
+2003-03-13  Per Bothner  <per@bothner.com>
+
+	* TreeList.java (consumeIRange):  Fix typo in BASE_URI handling.
+
+2003-03-02  Per Bothner  <per@bothner.com>
+
+	* AbstractSequence.java.in (getPosPrevious):  Make public.
+	* SubSequence.java (getPosPrevious):  Likewise.
+	* TreeList.java (getPosPrevious):  Likewise.
+
+2003-02-19  Per Bothner  <per@bothner.com>
+
+	* TreeList.java (oindex):  Field moved here from ValuesStack.
+	(availOject):  Removed field
+	(find(Object), find(Object,Object)):  Methods moved here
+	from ValuesStack.  This fixes quadratic behavior, at the cost of
+	not sharing duplicate indexes.
+
+2003-02-13  Per Bothner  <per@bothner.com>
+
+	* AbstractSequence.java.in (parentPos, baseUriOfPos):  New methods.
+	* TreeList.java (BASE_URI):  New constant.
+	(writeBaseUri):  New method, to add base-uri property.
+	(baseUriOfPos):  New method.
+	(gotoChildrenStart):  Skip BASE_URI for documents and groups.
+	(consumeIRange, dump):  Handle BASE_URI.
+	(toString, stringValue, nextNodeIndex, nextMatchingChild):
+	Skip BASE_URI.
+	(parentPos):  New method.
+
+	* TreeList.java (curerntBeginGroup):  Re-named to currentParent.
+	(beginDocument, endDocument):  Set and clear currentParent.
+
+2003-01-05  Per Bothner  <per@bothner.com>
+
+	Replace position triples (including xpos), with positions pairs,
+	using just an 'int' "Pos" cookie to identify a position.
+	* PositionContainer.java:  Remove no-longer-useful interface.
+	* AbstractSequence.java.in (fillPosRange):  New method.
+	(fill):  Re-write to use nextPos+setPosPrevious.
+	(elements, iterator):  Use getIterator and make final.
+	(getIterator):  Default implementation uses startPos.
+	(indexOf, removeAll, retailAll, toArray, hashCode):  Re-implement using
+	startPos+nextPos+getPosPrevious.
+	(contains):  Re-implement to just call indexOf.
+	(containsAll):  Fix bug.
+	(listIterator):  Use new SeqPosition constructor.
+	(add, releasePosition, copyPosition, gotoNext, gotoPrevious):
+	Remove methods taking a PositionContainer.
+	(addPos):  New method.
+	(removePos):  Renamed from remove.  Remove xpos parameter.  Update.
+	(removePosRange):  Renamed from remove.  Remove xpos parameters.
+	(isAfter):  Rename to isAfterPos.  Remove xpos parameter.
+	(getNext):  Renamed to getPosNext.  Remove xpos parameter.
+	(getPrevious):  Renamed to getPosPrevious.  Remove xpos parameter.
+	(subSequence):  Renamed to subSequencePos.  Remove xpos parameter.
+	(setNext):  Renamed to setPosNext.  Remove xpos parameter.
+	(setPrevious):  Renamed to setPosPrevious.  Remove xpos parameter.
+	(consume):  Renamed to consumePosRange.  Remove xpos parameters.
+	(getIndexDifference, nextIndex, getContainingSequenceSize, hasNext,
+	fromEndIndex, getNextKind, getNextTypeName, getNextTypeObject, equals,
+	compare, hasPrevious, consumeNext):  Remove xpos parameter.
+	(remove(int)): Re-implement using createPos+getNext+removePos.
+	(remove(Object)):  Likewise.
+	(clear):  Re-implement using removePos.
+	(createPos):  New abstract method.
+	(makePosition, createPosition, makeRelativePosition,
+	makeStartPosition, makeEndPosition):  Remove methods.
+	(createRelativePos, startPos, endPos, releasePos, copyPos, nextPos,
+	previousPos, firstChildPos):  New methods.
+	(subList):  Re-implement using createPos.
+	(toString(String,StringBuffer)):  New helper method.
+	* SeqPosition.java.in:  No longer implement PositionContainer.
+	(getPositionInt, getPositionPtr, setPosition, setSequence,
+	countPositions):  Remove PositionContainer methods.
+	(xpos):  Remove field.
+	(toString):  Don't print xpos.
+	(hasNext, getNextKind, getNextTypeName, getNextTypeObject, hasPrevious,
+	getNext, nextIndex, fromEndIndex, getContainingSequenceSize, isAfter,
+	previousIndex, remove, add, init, release):  Don't pass xpos to
+	corresponding sequence method.
+	(<init>(AbstractSequence,int,boolean)):  Re-implement using createPos.
+	(<init>(AbstractSequence,int,Object)):  Remove xpos parameter.
+	(make):  Likewise.
+	(copy):  New method.
+	(gotoStart):  Re-implement using setPos and startPos.
+	(gotoEnd):  Re-implement using setPos and endPos.
+	(gotoChildrenStart):  New method.
+	(hasMoreElements):  Use hasNext and make final.
+	(gotoNext):  Make non-final.  Use nextPos.
+	(gotoPrevious):  New method.
+	(next):  Use getNext and gotNext  methods in this class, not sequence.
+	(previous):  Use getPosPrevious and new gotoPrevious method.
+	(nextElement):  Make final, define in terms of next.
+	(nextIndex):  Make non-final.
+	(getNext, getPrevious)   Use renamed getPosNext, getPosPrevious.
+	(init, release):  Update for renamed releasePos, copyPos.
+	(setNext, setPrevious):  New methods.
+	(set)  Use them.
+	(setPos, setPos):  New methods.
+	(init):  Renamed to set.
+	(getPos):  New method.
+	(various):  Use getPos instead of accessing ipos directly.
+	* SimpleVector.java.in (createPosition):  Rename to createPos.
+	(isAfter):  Rename to isAfterPos.  Remove xpos parameter.
+	(getNext):  Rename to getPosNext.  Remove xpos parameter.
+	(remove):  Rename to consumePosRange.  Remove xpos parameters.
+	(consume):  Rename to getPosNext.  Remove xpos parameter.
+	(nextIndex, consumeNext, getNextKind):  Remove xpos parameter.
+	(nextPos):  New method.
+	(add):  Remove methods taking a PositionContainer.
+	(addPos):  New method.
+	* U8Vector.java, U16Vector.java, U32Vector.java, U64Vector.java,
+	S8Vector.java, S16Vector.java, S32Vector.java, S64Vector.java,
+	F32Vector.java, F64Vector.java, FString.java, FVector.java, 
+	BitVector.java (consumeNext):  Remove xpos parameter.
+	(remove):  Rename to consumePosRange.  Remove xpos parameters.
+	* FVector.java (consumePosRange):  New method.
+	* GapVector.java (add):  Remove methods taking a PositionContainer.
+	(addPos):  New method.
+	(nextIndex, nextIndex, getNextKind):  Remove xpos parameter.
+	(remove):  Rename to consumePosRange.  Remove xpos parameters.
+	(clear):  Remove - use inherited method.
+	(createPosition):  Rename to createPos.
+	(consume):  Renamed to consumePosRange.  Rmeove xpos parammeters.
+	(fill):  Replaced by fillPosRange.
+	* StableVector.java (createPosition):  Rename to createPos.
+	(startPos, endPos, nextPos. copyPos, addPos):  New methods.
+	(makeStartPosition, makeEndPosition, gotoNext, copyPosition, add):
+	Removed methods.
+	(isAfter):  Rename to isAfterPos.
+	(hasNext, nextIndex):  Remove xpos parameter.
+	(releasePosition):  Renamed to releasePos.  Remove xpos parameter.
+	(remove):  Renamed to removePosRange.  Rmeove xpos parammeters.
+	(consume):  Renamed to consumePosRange.  Rmeove xpos parammeters.
+	(fillPosRange):  New method.
+	* CharBuffer.java (delete):  Use createPos+removePos.
+	* GeneralArray.java (createPos):  New method.
+	* SubSequence.java:  No longer implement PositionContainer.
+	(xpos0, xpos1):  Remove fields.
+	(<init>):  New constructor.
+	Update various methods.
+	* PositionManager.java:  New class.
+	* ExtPosition.java:  New class, extends SeqPosition.
+	* ExtSequence:  New abatract class; extends AbstacrtSequence.
+	* ElementPredicate.java (isInstance):  Renamed to isInstancePos,
+	remove xpos parameter.
+	* GroupPredicate.java:  Remove xpos parameter.
+	* LList.java:  new inherit from ExtSequence.
+	(getIterator, createPos, createRelativePos):  New methods.
+	(various):  Other updates; some logic moved to LListPosition.
+	(makePosition):  Removed PositionContainer method.
+	(class LListPosition):  New, inherits from ExtPosition.
+	* Pair.java (hasNext, nextPos, getPosNext, getPosPrevious, lastPair,
+	getPosPrevious, lastPaur):  New methods.
+	* TreeList.java (consumeRange):  Rebane to consumeIRange.
+	Fix bug in INT_FOLLOWS/FLOAT_FOLLOWS/LONG_FOLLOWS/DOUBLE_FOLLOWS cases.
+	(consumePosRange):  New method.
+	(POSITION_TRIPLE_FOLLOWS):  Renamed to POSITION_PAIR_FOLLOWS.
+	(posToDataIndex, firstChildPos, toSrring, compare, hashCode):
+	New methods.
+	(various):  Update various methods.
+	* PositionConsumer.java (consume):  Take SeqPosition, not TreePosition.
+	(wrotePosition):  Remove xpos parameter.
+	* TreePosition.java (xpos):  "New" field, now private and here.
+	(xstack):  Removed.
+	Remove PosutionContainer methods.
+	Various updates.
+	* TreePositionList.java:  Removed, since it was unused.
+	* Makefile.am:  Update accordingly.
+	* package.html:  Update for new world.
+	
+2003-01-06  Per Bothner  <per@bothner.com>
+
+	* AbstractSequence.java.in (isEmpty):  Fix obvious thinko.
+
+2003-01-05  Per Bothner  <per@bothner.com>
+
+	* LList.java (toString): New method.
+
+2002-09-21  Per Bothner  <per@bothner.com>
+
+	* TreeList.java (getIntN):  Mask with 0xFFFF, in case low word is < 0.
+	(getLongN):  Likewise, and force shifts to be long.
+
+2002-07-24  Per Bothner  <per@bothner.com>
+
+	* LList.java (getPrevious, setPrevious):  New methods.
+
+2002-06-10  Per Bothner  <per@bothner.com>
+
+	* Array.java (isEmpty, getRowMajor, getLowBound, getSize, transpose):
+	New methods.
+	* GeneralArray.java:  Extend AbstractSequence.
+	Generalize to arbitrary lower bound.
+	(makeSimple, get, getRowMajor, getLowBound, getSize, transpose):
+	New methods.
+	* Sequence.java.in:  Don't implement Array.
+	* SimpleVector.java.in:  Do implement Array.
+	(getRowMajor, transpose):  New methods.
+	* AbstractSequence.java.in (getLowBound(int), getSize(int)):  New.
+	* GeneralArray1.java:  New class, extends GeneralArray and Sequence.
+	* Makefile.am: (java_sources):  Update accordingly. 
+
+	* FVector.java (<init>):  Don't set initial value if it is null.
+
+2002-05-06  Per Bothner  <per@bothner.com>
+
+	* TreeList.java (find(Object), find (Object,Object)):  Make public.
+
+	* TreePosition.java (depth):  New field.
+	(set, getRoot, push, popNoRelease, getAncestor, dump):  Use depth.
+
+2002-04-18  Per Bothner  <per@bothner.com>
+
+	* AbstractSequence.java.in (createPosition):  New semi-abstract method.
+	(makePosition):  New default implementation uses createPosition.
+	* GapVector.java (makePosition):  Remove - just use inherited default.
+	(createPosition):  New method.
+	* SimpleVector.java.in (makePosition):  Likewise remove.
+	(createPosition):  New method.
+	* StableVector.java (makePosition):  Likewise remove.
+	* TreePositionList.java (makePosition):  Likewise remove.
+	(createPosition):  New method.
+	* TreePosition.java (<init>):  Just call super constructor.
+	* TreeList.java (makePosition):  Likewise remove.
+	(createPosition):  New method.
+
+	* TreeList.java (stringValue):  Use nextNodeIndex.
+
+2002-04-06  Per Bothner  <per@bothner.com>
+
+	* NodePredicate.java:  New class, extends ElementPredicate.
+	* GroupPredicate.java:  Change to extend NodePredicate.
+	* AttributePredicate.java:  New class, extends NodePredicate.
+	* Makefile.am (java_sources);  Add new classes.
+	* TreeList.java (nextMatchingChild):  Generalize to take en
+	ElementPredicate instead of a GroupPredicate.
+
+	* TreeList.java (nextNodeIndex):  New method.
+	(consumeNext):  Call  nextNodeIndex.
+
+	* TreeList.java (hasNext):  Return false also for END_DOCUMENT.
+
+	* AbstractSequence.java.in (hasNext):  Make public.
+	* GapVector.java (hasNext):  Likewise.
+	* LList.java (hasNext):  Likewise.
+	* StableVector.java (hasNext):  Likewise.
+
+2002-03-19  Per Bothner  <per@bothner.com>
+
+	* AbstractSequence.java.in (remove):  Make public.
+	* SimpleVector.java.in (remove):  Make public.
+	* StableVector.java (makePosition):  Make public.
+
+2002-02-16  Per Bothner  <per@bothner.com>
+
+	* UnescapedData.java:  Implement Consumable..
+	(consume):  New method.
+
+2002-02-05  Per Bothner  <per@bothner.com>
+
+	* TreeList.java (getNextTypeIndex):  Fix bad BEGIN_GROUP_LONG handling.
+
+	* TreeList.java (nextMatchingChild):  New method.
+
+	* ElementPredicate.java:  New interface.
+	* GroupPredicate.java:  New interface, extends ElementPredicate.java.
+	* Makefile.am (java_sources):  Update accordingly.
+
+2002-02-01  Per Bothner  <per@bothner.com>
+
+	* PrintConsumer.java (writeInt):  Add missing startNumber call.
+
+2002-01-23  Per Bothner  <per@bothner.com>
+
+	* ConsumerWriter.java:  Extends Writer.
+	* PrintConsumer.java:  New class, extends PrintWriter.
+	* Makefile.am (java_sources):  Add new classes.
+
+2002-01-21  Per Bothner  <per@bothner.com>
+
+	* UnescapedData.java:  New class.
+	* Makefile.am (java_sources):  Add UnescapedData.java.
+
+2002-01-07  Per Bothner  <per@bothner.com>
+
+	* Consumer.java (beginDocument, endDocument):  New methods.
+	* FilterConsumer.java (beginDocument, endDocument):  New methods.
+	* TreeList.java (END_DOCUMENT):  New code.
+	(BEGIN_DOCUMENT):  Now followed by pointer to END_DOCUMENT.
+	(various methods):  update as appropriate.
+
+	* FilterConsumer.java (skipping):  New boolean field.
+	(Consumer methods):  Do nothing if skipping is true.
+	* VoidConsumer.java:  New extends FilterConsumer.
+	(Consumer methods):  Remove - use inherited versions.
+
+2001-12-29  Per Bothner  <per@bothner.com>
+
+	* TreeList.java (consumeRange):  Fix indexing bug for BEGIN_GROUP_LONG.
+
+	* TreeList.java (stringValue):  Fix indexing bugs.
+	Support POSITION_TRIPLE_FOLLOWS.
+
+2001-12-24  Per Bothner  <per@bothner.com>
+
+	* TreeList.java (get):  Add working implementation.
+
+	* FString.java (getChars):  New method.
+
+2001-11-24  Per Bothner  <per@bothner.com>
+
+	* TreeList.java (writeObject):  Special-case SeqPosition.
+	* SeqPosition.java.in (<init>):  New constructor.
+	(toString):  Handle null sequence.
+
+	* FString.java (getChars):  New method, writes to StringBuffer.
+
+2001-11-18  Per Bothner  <per@bothner.com>
+
+	* TreeList.java (dump):  Better output for POSITION_TRIPLE_FOLLOWS.
+
+2001-11-12  Per Bothner  <per@bothner.com>
+
+	* TreeList.java (dump):  Print group and attribute type objects.
+
+2001-11-06  Per Bothner  <per@bothner.com>
+
+	* TreeList.java (stringValue):  Make attributes and long groups work.
+
+2001-10-25  Per Bothner  <per@bothner.com>
+
+	* AbstractSequence.java.in (getNextKind, getNextTypeName,
+	getNextTypeObject, gotoNext, gotoChildrenStart):  Make public.
+	* GapVector.java, LList.java, SimpleVector.java.in,  StableVector.java,
+	SubSequence.java, TreeList.java:  Update accordingly.
+
+2001-10-17  Per Bothner  <per@bothner.com>
+
+	* Sequence.java.in (ATTRIBUTE_VALUE):  New constant.
+	* TreeList.java (getNextKind, getNext):  Handle BEGIN_ATTRIBUTE_LONG.
+	(attrStart):  New field.
+	(beginAttribute, endAttribute):  Use it to correctly set end pointer.
+	(gotoAttributesStart, gotoAttributesStart):  New methods.
+	(nextDataIndex):  Return index *after* END_ATTRIBUTE.
+
+2001-10-05  Per Bothner  <per@bothner.com>
+
+	* CharSequence.java:  Renamed to CharSeq.java to avoid conflict with
+	similar interface java.lang.CharSequence in JDK 1.4beta.
+	* CharSeq.java:  New interface renamed fro CharSequence.
+	(toString):  Added new method - matching JDK 1.4 CharSequence.
+	* CharBuffer.java (toString):  New method.
+	* CharBuffer.java, FString.java, Strings.java, Makefile.am:
+	Update for CharSequence -> CharSeq renaming.
+
+2001-08-15  Per Bothner  <per@bothner.com>
+
+	* Sequence.java.in (DOCUMENT_VALUE):  New constant.
+
+	* AbstractSequence.java.in (toArray):  Removed debugging catch.
+
+	* SeqPosition.java.in (make):  New static method
+	* TreeList.java (consumeRange):  On POSITION_TRIPLE_FOLLOWS
+	create new SeqPostion, not TreePosition.
+	(getNext):  Likewise.
+
+	* TreePosition.java (stringValue):  New methods.
+
+	* TreeList.java (nextDataIndex):  Fix off-by-one error.
+
+	* SeqPosition.java.in (toString):  New method
+
+	* TreeList.java (BEGIN_DOCUMENT):  New constant.
+	(beginDocument, endDocument):  New methods.
+	(consumeRange, getNextKind, getNextTypeObject, nextDataIndex,
+	dump):  Handle BEGIN_DOCUMENT.
+
+	* TreeList.java (size):  Re-write to use nextDataIndex rather
+	than less efficient and broken consumeRange.
+	(gotoChildrenStart(int)):  New overloaded method.
+	(consumeRange):  Remove maxSteps parameter.
+	(consumeNext):  Use nextDataIndex.
+	(getNextKind, getNextTypeObject):  Make public.
+
+2001-07-15  Per Bothner  <per@bothner.com>
+
+	* Consumer.java:  Replace endAttributes by endAttribute.
+	* VoidConsumer.java:  Likewise.
+	* FilterConsumer.java:  Likewise.
+	* TreeList.java (END_ATTRIBUTES):  Removed constant.
+	(END_ATTRIBUTE):  New constant.
+	(beginGroup):  No longer emit END_ATTRIBUTES word.
+	(beginAttribute):  Write END_ATTRIBUTE word.
+	(endAttributes):  Removed.
+	(endAttribute):  New method.
+	(consumeRange, gotoChildrenStart, hasNext, getNextKind, getNext,
+	nextDataIndex, dump):  Update accordingly.
+	* FVector.java:  Remove endAttributes call.
+
+	* PositionConsumer.java (writePosition):  New method.
+	* TreeList.java: Implement PositionConsumer.
+	(consume, writePosition):  New methods.
+	(POSITION_REF_FOLLOWS, POSITION_TRIPLE_FOLLOWS):  New constants.
+	(consumeRange, getNextKind, getNext, nextDataIndex, dump):
+	Support new constants.
+
+	* TreeList.java (<init>):  New constructors.
+	(isEmpty):  New method.
+	(consumeRange):  Fix logic checking maxSteps.
+	(getNext):  Handle BEGIN_GROUP_SHORT/_LONG using copy constructor.
+	* TreePositionList.java (added):  New helper method,.
+	(consume):  Replace old logic by new 'added' method..
+	(writePosition):  New method.
+	(expand):  New helper method.
+
+	* AbstractSequence.java.in (toArray):  Change 0-argument version
+	to use correct implementation rather than using 1-argument version.
+	* AbstractSequence.java.in (consume)  Likewise.
+	* LList.java (consume):  Likewise.
+
+	* FormatToConsumer.java (beginGroup, endGroup):  New methods.
+
+2001-06-17  Per Bothner  <per@bothner.com>	
+
+	Various improvements to documentation comments.
+	* package.html:  Additional text.
+
+2001-06-03  Per Bothner  <per@bothner.com>
+
+	* CharSequence.java (consume(int,int,Consumer)):  New method.
+	* CharBuffer.java (consume):  Implement.
+	* SimpleVector.java.in (consume):  Likewise.
+
+	* SimpleVector.java.in (get, intAt, longAt, set):
+	Fix off-by-one errors: > should be >=.
+
+	* SimpleVector.java.in (getNext):  New method.
+
+	* AbstractSequence.java.in (consumeNext):  New method.
+	(consume):  Fix to use nextElement.
+	* U8Vector.java, F32Vector.java, F64Vector.java, U8Vector.java,
+	S16Vector.java, S32Vector.java, S64Vector.java, S8Vector.java,
+	U16Vector.java, U32Vector.java, U64Vector.java, U8Vector.java,
+	FString.java, SimpleVector.java.in (consumeNext):  New methods.
+	* TreeList.java (consumeStep):  Replaced by new consumeNext method.
+
+	* U16Vector.java, U8Vector.java (consume):  Mask off value.
+
+	* FString.java (consume):  Just do plain write.
+
+	* FormatToConsumer.java:  New interface.
+	* Makefile.am (java_sources):  Add FormatToConsumer.java.
+
+	* LList.java (print):  Remove unused method.
+	(consume):  Re-write to generate more robust output.
+
+2001-05-16  Per Bothner  <per@bothner.com>
+
+	* TreeList.java (getNext):  Better error for default unsupported case.
+
+2001-05-09  Per Bothner  <per@bothner.com>
+
+	* Makefile.am (install-data-am):  Removed bogus dependency.
+
+	* TreeList.java (data, hasNext):  Make public.
+	(getNext):  New method.
+
+	* PairWithPosition.java (<init>):  Remove constructor taking a
+	LineBufferedReader to remove dependency on gnu.text.
+
+2001-04-24  Per Bothner  <per@bothner.com>
+
+	* Convert.java:  Moved to ...
+	* Convert.java.in:  New file.
+	(parseDouble):  New static convenience method.
+	* Makefile.am:  Update to generate Convert.java from Convert.java.in.
+
+2001-04-22  Per Bothner  <per@bothner.com>
+
+	* Convert.java (booleanToObject, objectToBoolean):  New methods.
+	(toObject, toBoolean):  New static methods.
+
+	* BitVector.java:  New class, extends SimpleVector.
+	* Makefile.am:  Update accordingly.
+
+2001-04-10  Per Bothner  <per@bothner.com>
+
+	* TreePosition.java (copy constructor):  Positions are numbered
+	with the most recent (a leaf) as 0.
+
+	* TreePosition.java (gotoParent):  Handle null sequence.
+
+2001-04-09  Per Bothner  <per@bothner.com>
+
+	* Sequence.java.in (isEmpty):  New method.
+	(EOF_VALUE, INT_U8_VALUE, INT_S8_VALUE, INT_U16_VALUE, INT_S16_VALUE,
+	INT_U32_VALUE, INT_S32_VALUE, INT_U64_VALUE, INT_S64_VALUE,
+	FLOAT_VALUE, DOUBLE_VALUE, BOOLEAN_VALUE, TEXT_BYTE_VALUE, CHAR_VALUE,
+	OBJECT_VALUE, GROUP_VALUE):  New constants.
+	* AbstractSequence.java.in (getNextKind, getNextTypeName,
+	getNextTypeObject):  New methods.
+	* SeqPosition.java.in (getNextKind, getNextTypeName,
+	getNextTypeObject):  New methods.
+	* SimpleVector.java.in (getNextKind, getElementKind):  New methods.
+	* GapVector.java (getNextKind): New method.
+	* FString.java, F32Vector.java, F64Vector.java, S16Vector.java,
+	S32Vector.java, S64Vector.java, S8Vector.java, U16Vector.java,
+	U32Vector.java, U64Vector.java, U8Vector.java (getElementKind):
+	New method.
+
+	* SubSequence.java (getNext, getPrevious):  Fix thinko.
+	(getNextKind):  New method.
+	* TreeList.java (endGroup, consumeRange):  Fix thinkos.
+	(makePosition, gotoChildrenStart, getNextKind, getNextTypeIndex,
+	getNextTypeName, getNextTypeObject, makeRelativePosition,
+	nextDataIndex):  New methods.
+
+	* TreePosition.java: Implement Cloneable.
+	(TreePosition(TreePosition)):  New copy constructor.
+	(clone, set):  New method.
+	(push):  Handle case of depth == -1.
+	(clear):  Improve.
+
+	* FilterConsumer.java:  New class, implements Consumer.
+	* PositionConsumer.java:  New interface.
+	* TreePositionList.java:  New class.
+	* Makefile.am:  Add new classes.
+
+2001-04-04  Per Bothner  <per@bothner.com>
+
+	* VoidConsumer.java:  New class, implements Consumer.
+	* Makefile.am (java_sources):  Add VoidConsumer.java.
+
+2001-04-02  Per Bothner  <per@bothner.com>
+
+	* TreeList.java:  Make it extend AbstractSequence.
+	Made various fields public for convenience that probably shouldn't be.
+	(clear, size, makePosition, get, hasNext):  New method.
+	(ensureSpace):  Set data to new array.  Oops.
+	(beginGroup, beginAttribute):  New versions that just take an index.
+
+2001-03-23  Per Bothner  <per@bothner.com>
+
+	* Makefile.am:  The automake Java support does not handle "built"
+	Java sources, so roll our own.
+
+2001-03-08  Per Bothner  <per@bothner.com>
+
+	New package.
+	Many of the classes are based on ones that used to be in gnu.kawa.util.

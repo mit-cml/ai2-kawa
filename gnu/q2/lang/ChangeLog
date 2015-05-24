@@ -1,0 +1,88 @@
+2010-10-21  Per Bothner  <per@bothner.com>
+
+	* Q2.java (compareIndentation): New static method.
+	* Q2Apply.java (apply): Handle Type or Class as construction function.
+	* Q2Read.java: Re-write indentation logic.
+	(curIndentation): New field.
+	(readIndentCommand): New method.
+	(readCommand): Change to call skipIndentation then readIndentCommand.
+
+2010-06-21  Per Bothner  <per@bothner.com>
+
+	* Q2Read.java (readCommand): Now need to use backdoor to set
+	immutable cdr when constructing list.
+
+2009-03-10  Per Bothner  <per@bothner.com>
+
+	* Q2Read.java (init): Clearing initialColonIsKeyword is no
+	longer needed.
+	* Q2.java (createReadTable): Do setFinalColonIsKeyword() here.
+
+2006-11-13  Per Bothner  <per@bothner.com>
+
+	* Q2Read.java: Update getColumn -> getColumnNumber.
+
+2006-05-01  Per Bothner  <per@bothner.com>
+
+	* Q2.java (createReadTable): Update getInitial -> createInitial.
+
+2006-02-13  Per Bothner  <per@bothner.com>
+
+	* Q2.java (makeApply): Change return type to Expression.
+
+2005-08-03  Per Bothner  <per@bothner.com>
+
+	* Q2.java (makeApply): Fix return type to match super class.
+
+2005-05-18  Per Bothner  <per@bothner.com>
+
+	* Q2.java (<init>): Don't set current Environment from this.
+
+2005-04-03  Per Bothner  <per@bothner.com>
+
+	* package.html: New file, for javadoc.
+	* Q2.java: Add javadoc comment.
+
+2005-03-17  Per Bothner  <per@bothner.com>
+
+	* Q2.java (createReadTable): New method.
+	* Q2Read.java (getReadTable): Remove method.
+	(q2ReadTable): Remove field.
+
+2005-02-24  Per Bothner  <per@bothner.com>
+
+	* Q2.java (registerEnvironment): Use new setDefaults method.
+
+2004-12-22  Per Bothner  <per@bothner.com>
+
+	* Q2Read.java: Update import for moved MakeAttribute.
+
+2004-08-03  Per Bothner  <per@bothner.com>
+
+	* Q2Apply.java:  Extend MethodProc instead of CpsProcedure.
+
+2004-07-20  Per Bothner  <per@bothner.com>
+
+	* Q2.java:  Remove unused import statements.
+	* Q2Read.java:  Likewise.
+
+2004-06-22  Per Bothner  <per@bothner.com>
+
+	* Q2Read.java:  Remove BRL/KRL model of starting out quoted.
+	(inLiteral):  Remove method.
+
+	* Q2Read.java (nesting):  Moved field to Lexer.
+	(skipIndentation, singleLine, readCommand):  New methods.
+	(Q2ReaderParens):  New class.
+
+2004-06-12  Per Bothner  <per@bothner.com>
+
+	* Q2Read.java (readObject()):   Remove method - use inherited version.
+
+2004-02-13  Per Bothner  <per@bothner.com>
+
+	New package for a new experimental "q2" language.
+	* Q2.java:  New class, extends Scheme.
+	* Q2Apply.java:  New class, extends CpsProcedure.
+	* Q2Read.java:  New class, extends LispReader.
+	* Makefile.am:  New file.

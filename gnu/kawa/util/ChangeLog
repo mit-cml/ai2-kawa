@@ -1,0 +1,452 @@
+2010-08-28  Per Bothner  <per@bothner.com>
+
+	* PreProcess.java (version_features): Add "java7".
+
+2010-08-07  Per Bothner  <per@bothner.com>
+
+	* AbstractHashTable.java (clear):  Fix thinko.
+
+2010-07-23  Per Bothner  <per@bothner.com>
+
+	* AbstractHashTable.java (<init>): New default constructor.
+	(DEFAULT_INITIAL_SIZE): Moved from GeneralHashTable.
+	* GeneralHashTable.java (<init>): Default constructor
+	just calls super default constructor.
+
+2010-04-18  Per Bothner  <per@bothner.com>
+
+	* PreProcess.java: The use:com.sun.net.httpserver option is now
+	passed in by the top-level Makefile.
+
+	* AbstractHashTable.java: Fix comment to it is PreProcess-safe.
+
+2010-04-10  Per Bothner  <per@bothner.com>
+
+	* PreProcess.java: Add support for "java6compat5" version.
+	Add JAVA6COMPAT5 pre-processor macro.
+
+2010-04-08  Per Bothner  <per@bothner.com>
+
+	* GeneralHashTable.java (getNode): Fix parameter inconsistency
+	introduced by recent changes to add java.util.Map-compatibility.
+	Fixes bug reported by Yaroslav Kavenchuk <kavenchuk@jenty.by>.
+
+2010-04-05  Per Bothner  <per@bothner.com>
+
+	* AbstractWeakHashTable.java (put): Restore (and update) custom
+	implementation that was incorrectly removed by previous change.
+
+2010-04-04  Per Bothner  <per@bothner.com>
+
+	Change AbstractHashTable to implement java.util.Map.
+	* AbstractHashTable.java: Change to extend java.util.AbstractMap.
+	(getEntryKey, getEntryValue, setEntryValue): Remove - just use
+	the correspondong Map.Entry methods.
+	(hash, matches, get, getNode, remove): Change type of key parameter
+	to be Object rather than K, to be compatible with java.util.Map.
+	(class AbstractEntrySet): New helper class, for entrySet method/
+	* HashNode.java: Change to extend AbstractMap.SimpleEntry, if JAVA6.
+	In that case, #ifndef out stuff that is now inherited.
+	Add 2-argument constructor.
+	* GeneralHashTable.java: Update accordingly.
+	* IdentityHashTable.java: Likewise.
+	* WeakIdentityHashMap.java: Likewise.
+	* WeakHashNode.java: Now implements Map.Entry.
+	* AbstractWeakHashTable.java: Somewhat more major changes.
+	(class WEntry): Use this in place of WeakHashNode, since WeakHashNode
+	was being used in a way that made it incompatible with Map.Entry.
+
+2010-04-02  Per Bothner  <per@bothner.com>
+
+	* PreProcess.java (filter): Factor out pre-processing from writing
+	into new method, to allow some flexiobility is uses.
+
+	* PreProcess.java (NO_JAVA4_FEATURES): Add "-JAVA5".
+
+2009-06-01  Per Bothner  <per@bothner.com>
+
+	* AbstractWeakHashTable.java (cleanup): Make protected.
+
+2009-05-17  Per Bothner  <per@bothner.com>
+
+	* WeakIdentityHashMap.java: New class, extends AbstractHashTable.
+	* Makefile.am: Update accordingly.
+	* AbstractHashTable.java (makeEntry): New method.
+	(put*2, remove): Add new default methods.
+	* GeneralHashTable.java (put*2, remove):  Remove methods.
+	* WeakHashNode.java: Extend WeakReference<K> rather than
+	WeakReference<V> and add value field, so this class can be ued by
+	both AbstractWeakHashTable and WeakIdentityHashMap.
+	* AbstractWeakHashTable.java: Update accordingly.
+	(hash): New method.
+	(cleanup): Make a more abstract static method that can also be
+	used by WeakIdentityHashMap.
+
+2009-03-15  Per Bothner  <per@bothner.com>
+
+	* GeneralHashTable.java (DEFAULT_INITIAL_SIZE): New constant.
+
+2009-03-07  Per Bothner  <per@bothner.com>
+
+	* AbstractHashTable.java (getNode): New (or rather restored) method.
+	(get): Re-implement to use getNode.
+	* GeneralHashTable.java (getNode): New method. 
+
+2009-02-25  Per Bothner  <per@bothner.com>
+
+	* AbstractHashTable.java: New abstract superclass of GeneralHashTable.
+	* GeneralHashTable.java: Change to extend AbstractHashTable,
+	and make generic.
+	* HashNode.java: Make generic.
+	* IdentityHashTable.java: Likewise.
+	* AbstractWeakHashTable.java: New generic class, extends 
+	AbstractHashTable.
+	* WeakHashNode.java: New class, used by AbstractWeakHashTable.
+	* Makefile.am: Update accordingly.
+
+2009-01-17  Per Bothner  <per@bothner.com>
+
+	* PreProcess.java (version_features): New Android pre-processor tag..
+
+2008-12-25  Per Bothner  <per@bothner.com>
+
+	* PreProcess.java: Partially revert previous check-in:
+	Don't enable JAXP-QName even if Java5 or Java5.
+
+2008-12-23  Per Bothner  <per@bothner.com>
+
+	* PreProcess.java:  Support "android" as a new "version".
+	Add 'use:javax.xml.transform' as a new directive.
+
+2008-10-24  Per Bothner  <per@bothner.com>
+
+	* IdentityHashTable.java: New class, extends GeneralHashTable.
+	* Makefile.am: Update accordingly.
+
+	* GeneralHashTable.java (get(Object)): New method, for partial
+	compatibility with Map.
+
+2008-01-16  Per Bothner  <per@bothner.com>
+
+	* GeneralHashTable.java (remove): Fix thinko.
+	Bug reported by daniel.s.terhorst@gmail.com; and jim@pagesmiths.com.
+
+2007-01-06  Per Bothner  <per@bothner.com>
+
+	* PreProcess.java (version_features): Map "java1" etc to
+	list of pre-process options.
+	(handleArg): New method.
+	Handele '%java1" etc using version_features.
+
+2007-01-02  Per Bothner  <per@bothner.com>
+
+	* FixupHtmlToc.java: New class, used for managing Kawa web site.
+	* Makefile.am: Update accordingly.
+
+2006-10-25  Per Bothner  <per@bothner.com>
+
+	* GeneralHashTable.java (rehash): Preserve order of nodes in hash
+	bucket - this is useful for NameLookup.
+	(mask, rehash): Make protected.
+	* HashNode.java (next): Make public.
+
+2006-10-24  Per Bothner  <per@bothner.com>
+
+	* GeneralHashTable.java (log2Size): Remove unneeded field.
+
+	* GeneralHashTable.java (put): We need to update the index and first
+	variable after a rehash.
+
+2006-09-08  Per Bothner  <per@bothner.com>
+
+	* ConsumeProc.java: Remove unused class.
+	* Makefile.ma: Update accordingly.
+
+2005-12-31  Per Bothner  <per@bothner.com>
+
+	* PreProcess.java: Fix various problems in handling nested
+	conditionals.
+
+2005-12-30  Per Bothner  <per@bothner.com>
+
+	* PreProcess.java (filter): Implement nested conditionals.
+
+2005-10-16  Per Bothner  <per@bothner.com>
+
+	* GeneralHashTable.java: Improve compatibility with java.util.Map.
+	(clear, size): New methods.
+	* HashNode.java: Implement java.util.Map.Entry, in the JAVA2 case.
+	(setValue): Method returns old value.
+	(equals, hashCode): New methods.
+
+	* GeneralHashTable.java (getNode): New helper method, for srfi69.scm.
+	(table, num_bindings): Make proctected, for access from srfi69.scm.
+	(next): New protected static method, also for srfi69.scm.
+
+2005-08-16  Per Bothner  <per@bothner.com>
+
+	* GeneralHashTable.java: New class.
+	* HashNode.java: New class.
+	* Makefile.am (java_sources): Add new classes.
+
+2005-07-20  Per Bothner  <per@bothner.com>
+
+	* Makefile.am (EXTRA_DIST): Add PreProcess.java.
+
+2005-06-04  Per Bothner  <per@bothner.com>
+
+	* AbstractFormat.java: Moved to gnu.lists.
+	* Makefile.am: Update accordingly.
+
+	* AbstractFormat.java: No longer implement FormatToConsumer.
+	(writeObject): New abstract method.
+	(format): Update variable saveFormat to match OutPort's objectFormat.
+
+	* AbstractFormat.java: Change to extend java.text.Format
+	rather than Procedure1or2.
+	(apply1, apply2): Remove methods.
+	(format(Object,StringBuffer,FieldPosition)): New method, for Format.
+	(parseObject): New stub method.
+
+	* AbstractFormat.java (writeLong, writeInt): New methods.
+
+2005-01-29  Per Bothner  <per@bothner.com>
+
+	* PreProcess.java (main): Predefine "true" and "false" keywords.
+
+2005-01-08  Per Bothner  <per@bothner.com>
+
+	* PreProcess.java (main): Also handle [-,--]keyword=[true|false].
+
+2005-01-07  Per Bothner  <per@bothner.com>
+
+	* PreProcess.java: New class, used by the select-javaN rules in
+	top-level Makefile to convert Java source files.
+
+2003-04-05  Per Bothner  <per@bothner.com>
+
+	* AbstractFormat.java (writeObject):  Add overloaded methods.
+
+2001-07-17  Per Bothner  <per@bothner.com>
+
+	* AbstractFormat.java:  New class, implements FormatToConsumer.
+	* Makefile.am:  Update accordingly.
+
+2001-06-03  Per Bothner  <per@bothner.com>
+
+	* RangeTable.java (remove):  New methods.
+
+2001-04-22  Per Bothner  <per@bothner.com>
+
+	* RangeTable.java:  New class.
+	* Makefile.am:  Update accordingly.
+
+2001-03-29  Per Bothner  <per@bothner.com>
+
+	* Position.java:  Removed - subsumed by gnu.lists.SeqPosition.
+
+2001-03-08  Per Bothner  <per@bothner.com>
+
+	* AbstractString.java:  Replaced by gnu.lists.CharSequence.
+	* CharBuffer.java:  Moved to gnu.lists.
+	* ConstantString.java:  Removed for now.
+	* Consumable.java:  Moved to gnu.lists.
+	* Consumer.java:  Moved to gnu.lists.
+	* F32Vector.java:  Moved to gnu.lists.
+	* F64Vector.java:  Moved to gnu.lists.
+	* FString.java:  Moved to gnu.lists.
+	* FVector.java:  Moved to gnu.lists.
+	* LList.java:  Moved to gnu.lists.
+	* Pair.java:  Moved to gnu.lists.
+	* PairWithPosition.java:  Moved to gnu.lists.
+	* S16Vector.java:  Moved to gnu.lists.
+	* S32Vector.java:  Moved to gnu.lists.
+	* S64Vector.java:  Moved to gnu.lists.
+	* S8Vector.java:  Moved to gnu.lists.
+	* Sequence.java:  Moved to gnu.lists and made to an interface, with
+	method implementation moved to AbstractSequence.
+	* SubString.java:  Removed, for now.
+	* TreeList.java:  Moved to gnu.lists.
+	* U16Vector.java:  Moved to gnu.lists.
+	* U32Vector.java:  Moved to gnu.lists.
+	* U64Vector.java:  Moved to gnu.lists.
+	* U8Vector.java:  Moved to gnu.lists.
+	* UniformVector.java:  Replaced by gnu.lists.SimpleVector.
+	* Makefile.am:  Update accordingly.
+	* ConsumeProc.java:  Now need to import gnu.lists.
+
+2001-02-16  Per Bothner  <per@bothner.com>
+
+	* TreeList.java:  New class.
+	* ConsumeProc.java (applyN):  Use a TreeList instead of Collector.
+	* Collector.java:  Removed.
+	* gnu/kawa/util/Consumer.java (beginGroup):  Add new typeName argument.
+	(beginAttributes):  Liekwise.
+	(endGroup):  Make argument be a type-name String.
+	(endAttribute):  Removed method.
+	(endAttributes):  New method.
+	(writeChars(AbstractString)):  Removed.
+	* Makefile.am (java_JAVA):  Update accordingly.
+
+2000-12-13  Per Bothner  <per@bothner.com>
+
+	* LList.java (reverseInPlace):  New static method.
+
+2000-08-17  Per Bothner  <per@bothner.com>
+
+	* AbstractString.java (open, deleteRange):  New methods.
+	* CharBuffer.java (deleteRange):  New method.
+
+	* FVector.java (length):  New field.  Supports variable-length.
+	(add(Object)):  New method.  (Compatible with java.util.List.)
+	
+	* ConstantString.java:  New class, extends AbstractString.
+
+	* Consumer.java:  New interface.
+	* Consumable.java:  New interface.
+	* Collector.java:  New class.
+	* ConsumeProc.java:  New class.
+	* Makefile.am (java_JAVA):  Update for new classes.
+
+2000-06-24  Per Bothner  <per@bothner.com>
+
+	* AbstractString.java:  Implement gnu.mapping.Printable.
+	(print):  New method, code copied from FString.
+	(getChars, substring, toString, subString):  New methods.
+	* CharBuffer.java (getChars):  New method.
+	* FString.java (getChars, toCharArray):  Moved.
+	(print):  Use super.print.
+	* SubString.java (getChars, substring, subString):  New method.
+	(charAt, setCharAt, createPosition):  Add start	offset,
+	don't subtract it!
+
+	* Position.java (data, position):  Make protected.
+
+2000-06-19  Per Bothner  <per@bothner.com>
+
+	* Char.java:  Moved to gnu.text.
+
+2000-06-17  Per Bothner  <per@bothner.com>
+
+	* FString.java (substring):  New method.
+
+2000-06-09  Per Bothner  <per@bothner.com>
+
+	* Char.java (readResolve):  Fix return type to Object.
+	* LList.java (readResolve):  Likewise.
+
+2000-05-28  Per Bothner  <per@bothner.com>
+
+	* FString.java (import):  CharArrayInPort is now in gnu.mapping.
+
+2000-05-22  Per Bothner  <per@bothner.com>
+
+	* Char.java:  No longer implements Compilable.
+	* FString.java:  No longer implements Compilable.
+	* FVector.java:  No longer implements Compilable.
+	* LList.java:  No longer implements Compilable.
+	* Pair.java:  No longer implements Compilable.
+	(make):  Renamed from makePair.
+	* PairWithPosition.java:  Change encoding of position.
+	Implement Externalizable.
+
+	* F32Vector.java (<init>(float[])):  New contructor.
+	* F64Vector.java (<init>(double[])):  New contructor.
+	* S8Vector.java (<init>(byte[])):  New contructor.
+	* S16Vector.java (<init>(short[])):  New contructor.
+	* S32Vector.java (<init>(int[])):  New contructor.
+	* S64Vector.java (<init>(long[])):  New contructor.
+	* U8Vector.java (<init>(byte[])):  New contructor.
+	* U16Vector.java (<init>(short[])):  New contructor.
+	* U32Vector.java (<init>(int[])):  New contructor.
+	* U64Vector.java (<init>(long[])):  New contructor.
+
+2000-05-09  Per Bothner  <per@bothner.com>
+
+	* F32Vector.java:  Make implement java.io.Externalizable.
+	(writeExternal, readExternal, default constructor):  Added new methods.
+	* F64Vector.java:  Likewise.
+	* S8Vector.java:  Likewise.
+	* S16Vector.java:  Likewise.
+	* S32Vector.java:  Likewise.
+	* S64Vector.java:  Likewise.
+	* U8Vector.java:  Likewise.
+	* U16Vector.java:  Likewise.
+	* U32Vector.java:  Likewise.
+	* U64Vector.java:  Likewise.
+
+	* FString.java:  Make implement java.io.Externalizable.
+	(writeExternal, readExternal, default constructor):  Added new methods.
+	* FVector.java:  Likewise.
+	* Pair.java:  Likewise.
+	* Char.java:  Likewise.  Also add readResolve method.
+	* LList.java:  Likewise.
+
+2000-04-21  Per Bothner  <per@bothner.com>
+
+	* AbstractString.java (insert):  Use RuntimeException instead of
+	UnsupportedOperationException (which is in Java 2 but not JDK 1.1).
+	* LList.java (makeLiteral):  Slight simplification.
+
+2000-04-18  Per Bothner  <per@bothner.com>
+
+	* Position.java:  Fix missing comment terminator.
+
+2000-04-17  Per Bothner  <per@bothner.com>
+
+	* AbstractString.java:  New class, extends UniformVector.
+	* FString.java:  Changed to extend AbstractString.
+	(getTag, copy, get, setAll, makeUpperCase, makeLowerCase,
+	makeCapitalize, get):  Moved to AbstractString.
+	(writeTo, replace):  New method.
+	* CharBuffer.java:  New class, extends AbstractString.
+	Moved some logic from gnu.jemacs.buffer.BufferContent, but simplified
+	data structure managing positions.
+	* SubString.java:  New class, extends AbstractString.
+	* Position.java:  New class, similar t
+	* Makefile.am (java_JAVA):  Update for new classes.
+
+2000-03-17  Per Bothner  <per@bothner.com>
+
+	* Char.java (nameToChar):  Handle Unicode syntax: #\uaaaa .
+
+2000-03-12  Per Bothner  <per@bothner.com>
+
+	* UniformVector.java (setAll):  New method.
+	* FVector.java: Extend UniformVector, rather than Sequence directly.
+	(set):  Subsumed by version in Unifromvector.
+	* FString.java: Extend UniformVector, rather than Sequence directly.
+	(setElementAt, setAll):  New methods.
+
+2000-02-26  Per Bothner  <per@bothner.com>
+
+	* Pair.java (equals(Pair,Pair)):  Generalize to handle null.
+
+2000-02-19  Per Bothner  <per@bothner.com>
+
+	* FVector.java (makeLiteral):  Update unqualified package name.
+
+2000-01-24  Per Bothner  <per@bothner.com>
+
+	* FVector.java (setAll):  New method.
+
+2000-01-22  Per Bothner  <per@bothner.com>
+
+	* LList.java (list4, chain1, chain4):  New static methods.
+
+1999-12-10  Per Bothner  <per@bothner.com>
+
+	New directory.
+	* Sequence.java, Pair.java, PairWithPosition.java, FString.java,
+	Char.java:  Moved from kawa/lang.
+	* LList.java:  Renamed from kawa/lang/List.java.
+	* FVector.java:  Renamed from kawa/lang/Vector.java.
+	* Makefile.am, Makefile.in:  New files.
+
+	* UniformVector.java:  New abstract class.
+	* S8Vector.java, S16Vector.java, S32Vector.java, S64Vector.java,
+	U8Vector.java, U16Vector.java, U32Vector.java, U64Vector.java,
+	F32Vector.java, F64Vctor.java:  New uniform vector classes.
+
+	* Most classes (elementAt):  Renamed to, as in Java 2 collections.
+	* Char.java (nameToChar):  New method.
