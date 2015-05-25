@@ -44,6 +44,8 @@ public class Label {
     this.position = position;
   }
 
+    public boolean isUsed() { return stackTypes != null; }
+
   Type mergeTypes (Type t1, Type t2)
   {
     if ((t1 instanceof PrimType) != (t2 instanceof PrimType))
@@ -87,13 +89,10 @@ public class Label {
           {
             stackTypes[i] = mergeTypes(stackTypes[i], stack[i]);
           }
-        int min = usedLocals < localTypes.length ? usedLocals : localTypes.length ;
-        for (int i = 0; i < min; i++)
+        for (int i = 0; i < localTypes.length;  i++)
           {
-            mergeLocalType(i, locals[i]);
+            mergeLocalType(i, i < usedLocals ? locals[i] : null);
           }
-        for (int i = usedLocals; i < localTypes.length;  i++)
-          localTypes[i] = null;
       }
   }
 
@@ -116,11 +115,16 @@ public class Label {
 
   private void mergeLocalType (int varnum, Type newType)
   {
-    Type oldLocal = localTypes[varnum];
-    Type newLocal = mergeTypes(oldLocal, newType);
-    localTypes[varnum] = newLocal;
-    if (newLocal != oldLocal)
-      notifyTypeChangeListeners(varnum, newLocal);
+    if (varnum < localTypes.length)
+      {
+        Type oldLocal = localTypes[varnum];
+        Type newLocal = mergeTypes(oldLocal, newType);
+        if (newLocal != oldLocal)
+          {
+            localTypes[varnum] = newLocal;
+            notifyTypeChangeListeners(varnum, newLocal);
+          }
+      }
   }
 
   private void notifyTypeChangeListeners (int varnum, Type newType)

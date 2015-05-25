@@ -1,7 +1,9 @@
 package kawa;
 import gnu.expr.*;
 import gnu.mapping.*;
-import gnu.text.*;
+import gnu.kawa.io.OutPort;
+import gnu.kawa.io.FilePath;
+import gnu.kawa.io.TtyInPort;
 
 public class TelnetRepl extends Procedure0
 {
@@ -40,7 +42,7 @@ public class TelnetRepl extends Procedure0
       @param client A client that has connected to us,
       and that wants to use the telnet protocol to talk to a
       Scheme read-eval-print-loop. */
-  public static void serve (Language language, java.net.Socket client)
+  public static Thread serve (Language language, java.net.Socket client)
     throws java.io.IOException
   {
     Telnet conn = new Telnet(client, true);
@@ -55,9 +57,11 @@ public class TelnetRepl extends Procedure0
     conn.request(Telnet.DO, Telnet.LINEMODE);
     */
 
-    Thread thread = new Future(new TelnetRepl(language, client),
-			       in, out, out);
+    Runnable r = new RunnableClosure(new TelnetRepl(language, client),
+				     in, out, out);
+    Thread thread = new Thread(r);
     thread.start();
+    return thread;
   }
 }
 

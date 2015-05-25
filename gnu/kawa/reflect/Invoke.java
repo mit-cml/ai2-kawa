@@ -2,9 +2,11 @@ package gnu.kawa.reflect;
 import gnu.mapping.*;
 import gnu.expr.*;
 import gnu.bytecode.*;
+import gnu.lists.ConstVector;
 import gnu.lists.FString;
 import java.lang.reflect.Array;
 import gnu.kawa.lispexpr.ClassNamespace; // FIXME
+import gnu.kawa.lispexpr.LangObjType;
 
 public class Invoke extends ProcedureN
 {
@@ -13,7 +15,7 @@ public class Invoke extends ProcedureN
    *  'P' - invoke-special.
    *  'S' - invoke-static (static or non-static):
    *        The first operand is a Class or Type, the second is the name,
-   *        and if the is non-static the 3rd is the receiver.
+   *        and if the method is non-static the 3rd is the receiver.
    *  's' - Like 'S' but only allow static methods. [not used]
    *  'V' - non-static invoke, only allow non-static methods. [not used]
    *  '*' - non-static invoke, can match static methods also.
@@ -40,8 +42,8 @@ public class Invoke extends ProcedureN
     super(name);
     this.kind = kind;
     this.language = language;
-    setProperty(Procedure.validateApplyKey,
-                   "gnu.kawa.reflect.CompileInvoke:validateApplyInvoke");
+    setProperty(Procedure.validateXApplyKey,
+                "gnu.kawa.reflect.CompileInvoke:validateApplyInvoke");
   }
 
   public static Object invoke$V(Object[] args) throws Throwable
@@ -130,9 +132,9 @@ public class Invoke extends ProcedureN
 	    PairClassType ptype = (PairClassType) dtype;
 	    dtype = ptype.instanceType;
 	  }
-        if (dtype instanceof ArrayType)
+        if (dtype instanceof ArrayType
+            || dtype == LangObjType.constVectorType)
           {
-            Type elementType = ((ArrayType) dtype).getComponentType();
             int len;
             len = args.length-1;
             String name;
@@ -153,6 +155,9 @@ public class Invoke extends ProcedureN
                 i = 1;
                 lengthSpecified = false;
               }
+            Type elementType = (dtype == LangObjType.constVectorType
+                                ? Type.objectType
+                                : ((ArrayType) dtype).getComponentType());
             Object arr = Array.newInstance(elementType.getReflectClass(),
                                            length);
             int index = 0;
@@ -166,7 +171,7 @@ public class Invoke extends ProcedureN
                       {
                         index =  Integer.parseInt(kname);
                       }
-                    catch (Throwable ex)
+                    catch (Exception ex)
                       {
                         throw new RuntimeException("non-integer keyword '"+kname+"' in array constructor");
                       }
@@ -175,6 +180,8 @@ public class Invoke extends ProcedureN
                 Array.set(arr, index, elementType.coerceFromObject(arg));
                 index++;
               }
+            if (dtype == LangObjType.constVectorType)
+                return new ConstVector((Object[]) arr);
             return arr;
           }
       }
@@ -208,7 +215,7 @@ public class Invoke extends ProcedureN
             if (err == 0)
               return vars.runUntilValue();
 
-            MethodProc vproc = ClassMethods.apply((ClassType) dtype, "valueOf",
+            MethodProc vproc = ClassMethods.apply(dtype, "valueOf",
                                                   '\0', language);
             if (vproc != null)
               {
@@ -243,7 +250,7 @@ public class Invoke extends ProcedureN
           i = 1;
         if (i != args.length)
           {
-            MethodProc aproc = ClassMethods.apply((ClassType) dtype, "add",
+            MethodProc aproc = ClassMethods.apply(dtype, "add",
                                               '\0', language);
             if (aproc == null)
               throw MethodProc.matchFailAsException(err, proc, args);
@@ -267,12 +274,12 @@ public class Invoke extends ProcedureN
       mname = "<init>";
     else
       {
-        if (name instanceof String || name instanceof FString)
+        if (name instanceof CharSequence)
           mname = name.toString();
 	else if (name instanceof Symbol)
 	  mname = ((Symbol) name).getName();
         else
-          throw new WrongType(this, 1, null);
+          throw new WrongType(this, 1, name, "string-or-symbol");
         mname = Compilation.mangleName(mname);
       }
     MethodProc proc = ClassMethods.apply(dtype, mname,
@@ -294,7 +301,7 @@ public class Invoke extends ProcedureN
    * @return an ApplyExp representing the call
    */
   public static synchronized
-  ApplyExp makeInvokeStatic(ClassType type, String name, Expression[] args)
+  ApplyExp makeInvokeStatic(ClassType type, String name, Expression... args)
   {
     PrimProcedure method = getStaticMethod(type, name, args);
     if (method == null)

@@ -1,30 +1,26 @@
+A GRAB-BAG OF IDEAS AND THINGS TO DO, SOME QUITE OLD
+
+Optimize splicing of methods calls.
+Remove createVarargsArrayIfNeeded logic from PrimProcedure.
+
 Document:
   in-http-server and in-servlet cond-expand options.
 
-Before Kawa 1.11:
-- LOGO!
-- Update Android build procedure.
-- Check that 'ant' works.
-- Make Values constructors be private, so we can make Values be abstract.
+Use Parboiled as parser library?  https://github.com/sirthias/parboiled/wiki
+
+Before Kawa 1.12:
+- Jemacs type ctrl-C --> TooLongAction
 - Go through Savannah bugs.
-- Manual: should rename @node Extensions
-- Change version number to 1.10.
 - Evaluate reported JEmacs bugs.
 - Go through remaining "news" entries and update manual.
 - go through Evaluating-Scheme-expressions-from-Java.
-- R6RS exception handling - see message from March 15, patch from March 16.
 - gnu/bytecode:
 -- Document emitIf../emitThen else, at overview level.
 - Verify that Path is consistent with new javax.nio (JDR 203)
   http://openjdk.java.net/projects/nio
 - internals: Update about procedures, inlining, tail-calls.
 
-R6RS
-- string-for-each
-
 HTTP/SERVLETS
-* Support Java6 com.sun.net.httpserver
-http://java.sun.com/javase/6/docs/jre/api/net/httpserver/spec/com/sun/net/httpserver/package-frame.html
 * Fix formatting: Language format -> HttpPrinter
   #t should print correctly
   BRL should by default not HTML-quote strings
@@ -41,8 +37,6 @@ OPTIMIZATIONS
   - in fluid-let call getLocation before calling setWithSave so we don't
   have to call it again in setRestore.
   - In local references inside a fluid-let use the location from above.
-* case/switch
-* translate Scheme character->int
 * Optimize (make T) where T is a known non-simple class.
   This should not need to use reflection.
 * optimize zero? etc
@@ -54,7 +48,6 @@ OPTIMIZATIONS
 
 HIGH PRIORITY:
 * Allow co-variant return types.
-* Document meta-arg facility.
 * compile-file doesn't display warnings
 * When deferring imports (require) the 'run' actions shouldn't be deferred. FIXME
 * Optimize and/or in the case of ConditionalTarget or <boolean> target.
@@ -85,7 +78,6 @@ It should be the same as the ctx.consumer.
 * Handle defmacro definition and use in same source file.
 * load.loadSource if (true) should be if (false).
 * Implement Scheme API for serialization.
-* Tail-calls in top-level functions should loop.
 * Document in internals.html how ModuleMethod/ModuleBody works.
 
 Optimize to avoid creating frame classes:
@@ -111,7 +103,6 @@ Remove Scheme.getTypeValue.
 
 Implement IntRange class.
 Use it to replace Char's hashtable.
-Replace Char by Character.
 
 Modules:
 * Infer parameter and return types when defaulted and otherwise match
@@ -133,10 +124,6 @@ Re-store code to check argument count when applyN is involved.
 BindingInitializer.emit: global Environment should be cached
 
 TO BE DONE FOR 2.0:
-
-Move more of kawa.lang.* to gnu.kawa.reflect and gnu.kawa.*.
-
-Calls to setter (as in (set! (...)) should be inlined.
 
 'object': being able to pass constructor arguments. eg., to simulate:
    new javax.swing.JDialog(myFrame) {  public void foo() {} };
@@ -165,16 +152,9 @@ exact->inexact only implemented for RealNums, not other Complex.
 
 Fix scheme-window so #!eof closes window.
 
-Implement source-filename source-line source-column macros.
-
-All function calls in kawa.lib that call standard or library functions
-should be resolved statically (inlined or direct methods calls).
-
 Combine primitive field with record facility and define-class.
 
 Provide getopt-long (Guile, check scsh).
-
-Implement SwitchExp;  use it for Scheme case.
 
 Implement full call-cc by re-writing.
 This would be slower, so should be optional, probably not the default.
@@ -222,8 +202,6 @@ Make closure representation consistent with inner classes wrt
 use of Attributes (for possible improved debugging).
 
 Optionally issue a warning if a symbol is rebound.
-
-Make kawa.repl -f FILE (or something) work for compiled FILEs.
 
 Inline calls to simple methods, especially builtins.
 Ties in with module specifications (to determine which bindings are builtin).

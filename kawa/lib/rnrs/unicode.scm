@@ -1,70 +1,51 @@
-(module-name <kawa.lib.rnrs.unicode>)
+(module-name (rnrs unicode))
 (module-export char-upcase char-downcase char-titlecase char-foldcase
-	       char-ci=? char-ci<? char-ci>? char-ci<=? char-ci>=?
 	       char-alphabetic? char-numeric? char-whitespace?
 	       char-upper-case? char-lower-case? char-title-case?
 	       char-general-category
 	       string-upcase string-downcase string-titlecase string-foldcase
-	       string-ci=? string-ci<? string-ci>? string-ci<=? string-ci>=?
 	       string-normalize-nfd string-normalize-nfkd
 	       string-normalize-nfc string-normalize-nfkc)
 (require <kawa.lib.characters>)
+(require <kawa.lib.compile_misc>)
 
 (define (char-upcase (ch :: character)) :: character
-  (character:make (java.lang.Character:toUpperCase (ch:intValue))))
+  (integer->char (java.lang.Character:toUpperCase (char->integer ch))))
 
 (define (char-downcase (ch :: character)) :: character
-  (character:make (java.lang.Character:toLowerCase (ch:intValue))))
+  (integer->char (java.lang.Character:toLowerCase (char->integer ch))))
 
 (define (char-titlecase (ch :: character)) :: character
-  (character:make (java.lang.Character:toTitleCase (ch:intValue))))
+  (integer->char (java.lang.Character:toTitleCase (char->integer ch))))
 
 (define (char-alphabetic? (ch :: character)) :: boolean
-  (java.lang.Character:isLetter (ch:intValue)))
+  (java.lang.Character:isLetter (char->integer ch)))
 
 (define (char-numeric? (ch :: character)) :: boolean
-  (java.lang.Character:isDigit (ch:intValue)))
+  (java.lang.Character:isDigit (char->integer ch)))
 
 (define (char-whitespace? (ch :: character)) :: boolean
-  (gnu.kawa.functions.UnicodeUtils:isWhitespace (ch:intValue)))
+  (gnu.kawa.functions.UnicodeUtils:isWhitespace (char->integer ch)))
 
 (define (char-upper-case? (ch :: character)) :: boolean
-  (java.lang.Character:isUpperCase (ch:intValue)))
+  (java.lang.Character:isUpperCase (char->integer ch)))
 
 (define (char-lower-case? (ch :: character)) :: boolean
-  (java.lang.Character:isLowerCase (ch:intValue)))
+  (java.lang.Character:isLowerCase (char->integer ch)))
 
 (define (char-title-case? (ch :: character)) :: boolean
-  (java.lang.Character:isTitleCase (ch:intValue)))
+  (java.lang.Character:isTitleCase (char->integer ch)))
 
 (define (char-foldcase (ch :: character)) :: character
-  (let ((val (ch:intValue)))
+  (let ((val (char->integer ch)))
     (if (or (= val #x130) (= val #x131))
-	ch
-	(character:make (java.lang.Character:toLowerCase
-		    (java.lang.Character:toUpperCase val))))))
-
-;; The following functions are written so they will work and generate
-;; good code for both Java5 (which has Character.toUppercase(int))
-;; and older Java versions (which only have Character.toUppercase(char)).
-(define (char-ci=? (c1 :: <character>) (c2 :: <character>)) :: <boolean>
-  (= (as <int> (java.lang.Character:toUpperCase (invoke c1 'intValue)))
-     (as <int> (java.lang.Character:toUpperCase (invoke c2 'intValue)))))
-(define (char-ci<? (c1 :: <character>) (c2 :: <character>)) :: <boolean>
-  (< (as <int> (java.lang.Character:toUpperCase (invoke c1 'intValue)))
-     (as <int> (java.lang.Character:toUpperCase (invoke c2 'intValue)))))
-(define (char-ci>? (c1 :: <character>) (c2 :: <character>)) :: <boolean>
-  (> (as <int> (java.lang.Character:toUpperCase (invoke c1 'intValue)))
-     (as <int> (java.lang.Character:toUpperCase (invoke c2 'intValue)))))
-(define (char-ci<=? (c1 :: <character>) (c2 :: <character>)) :: <boolean>
-  (<= (as <int> (java.lang.Character:toUpperCase (invoke c1 'intValue)))
-     (as <int> (java.lang.Character:toUpperCase (invoke c2 'intValue)))))
-(define (char-ci>=? (c1 :: <character>) (c2 :: <character>)) :: <boolean>
-  (>= (as <int> (java.lang.Character:toUpperCase (invoke c1 'intValue)))
-     (as <int> (java.lang.Character:toUpperCase (invoke c2 'intValue)))))
+        ch
+        (integer->char
+         (java.lang.Character:toLowerCase
+          (java.lang.Character:toUpperCase val))))))
 
 (define (char-general-category (ch :: character)) :: symbol
-  (gnu.kawa.functions.UnicodeUtils:generalCategory (ch:intValue)))
+  (gnu.kawa.functions.UnicodeUtils:generalCategory (char->integer ch)))
 
 (define (string-upcase (str :: string)) :: string
   (gnu.lists.FString ((str:toString):toUpperCase java.util.Locale:ENGLISH)))
@@ -77,34 +58,6 @@
 
 (define (string-foldcase (str :: string)) :: string
   (gnu.lists.FString (gnu.kawa.functions.UnicodeUtils:foldCase str)))
-
-(define (string-ci=? (str1 :: string) (str2 :: string)) :: <boolean>
-  ((gnu.kawa.functions.UnicodeUtils:foldCase str1):equals
-   (gnu.kawa.functions.UnicodeUtils:foldCase str2)))
-
-(define (string-ci<? (str1 :: string) (str2 :: string)) :: <boolean>
-  (< (invoke (gnu.kawa.functions.UnicodeUtils:foldCase str1)
-	     'compareTo
-	     (gnu.kawa.functions.UnicodeUtils:foldCase str2))
-     0))
-
-(define (string-ci>? (str1 :: string) (str2 :: string)) :: <boolean>
-  (> (invoke (gnu.kawa.functions.UnicodeUtils:foldCase str1)
-	     'compareTo
-	     (gnu.kawa.functions.UnicodeUtils:foldCase str2))
-     0))
-
-(define (string-ci<=? (str1 :: string) (str2 :: string)) :: <boolean>
-  (<= (invoke (gnu.kawa.functions.UnicodeUtils:foldCase str1)
-	      'compareTo
-	      (gnu.kawa.functions.UnicodeUtils:foldCase str2))
-      0))
-
-(define (string-ci>=? (str1 :: string) (str2 :: string)) :: <boolean>
-  (>= (invoke (gnu.kawa.functions.UnicodeUtils:foldCase str1)
-	      'compareTo
-	      (gnu.kawa.functions.UnicodeUtils:foldCase str2))
-      0))
 
 (define-syntax string-normalize
   (syntax-rules ()

@@ -4,25 +4,39 @@
 package gnu.xquery.lang;
 import gnu.kawa.lispexpr.*;
 import gnu.mapping.*;
-import gnu.lists.*;
-import gnu.text.*;
 import gnu.expr.*;
 import gnu.math.IntNum;
+import java.util.Map;
+import java.util.HashMap;
 import java.util.Vector;
 import java.util.Stack;
-import java.io.File;
 import gnu.kawa.xml.*;
 import gnu.xml.*;
 import gnu.bytecode.*;
+import gnu.kawa.io.BinaryInPort;
+import gnu.kawa.io.CharArrayInPort;
+import gnu.kawa.io.FilePath;
+import gnu.kawa.io.InPort;
+import gnu.kawa.io.Path;
+import gnu.kawa.io.TtyInPort;
+import gnu.kawa.io.URIPath;
 import gnu.kawa.reflect.OccurrenceType;
 import gnu.kawa.reflect.SingletonType;
 import gnu.kawa.functions.Convert;
+import gnu.lists.FString;
+import gnu.lists.LList;
+import gnu.text.Lexer;
+import gnu.text.SourceError;
+import gnu.text.SourceLocator;
+import gnu.text.SourceMessages;
+import gnu.text.SyntaxException;
 import gnu.xquery.util.NamedCollator;
 import gnu.xquery.util.CastableAs;
 import gnu.xquery.util.QNameUtils;
 import gnu.xquery.util.RelativeStep;
 import gnu.xquery.util.ValuesFilter;
 import kawa.standard.require;
+import kawa.lang.Translator.FormStack;
 
 /** A class to read xquery forms. */
 
@@ -38,6 +52,8 @@ public class XQParser extends Lexer
   boolean seenDeclaration;
 
   String libraryModuleNamespace;
+
+    Map<String,SourceLocator> seenImports;
 
   /** Value of getLineNumber() at start of current token.
    * Sometimes set otherwise, to report errors. */
@@ -67,7 +83,7 @@ public class XQParser extends Lexer
   public static final gnu.kawa.reflect.InstanceOf instanceOf
   = new gnu.kawa.reflect.InstanceOf(XQuery.getInstance(), "instance");
   public static final CastableAs castableAs = CastableAs.castableAs;
-  public static final Convert treatAs = Convert.as;
+  public static final Convert treatAs = Convert.cast;
 
   NamedCollator defaultCollator = null;
 
@@ -86,11 +102,12 @@ public class XQParser extends Lexer
       {
         baseURI = fixupStaticBaseUri(URIPath.valueOf(uri));
       }
-    catch (Throwable ex)
+    catch (Exception ex)
       {
-        if (ex instanceof WrappedException)
-          ex = ((WrappedException) ex).getCause();
-        error('e', "invalid URI: "+ex.getMessage());
+        Throwable th = (ex instanceof WrappedException
+                        ? ((WrappedException) ex).getCause()
+                        : ex);
+        error('e', "invalid URI: "+th.getMessage());
       }
   }
 
@@ -117,7 +134,7 @@ public class XQParser extends Lexer
               path = URIPath.valueOf(value.toString());
           }
 
-        LineBufferedReader port;
+        InPort port;
         if (path == null && (port = getPort()) != null)
           {
             path = port.getPath();
@@ -1360,7 +1377,7 @@ public class XQParser extends Lexer
 	func = makeFunctionExp("gnu.kawa.xml.NodeCompare", "$Ls", "<<");
 	break;
       case OP_RANGE_TO:
-	func = makeFunctionExp("gnu.xquery.util.IntegerRange", "integerRange");
+	func = makeFunctionExp("gnu.xquery.util.Xutils", "integerRange");
 	break;
       case OP_UNION:
 	func = makeFunctionExp("gnu.kawa.xml.UnionNodes", "unionNodes");
@@ -1859,7 +1876,7 @@ public class XQParser extends Lexer
 	    else if (next != '*')
 	      syntaxError("missing local-name after '*:'");
 	  }
-        return QuoteExp.getInstance(new Symbol(null, local));
+        return QuoteExp.getInstance(Symbol.makeUninterned(local));
       }
     else if (curToken == NCNAME_TOKEN)
       {
@@ -1974,7 +1991,7 @@ public class XQParser extends Lexer
 	Declaration dotDecl = lexp.addDeclaration(DOT_VARNAME);
 	dotDecl.setFlag(Declaration.IS_SINGLE_VALUE);
         dotDecl.setType(NodeType.anyNodeTest);
-	dotDecl.noteValue (null);  // Does not have a known value.
+	dotDecl.noteValueUnknown();
 	lexp.addDeclaration(POSITION_VARNAME, LangPrimType.intType);
 	lexp.addDeclaration(LAST_VARNAME, LangPrimType.intType);
 	comp.push(lexp);
@@ -2128,7 +2145,7 @@ public class XQParser extends Lexer
 	    lexp.addDeclaration(POSITION_VARNAME, Type.intType);
 	    lexp.addDeclaration(LAST_VARNAME, Type.intType);
 	    comp.push(lexp);
-	    dot.noteValue(null);
+	    dot.noteValueUnknown();
 	    Expression cond = parseExprSequence(']', false);
             if (curToken == EOF_TOKEN)
               eofError("missing ']' - unexpected end-of-file");
@@ -2286,9 +2303,10 @@ public class XQParser extends Lexer
                 Expression text = null;
                 if (tokenBufferLength > 0)
                   {
-                    String str = new String(tokenBuffer, 0, tokenBufferLength);
-                    Expression[] args = { new QuoteExp(str) };
-                    text = new ApplyExp(makeText, args);
+                    // Literal text is represent by an FString, to distinguish
+                    // from a string atomic value.
+                    FString str = new FString(tokenBuffer, 0, tokenBufferLength);
+                    text = new QuoteExp(str);
                   }
                 tokenBufferLength = 0;
                 if (next == '/')
@@ -2338,17 +2356,16 @@ public class XQParser extends Lexer
               }
           addText:
             {
-              String text;
+              FString text;
               if (tokenBufferLength > 0 && ! skippable)
-                text = new String(tokenBuffer, 0, tokenBufferLength);
+                text = new FString(tokenBuffer, 0, tokenBufferLength);
               else if (next == '{' && prevEnclosed == result.size())
                 // Handle the <a>{E1}{E2}</a> case - we must insert a
                 // joiner between E1 ad E2 to avoid a space being inserted.
-                text = "";
+                text = new FString();
               else
                 break addText; // Don't need to add anything.
-              Expression[] args = { new QuoteExp(text) };
-              result.addElement(new ApplyExp(makeText, args));
+              result.addElement(new QuoteExp(text));
             }
 	    tokenBufferLength = 0;
             if (next == delimiter)
@@ -2568,9 +2585,9 @@ public class XQParser extends Lexer
     // Instead we defer namespaced lookup until XQResolveNames.  (Mostly -
     // some places still incorrectly do premature namespace resolution.)
     String startTag = new String(tokenBuffer, 0, tokenBufferLength);
-    Vector vec = new Vector();
+    Vector<Expression> vec = new Vector<Expression>();
     Expression[] args;
-    vec.addElement(castQName(new QuoteExp(startTag), true));
+    vec.add(castQName(new QuoteExp(startTag), true));
     errorIfComment = "comment not allowed in element start tag";
     NamespaceBinding nsBindings = null;
     int ch;
@@ -2635,13 +2652,8 @@ public class XQParser extends Lexer
 	      syntaxError("enclosed expression not allowed in namespace declaration");
 	    else
               {
-                Object x = vec.elementAt(vecSize+1);
-                ApplyExp ax;
-                if (x instanceof ApplyExp
-                    && (ax = (ApplyExp) x).getFunction() == makeText)
-                  x = ax.getArg(0);
-                ns = ((QuoteExp) x).getValue()
-		.toString().intern();
+                ns = vec.get(vecSize+1)
+                  .valueIfConstant().toString().intern();
               }
 	    vec.setSize(vecSize);
             checkAllowedNamespaceDeclaration(definingNamespace, ns, true);
@@ -2979,7 +2991,7 @@ public class XQParser extends Lexer
               val = new java.lang.Double(str);
             exp = new QuoteExp(val);
           }
-        catch (Throwable ex)
+        catch (Exception ex)
           {
             exp = syntaxError("invalid decimal literal: '"+str+"'");
           }
@@ -3335,13 +3347,12 @@ public class XQParser extends Lexer
     getRawToken();
 
     Expression type = parseOptionalTypeDeclaration();
-    ScopeExp sc;
-    Expression[] inits = new Expression[1];
+    LambdaExp lexp = null;
     Declaration posDecl = null;
     if (isFor)
       {
 	boolean sawAt = match("at");
-	LambdaExp lexp = new LambdaExp(sawAt ? 2 : 1);
+	lexp = new LambdaExp(sawAt ? 2 : 1);
 	if (sawAt)
 	  {
 	    getRawToken();
@@ -3353,7 +3364,6 @@ public class XQParser extends Lexer
 	    if (posDecl == null)
 	      syntaxError("missing Variable after 'at'");
 	  }
-	sc = lexp;
 	if (match("in"))
 	  getRawToken();
 	else
@@ -3362,6 +3372,7 @@ public class XQParser extends Lexer
 	      getRawToken();
 	    syntaxError("missing 'in' in 'for' clause");
 	  }
+        comp.push(lexp);
       }
     else
       {
@@ -3373,27 +3384,30 @@ public class XQParser extends Lexer
 	      getRawToken();
 	    syntaxError("missing ':=' in 'let' clause");
 	  }
-	LetExp let = new LetExp(inits);
-	sc = let;
+        comp.letStart();
       }
-    inits[0] = parseExprSingle();
-    if (type != null && ! isFor) // FIXME - for now
-      inits[0] = Compilation.makeCoercion(inits[0], type);
-    popNesting(saveNesting);
-    comp.push(sc);
-    sc.addDeclaration(decl);
-    if (type != null)
-      decl.setTypeExp(type);
+    Expression init = parseExprSingle();
     if (isFor)
       {
-	decl.noteValue (null);  // Does not have a known value.
+        lexp.addDeclaration(decl);
+	decl.noteValueUnknown();
 	decl.setFlag(Declaration.IS_SINGLE_VALUE);
       }
+    else
+      {
+        if (type != null) // FIXME - for now
+          init = Compilation.makeCoercion(init, type);
+        comp.letVariable(decl, init);
+        comp.letEnter();
+      }
+    if (type != null)
+      decl.setTypeExp(type);
+    popNesting(saveNesting);
     if (posDecl != null)
       {
-	sc.addDeclaration(posDecl);
+	lexp.addDeclaration(posDecl);
 	posDecl.setType(LangPrimType.intType);
-	posDecl.noteValue(null);
+	posDecl.noteValueUnknown();
 	posDecl.setFlag(Declaration.IS_SINGLE_VALUE);
       }
     Expression body;
@@ -3463,21 +3477,18 @@ public class XQParser extends Lexer
           body = new IfExp(booleanValue(cond), body, QuoteExp.voidExp);
 	maybeSetLine(body, bodyLine, bodyColumn);
       }
-    comp.pop(sc);
     if (isFor)
       {
-	LambdaExp lexp = (LambdaExp) sc;
+        comp.pop(lexp);
 	lexp.body = body;
-	Expression[] args = { sc, inits[0]};  // SIC
+	Expression[] args = { lexp, init};  // SIC
 	return new ApplyExp(makeFunctionExp("gnu.kawa.functions.ValuesMap",
 					    lexp.min_args == 1 ? "valuesMap"
 					    : "valuesMapWithPos"),
 			    args);
       }
     else
-      ((LetExp) sc).setBody(body);
-    return sc;
-
+      return comp.letDone(body);
   }
 
   /** Parse a some- or an every-expression.
@@ -3494,7 +3505,7 @@ public class XQParser extends Lexer
     
     LambdaExp lexp = new LambdaExp(1);
     lexp.addDeclaration(decl);
-    decl.noteValue (null);  // Does not have a known value.
+    decl.noteValueUnknown();
     decl.setFlag(Declaration.IS_SINGLE_VALUE);
     decl.setTypeExp(parseOptionalTypeDeclaration());
 
@@ -3533,7 +3544,7 @@ public class XQParser extends Lexer
     comp.pop(lexp);
     lexp.body = body;
     Expression[] args = { lexp, inits[0]};  // SIC
-    return new ApplyExp(makeFunctionExp("gnu.xquery.util.ValuesEvery",
+    return new ApplyExp(makeFunctionExp("gnu.xquery.util.Xutils",
 					isEvery ? "every" : "some"),
 			args);
   }
@@ -3952,9 +3963,22 @@ public class XQParser extends Lexer
         // Make sure we have a ModuleInfo before we call importDefinitions.
         ModuleManager.getInstance().find(comp);
 
+        if (seenImports == null)
+            seenImports = new HashMap<String, SourceLocator>();
+        SourceLocator oldImport = seenImports.get(uri);
+        Declaration loc = new Declaration(uri);
+        maybeSetLine(loc, startLine, startColumn);
+        if (oldImport != null) {
+            comp.error('e', "duplicate import of '"+uri+"'",
+                       "XQST0047", loc);
+            comp.error('e', "(this is the previous import)", null, oldImport);
+            return QuoteExp.voidExp;
+        }
+        seenImports.put(uri, loc);
+
         String at;
  	ModuleExp module = comp.getModule();
-	Vector forms = new Vector();
+	FormStack formStack = new FormStack(comp);
         String packageName = Compilation.mangleURI(uri);
         comp.setLine(port.getName(), startLine, startColumn);
 	if (match("at"))
@@ -3972,7 +3996,7 @@ public class XQParser extends Lexer
                 if (info == null)
                   comp.error('e', "malformed URL: "+at);
                 require.importDefinitions(className, info,
-                                          null, forms, module, comp);
+                                          null, formStack, module, comp);
                 next = skipSpace(nesting != 0);
                 if (next != ',')
                   {
@@ -3995,7 +4019,7 @@ public class XQParser extends Lexer
                 // Do nothing.  If there is no such module,
                 // that will be reported below.
               }
-            catch (Throwable ex)
+            catch (Exception ex)
               {
                 error('e', "error loading map for "+uri+" - "+ex);
               }
@@ -4007,7 +4031,7 @@ public class XQParser extends Lexer
                 if (! uri.equals(info.getNamespaceUri()))
                   continue;
                 n++;
-                require.importDefinitions(info.getClassName(), info, null, forms, module, comp);
+                require.importDefinitions(info.getClassName(), info, null, formStack, module, comp);
               }
             if (n == 0)
               error('e', "no module found for "+uri);
@@ -4019,6 +4043,7 @@ public class XQParser extends Lexer
           {
             error('e', "module import forms a cycle", "XQST0073");
           }
+        LList forms = (LList) formStack.getFirst();
 	Expression[] inits = new Expression[forms.size()];
 	forms.toArray(inits);
 	return BeginExp.canonicalize(inits);
@@ -4239,6 +4264,16 @@ public class XQParser extends Lexer
                   }
                 if (bad)
                   error('e', "invalid encoding name syntax", "XQST0087");
+                InPort port = getPort();
+                if (port instanceof BinaryInPort) {
+                    try {
+                        ((BinaryInPort) port).setCharset(encoding);
+                    } catch (java.nio.charset.UnsupportedCharsetException ex) {
+                        error('e', "unrecognized encoding name");
+                    } catch (Exception ex) {
+                        error('e', "cannot set encoding name here");
+                    }
+                }
                 // ignore encoding specification.
                 getRawToken();
               }

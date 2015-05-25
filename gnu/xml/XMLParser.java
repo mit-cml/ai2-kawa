@@ -2,10 +2,9 @@ package gnu.xml;
 import java.io.*;
 import gnu.text.*;
 import gnu.lists.*;
-import gnu.text.Path;
-/* #ifdef use:java.nio */
-import java.nio.charset.*;
-/* #endif */
+import gnu.kawa.io.BinaryInPort;
+import gnu.kawa.io.InPort;
+import gnu.kawa.io.Path;
 
 /** Reads XML from a char array.
  * Assumes a state-less character encoding containing ascii as a sub-set,
@@ -48,6 +47,7 @@ public class XMLParser
   private static final int INVALID_VERSION_DECL = 35;
   private static final int SAW_ERROR = 36;
   private static final int SAW_EOF_ERROR = 37;  // Unexpected end-of-file.
+  private static final int MISSING_XML_DECL = 38;
 
   static final String BAD_ENCODING_SYNTAX = "bad 'encoding' declaration";
   static final String BAD_STANDALONE_SYNTAX = "bad 'standalone' declaration";
@@ -58,86 +58,26 @@ public class XMLParser
     parse(Path.openInputStream(uri), uri, messages, out);
   }
 
-  public static LineInputStreamReader XMLStreamReader (InputStream strm)
-    throws java.io.IOException
-  {
-    LineInputStreamReader in = new LineInputStreamReader(strm);
-    /* #ifndef use:java.nio */
-    // in.markStart();
-    /* #endif */
-    int b1 = in.getByte();
-    int b2 = b1 < 0 ? -1 : in.getByte();
-    int b3 = b2 < 0 ? -1 : in.getByte();
-    if (b1 == 0xEF && b2 == 0xBB && b3 == 0xBF)
-      {
-        in.resetStart(3);
-        in.setCharset("UTF-8");
-      }
-    else if (b1 == 0xFF && b2 == 0xFE && b3 != 0)
-      {
-        in.resetStart(2);
-        in.setCharset("UTF-16LE");
-      }
-    else if (b1 == 0xFE && b2 == 0xFF && b3 != 0)
-      {
-        in.resetStart(2);
-        in.setCharset("UTF-16BE");
-      }
-    else
-      {
-        int b4 = b3 < 0 ? -1 : in.getByte();
-        if (b1 == 0x4C && b2 == 0x6F && b3 == 0xA7 && b4 == 0x94)
-          throw new RuntimeException("XMLParser: EBCDIC encodings not supported");
-        in.resetStart(0);
-        if ((b1 == '<' && ((b2 == '?' && b3 == 'x' && b4 == 'm')
-                           || (b2 == 0 && b3 == '?' && b4 == 0)))
-            || (b1 == 0 && b2 == '<' && b3 == 0 && b4 == '?'))
-          {
-            char[] buffer = in.buffer;
-            if (buffer == null)
-              in.buffer = buffer = new char[LineBufferedReader.BUFFER_SIZE];
-            int pos = 0;
-            int quote = 0;
-            for (;;)
-              {
-                int b = in.getByte();
-                if (b == 0)
-                  continue;
-                if (b < 0) // Unexpected EOF - handled later.
-                  break;
-                buffer[pos++] = (char) (b & 0xFF);
-                if (quote == 0)
-                  {
-                    if (b == '>')
-                      break;
-                    if (b == '\'' || b == '\"')
-                      quote = b;
-                  }
-                else if (b == quote)
-                  quote = 0;
-              }
-            in.pos = 0;
-            in.limit = pos;
-          }
-        else
-          in.setCharset("UTF-8");
-      }
-    in.setKeepFullLines(false);
-    return in;
-  }
+    public static BinaryInPort XMLStreamReader(InputStream strm)
+        throws java.io.IOException {
+        BinaryInPort in = new BinaryInPort(strm);
+        in.setFromByteOrderMark();
+        in.setKeepFullLines(false);
+        return in;
+    }
 
   public static void parse (InputStream strm, Object uri,
                             SourceMessages messages, Consumer out)
     throws java.io.IOException
   {
-    LineInputStreamReader in = XMLStreamReader(strm);
+    BinaryInPort in = XMLStreamReader(strm);
     if (uri != null)
       in.setName(uri);
     parse(in, messages, out);
     in.close();
   }
 
-  public static void parse (LineBufferedReader in, SourceMessages messages, Consumer out)
+  public static void parse (InPort in, SourceMessages messages, Consumer out)
     throws java.io.IOException
   {
     XMLFilter filter = new XMLFilter(out);
@@ -151,7 +91,7 @@ public class XMLParser
     filter.endDocument();
   }
 
-  public static void parse (LineBufferedReader in, SourceMessages messages, XMLFilter filter)
+  public static void parse (InPort in, SourceMessages messages, XMLFilter filter)
     throws java.io.IOException
   {
     filter.setMessages(messages);
@@ -165,12 +105,13 @@ public class XMLParser
     in.close();
   }
 
-  public static void parse (LineBufferedReader in, XMLFilter out)
+  public static void parse(InPort in, XMLFilter out)
   {
     // Cache fields in local variables, for speed.
     char[] buffer = in.buffer;
     int pos = in.pos;
     int limit = in.limit;
+    boolean strict = false;
 
     // The flow logic of this method is unusual.  It is one big state machine,
     // but with two "subroutines": SKIP_SPACES_MODIFIER and EXPECT_NAME_MODIFIER.
@@ -198,7 +139,7 @@ public class XMLParser
     int dstart = -1;
     String message = null;
 
-    int start = limit;
+    int start = -1;
   mainLoop:
     for (;;)
       {
@@ -206,7 +147,6 @@ public class XMLParser
         switch (state)
           {
           case INIT_STATE:
-            state = TEXT_STATE;
             state = INIT_TEXT_STATE;
             break handleChar;
 
@@ -216,7 +156,7 @@ public class XMLParser
                 state = INIT_LEFT_STATE;
                 break handleChar;
               }
-            state = TEXT_STATE;
+            state = strict ?  MISSING_XML_DECL : TEXT_STATE;
             continue mainLoop;
 
           case INIT_LEFT_STATE:
@@ -226,16 +166,23 @@ public class XMLParser
                 state = EXPECT_NAME_MODIFIER + SKIP_SPACES_MODIFIER + INIT_LEFT_QUEST_STATE;
                 break handleChar;
               }
-            state = SAW_LEFT_STATE;
+            state = strict ?  MISSING_XML_DECL : SAW_LEFT_STATE;
             continue mainLoop;
+
+          case MISSING_XML_DECL:
+             message = "missing XML declaration";
+             state = SAW_ERROR;
+             continue mainLoop;
 
           case INVALID_VERSION_DECL:
             pos = dstart;
             message = "invalid xml version specifier";
-            /* ... fall thorugh ... */
+            state = SAW_ERROR;
+            continue mainLoop;
 
           case SAW_ERROR:
             in.pos = pos;
+            start = -1;
             out.error('e', message);
             for (;;)
               {
@@ -340,14 +287,14 @@ public class XMLParser
                 in.pos = pos;
                 out.textFromParser(buffer, start, length);
               }
-	    start = buffer.length;
+	    start = -1;
             break handleChar;
 
           case PREV_WAS_CR_STATE:
             // The previous character was a '\r', and we passed along '\n'
             // to out.  If the new character is '\n' or 0x85 ignore it.
             state = TEXT_STATE;
-            if (ch == '\n' | ch == 0x85)
+            if (ch == '\n' || ch == 0x85)
               {
                 in.incrLineNumber(1, pos);
                 break handleChar;
@@ -370,7 +317,7 @@ public class XMLParser
 		|| ch == '\u0085' || ch == '\u2028')
               {
                 in.incrLineNumber(1, pos);
-break handleChar;
+                break handleChar;
               }
             // Not a space, so "return" to next state.
             state -= SKIP_SPACES_MODIFIER;
@@ -489,7 +436,7 @@ break handleChar;
             if (ch != ';')
               out.error('w', "missing ';'");
             out.emitEntityReference(buffer, start, length);
-	    start = limit;
+	    start = -1;
             state = TEXT_STATE;
             break handleChar;
 
@@ -519,7 +466,7 @@ break handleChar;
             in.pos = pos-length;  // position of start of name, for errors.
             out.emitStartElement(buffer, start, length);
             state = SKIP_SPACES_MODIFIER + MAYBE_ATTRIBUTE_STATE;
-	    start = limit;
+	    start = -1;
             continue mainLoop;
 
           case SAW_LEFT_QUEST_STATE: // Seen '<?' Name Spaces
@@ -550,6 +497,7 @@ break handleChar;
                                 || buffer[dstart+5] != 'o'
                                 || buffer[dstart+6] != 'n')
                               {
+                                // FIXME should allow if !strict
                                 pos = dstart;
                                 message = "xml declaration without version";
                                 state = SAW_ERROR;
@@ -648,8 +596,8 @@ break handleChar;
                                       break;
                                   }
                                 String encoding = new String(buffer,dstart, i-dstart);
-                                if (in instanceof LineInputStreamReader)
-                                  ((LineInputStreamReader) in).setCharset(encoding);
+                                if (in instanceof BinaryInPort)
+                                  ((BinaryInPort) in).setCharset(encoding);
                                 dstart = i+1;
                                 while (dstart < end
                                        && Character.isWhitespace(buffer[dstart]))
@@ -739,10 +687,15 @@ break handleChar;
                             continue mainLoop;
                           }
                       }
+                    else if (strict && state == INIT_LEFT_QUEST_STATE)
+                      {
+                        state = MISSING_XML_DECL;
+                        continue mainLoop;
+                      }
                     else
                       out.processingInstructionFromParser(buffer, start, length,
                                                           dstart, end - dstart);
-		    start = limit;
+		    start = -1;
 		    dstart = -1;
 		    state = TEXT_STATE;
 		    break handleChar;
@@ -769,6 +722,7 @@ break handleChar;
 			  {
                             in.pos = pos;
 			    out.commentFromParser(buffer, start + 2, length - 4);
+                            start = -1;
 			    break exclLoop;
 			  }
 		      }
@@ -786,6 +740,7 @@ break handleChar;
 			  {
                             in.pos = pos;
 			    out.writeCDATA(buffer, start + 7, pos - 10 - start);
+                            start = -1;
 			    break exclLoop;
 			  }
 		      }
@@ -804,7 +759,7 @@ break handleChar;
 			 &&  buffer[start+5] == 'P'
 			 &&  ch == 'E')
 		  {
-		    start = limit;
+                    start = -1;
 		    state = SKIP_SPACES_MODIFIER + DOCTYPE_SEEN_STATE;
 		    break handleChar;
 		  }
@@ -813,7 +768,7 @@ break handleChar;
 		else
 		  break handleChar;
 	      }
-	    start = limit;
+	    start = -1;
 	    state = TEXT_STATE;
 	    break handleChar;
 
@@ -855,7 +810,7 @@ break handleChar;
                         out.emitDoctypeDecl(buffer, start, length,
                                             dstart, pos - 1 - dstart);
                         terminator = (char) '<';
-                        start = limit;
+                        start = -1;
                         dstart = -1;
                         state = TEXT_STATE;
                         break handleChar;
@@ -894,7 +849,7 @@ break handleChar;
               break handleChar;
             in.pos = pos-length; // position of start of name, for errors.
             out.emitStartAttribute(buffer, start, length);
-	    start = limit;
+	    start = -1;
             if (ch == '=')
               {
                 state = ATTRIBUTE_SEEN_EQ_STATE;
@@ -915,6 +870,7 @@ break handleChar;
             if (ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n'
 		|| ch == '\u0085' || ch == '\u2028')
               break handleChar;
+            out.emitEndAttributes();
             message = "missing or unquoted attribute value";
             state = SAW_ERROR;
             continue mainLoop;
@@ -928,7 +884,7 @@ break handleChar;
           case END_ELEMENT_STATE:  // Seen '</' Name.
             in.pos = pos;
             out.emitEndElement(buffer, start, length);
-	    start = limit;
+	    start = -1;
             // Skip spaces then goto EXPECT_RIGHT_STATE.
             state = SKIP_SPACES_MODIFIER + EXPECT_RIGHT_STATE;
             continue mainLoop;
@@ -945,20 +901,17 @@ break handleChar;
           }
 
         // After 'break handleChar', we get here.
-        if (pos < limit)
-          ch = buffer[pos++];
-        else
+        if (pos >= limit)
           {
 	    int saved = pos - start;
             try
               {
-                if (saved > 0)
+                if (start >= 0)
                   {
-                    in.pos = start;
-                    in.mark(saved + 1);
+                      in.setSaveStart(start);
                   }
                 in.pos = pos;
-                int x = in.read();
+                int x = in.peek();
                 if (x < 0)
                   {
                     if (state == TEXT_STATE || state == PREV_WAS_CR_STATE)
@@ -966,13 +919,10 @@ break handleChar;
                     state = SAW_EOF_ERROR;
                     continue;
                   }
-                if (saved > 0)
+                if (start >= 0)
                   {
-                    in.reset();
-                    in.skip(saved);
+                    in.setSaveStart(-1);
                   }
-                else
-                  in.unread_quick();
               }
             catch (java.io.IOException ex)
               {
@@ -982,9 +932,9 @@ break handleChar;
             buffer = in.buffer;
 
             limit = in.limit;
-            start = saved > 0 ? pos - saved : limit;
-            ch = buffer[pos++];
+            start = start >= 0 ? pos - saved : limit;
           }
+        ch = buffer[pos++];
       }
   }
 }

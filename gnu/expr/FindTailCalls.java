@@ -4,15 +4,12 @@ import gnu.bytecode.Type;
 /** A visitor that checks for tails-calls; also notes read/write/call accesses.
  *
  * Does setTailCall on ApplyExp's that are tail-calls.
- * Also setCanRead, setCanCall on Declarations
- * and setCanRead, setCanCall on LambdaExp when appropriate.
- * (setCanWrite on Declarations needs to be set before this.)
  * Note the final part of deciding inlineability has to be done after
  * FindTailCalls finishes (or at least after we've visited all possible
  * callers), so it is deferred to FindCapturedvars.visitLambdaExp.
  *
  * The extra parameter is the {@code returnContinuation} - the expression we
- * "return to" - i.e. when done eveluating an expression, we're also done
+ * "return to" - i.e. when done evaluating an expression, we're also done
  * with the {@code returnContinuation}.  Normally it is is same
  * {@code Expression} as we are visiting, but (for example) when visiting the
  * last expression of a {@code BeginExp} the  {@code returnContinuation}
@@ -59,18 +56,14 @@ public class FindTailCalls extends ExpExpVisitor<Expression>
         if (binding != null)
           {
             // No point in building chain if STATIC_SPECIFIED, and it can
-            // lead to memory leaks.  At least if interactive calls cam
+            // lead to memory leaks.  At least if interactive calls can
             // resolve to previously-compiled Declarations (as in XQuery).
-            if (! binding.getFlag(Declaration.STATIC_SPECIFIED))
+            if (! binding.getFlag(Declaration.STATIC_SPECIFIED)
+                && ! binding.inExternalModule(comp))
               {
-                exp.nextCall = binding.firstCall;
-                binding.firstCall = exp;
+                binding.addCaller(exp);
               }
             Compilation comp = getCompilation();
-            binding.setCanCall();
-            if (! comp.mustCompile)
-              // Avoid tricky optimization if we're interpreting.
-              binding.setCanRead();
             Expression value = binding.getValue();
             if (value instanceof LambdaExp)
               lexp = (LambdaExp) value;
@@ -80,12 +73,9 @@ public class FindTailCalls extends ExpExpVisitor<Expression>
              && ! (exp.func instanceof ClassExp))
       {
         lexp = (LambdaExp) exp.func;
-        visitLambdaExp(lexp, false);
-        lexp.setCanCall(true);
+        visitLambdaExp(lexp);
       }
-    else if (exp.func instanceof QuoteExp
-             && (((QuoteExp) exp.func).getValue()
-                 == gnu.kawa.functions.AppendValues.appendValues))
+    else if (exp.isAppendValues())
       isAppendValues = true;
     else
       {
@@ -148,13 +138,6 @@ public class FindTailCalls extends ExpExpVisitor<Expression>
 
   protected Expression visitFluidLetExp (FluidLetExp exp, Expression returnContinuation)
   {
-    for (Declaration decl = exp.firstDecl();
-         decl != null; decl = decl.nextDecl())
-      {
-        decl.setCanRead(true);
-        if (decl.base != null)
-          decl.base.setCanRead(true);
-      }
     visitLetDecls(exp);
     exp.body = exp.body.visit(this, exp.body);
     postVisitDecls(exp);
@@ -164,10 +147,9 @@ public class FindTailCalls extends ExpExpVisitor<Expression>
   void visitLetDecls (LetExp exp)
   {
     Declaration decl = exp.firstDecl();
-    int n = exp.inits.length; 
-    for (int i = 0;  i < n;  i++, decl = decl.nextDecl())
+    for (int i = 0;  decl != null;  i++, decl = decl.nextDecl())
       {
-        Expression init = visitSetExp(decl, exp.inits[i]);
+        Expression init = visitSetExp(decl, decl.getInitValue());
         // Optimize letrec-like forms.
         if (init == QuoteExp.undefined_exp)
           {
@@ -176,12 +158,13 @@ public class FindTailCalls extends ExpExpVisitor<Expression>
                 || (value != init && value instanceof QuoteExp))
               init = value;
           }
-        exp.inits[i] = init;
+        decl.setInitValue(init);
       }
   }
 
   protected Expression visitLetExp (LetExp exp, Expression returnContinuation)
   {
+    exp.clearCallList();
     visitLetDecls(exp);
     exp.body = exp.body.visit(this, returnContinuation);
     postVisitDecls(exp);
@@ -194,14 +177,6 @@ public class FindTailCalls extends ExpExpVisitor<Expression>
     for (;  decl != null;  decl = decl.nextDecl())
       {
 	Expression value = decl.getValue();
-	if (value instanceof LambdaExp)
-	  {
-	    LambdaExp lexp = (LambdaExp) value;
-	    if (decl.getCanRead())
-	      lexp.setCanRead(true);
-	    if (decl.getCanCall())
-	      lexp.setCanCall(true);
-	  }
         if (decl.getFlag(Declaration.EXPORT_SPECIFIED)
             && value instanceof ReferenceExp)
           {
@@ -223,22 +198,32 @@ public class FindTailCalls extends ExpExpVisitor<Expression>
     return exp;
   }
 
+    protected Expression visitCaseExp(CaseExp exp, Expression returnContinuation) {
+        exp.key = exp.key.visit(this, exp.key);
+        for (int i = 0; i < exp.clauses.length; i++) {
+            exp.clauses[i].exp = exp.clauses[i].exp.visit(this,
+                    returnContinuation);
+        }
+        if (exp.elseClause != null)
+            exp.elseClause.exp = exp.elseClause.exp.visit(this,
+                    returnContinuation);
+        return exp;
+    }
+
   protected Expression visitLambdaExp (LambdaExp exp, Expression returnContinuation)
   {
-    visitLambdaExp (exp, true);
+    exp.clearCallList();
+    visitLambdaExp(exp);
     return exp;
   }
 
-  final void visitLambdaExp (LambdaExp exp, boolean canRead)
+  final void visitLambdaExp (LambdaExp exp)
   {
     LambdaExp parent = currentLambda;
     currentLambda = exp;
-    if (canRead)
-      exp.setCanRead(true);
     try
       {
-	if (exp.defaultArgs != null)
-	  exp.defaultArgs = visitExps(exp.defaultArgs);
+        visitDefaultArgs(exp, exp);
 	if (exitValue == null && exp.body != null)
 	  exp.body = exp.body.visit(this, exp.getInlineOnly() ? exp : exp.body);
       }
@@ -263,33 +248,13 @@ public class FindTailCalls extends ExpExpVisitor<Expression>
       {
 	for (LambdaExp child = exp.firstChild;
 	     child != null && exitValue == null;  child = child.nextSibling)
-	  visitLambdaExp(child, false);
+	  visitLambdaExp(child);
       }
     finally
       {
 	currentLambda = parent;
       }
 
-    return exp;
-  }
-
-  protected Expression visitReferenceExp (ReferenceExp exp, Expression returnContinuation)
-  {
-    Declaration decl = Declaration.followAliases(exp.binding);
-    if (decl != null)
-      {
-        // Replace references to a void variable (including one whose value
-        // is the empty sequence in XQuery) by an empty constant.  This is
-        // not so much an optimization as avoiding the complications and
-        // paradoxes of variables and expression that are void.
-        Type type = decl.type;
-        if (type != null && type.isVoid())
-          return QuoteExp.voidExp;
-        decl.setCanRead(true);
-      }
-    Declaration ctx = exp.contextDecl();
-    if (ctx != null)
-      ctx.setCanRead(true);
     return exp;
   }
 
@@ -300,7 +265,7 @@ public class FindTailCalls extends ExpExpVisitor<Expression>
         && ! decl.isPublic())
       {
 	LambdaExp lexp = (LambdaExp) value; 
-	visitLambdaExp(lexp, false);
+	visitLambdaExp(lexp);
 	return lexp;
       }
     else
@@ -319,9 +284,6 @@ public class FindTailCalls extends ExpExpVisitor<Expression>
           }
         decl = Declaration.followAliases(decl);
       }
-    Declaration ctx = exp.contextDecl();
-    if (ctx != null)
-      ctx.setCanRead(true);
     Expression value = visitSetExp(decl, exp.new_value);
     if (decl != null && decl.context instanceof LetExp
         && value == decl.getValue()

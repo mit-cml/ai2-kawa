@@ -2,18 +2,6 @@
 ;;; They should be re-written in Common Lisp, but there are still some
 ;;; limitations in the Common Lisp support making that difficult.
 
-(define (car x)
-  (if (eq? x '()) x ((as <pair> x):getCar)))
-
-(define (cdr x)
-  (if (eq? x '()) x ((as <pair> x):getCdr)))
-
-(define (setcar (p <pair>) x)
-  (set-car! p x))
-
-(define (setcdr (p <pair>) x)
-  (set-cdr! p x))
-
 ;; SYMBOLS
 
 (define (boundp symbol) :: |clisp:boolean|
@@ -107,11 +95,6 @@
 		 (invoke-static <gnu.mapping.Environment> 'getCurrent)
 		 symbol object))
 
-(define (apply func #!rest (args :: <Object[]>))
-  ((as <function>
-       (if (symbol? func) (symbol-function func) func)):applyN
-       (gnu.kawa.functions.Apply:getArguments args 0 apply)))
-
 ;;; ARRAYS
 
 (define (length (x :: <gnu.lists.Sequence>))
@@ -155,5 +138,11 @@
 (define (char-to-string ch)
   (make <gnu.lists.FString> 1 (invoke-static <gnu.commonlisp.lang.CommonLisp> 'asChar ch)))
 
-(define (functionp x) |<clisp:boolean>|
+(define (functionp x) |clisp:boolean|
   (instance? x <function>))
+
+(define (princ value #!optional (out (current-output-port))) :: <void>
+  (gnu.commonlisp.lang.CommonLisp:displayFormat:format value out))
+
+(define (prin1 value #!optional (out (current-output-port))) :: <void>
+  (gnu.commonlisp.lang.CommonLisp:writeFormat:format value out))

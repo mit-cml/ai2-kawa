@@ -72,7 +72,7 @@ public class ObjectType extends Type
   //       thisClassLoader
   //         = Class.forName("gnu.mapping.ObjectType").getClassLoader();
   //     }
-  //   catch (Throwable ex)
+  //   catch (Exception ex)
   //     {
   //     }
   // }
@@ -85,24 +85,14 @@ public class ObjectType extends Type
   public static Class getContextClass (String cname)
     throws java.lang.ClassNotFoundException
   {
-    /* #ifdef JAVA2 */
-    /* Specifies optional 'initialize' argument. */
     return Class.forName(cname, false, getContextClassLoader());
-    /* #else */
-    // return Class.forName(cname);
-    /* #endif */
   }
 
-  /* #ifdef JAVA2 */
   public static ClassLoader getContextClassLoader ()
   {
     try
       {
-        /* #ifdef Android */
-        // return ClassLoader.getSystemClassLoader();
-        /* #else */
         return Thread.currentThread().getContextClassLoader();
-        /* #endif */
       }
     catch (java.lang.SecurityException ex)
       {
@@ -115,7 +105,6 @@ public class ObjectType extends Type
         /* #endif */
       }
   }
-  /* #endif */
 
   /** Get the java.lang.Class object for the representation type. */
   public Class getReflectClass()
@@ -124,27 +113,16 @@ public class ObjectType extends Type
       {
 	if (reflectClass == null)
           reflectClass = getContextClass(getInternalName().replace('/', '.'));
-        flags |= EXISTING_CLASS;
+        setExisting(true);
       }
     catch (java.lang.ClassNotFoundException ex)
       {
         if ((flags & EXISTING_CLASS) != 0)
           {
-	    RuntimeException rex
-              = new RuntimeException("no such class: "+getName());
-            /* #ifdef use:java.lang.Throwable.getCause */
-            rex.initCause(ex);
-            /* #endif */
-            throw rex;
+            throw new RuntimeException("no such class: "+getName(), ex);
           }
       }
     return reflectClass;
-  }
-
-  public Type getImplementationType()
-  {
-    return this == nullType ? objectType
-      : this == toStringType ? javalangStringType : this;
   }
 
   public Type promote ()
@@ -176,22 +154,19 @@ public class ObjectType extends Type
     return getMethods(filter, searchSupers, result);
   }
 
-  public int getMethods (Filter filter, int searchSupers,
-                         /* #ifdef JAVA5 */
-                         List<Method>
-                         /* #else */
-                         // Vector
-                         /* #endif */
-			 result)
-  {
-    return Type.objectType.getMethods(filter, searchSupers, result);
-  }
+    public int getMethods (Filter filter, int searchSupers,
+                           List<Method> result) {
+        return Type.objectType.getMethods(filter, searchSupers, result);
+    }
 
-  public int compare(Type other)
-  {
-    // Assume this == nullType.
-    return other == nullType ? 0 : -1;
-  }
+    public int compare(Type other) {
+	if (this == other)
+	    return 0;
+	else if (this == nullType)
+	    return -1;
+	else
+	    return -3;
+    }
 
   /* #ifdef JAVA5 */
   @SuppressWarnings("unchecked")

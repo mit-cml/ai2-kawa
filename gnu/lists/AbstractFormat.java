@@ -1,7 +1,9 @@
 package gnu.lists;
 import gnu.mapping.*;
+import gnu.kawa.io.CharArrayOutPort;
+import gnu.kawa.io.OutPort;
+import gnu.kawa.io.Path;
 import java.text.FieldPosition;
-import gnu.text.Path;
 
 public abstract class AbstractFormat extends java.text.Format
 {
@@ -93,7 +95,7 @@ public abstract class AbstractFormat extends java.text.Format
       {
 	OutPort port = new OutPort(out, false, true);
 	writeObject(obj, (Consumer) out);
-	port.close();
+	port.closeThis();
       }
   }
 

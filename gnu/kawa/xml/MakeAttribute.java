@@ -10,11 +10,13 @@ import gnu.bytecode.*;
 public class MakeAttribute extends NodeConstructor
 {
   public static final MakeAttribute makeAttribute = new MakeAttribute();
+  public static final MakeAttribute makeAttributeS = new MakeAttribute();
+    static { makeAttributeS.setStringIsText(true); }
   public static final QuoteExp makeAttributeExp = new QuoteExp(makeAttribute);
 
   public int numArgs() { return 0xFFFFF001; }
 
-  public static void startAttribute(Consumer out, Object type)
+  public static void startAttribute(Consumer out, Symbol type)
   {
     out.startAttribute(type);
   }
@@ -26,17 +28,17 @@ public class MakeAttribute extends NodeConstructor
     try
       {
 	Object type = ctx.getNextArg();
-	startAttribute(out, type);
+	startAttribute(out, (Symbol) type);
 	Object endMarker = Special.dfault;
 	for (;;)
 	  {
 	    Object arg = ctx.getNextArg(endMarker);
 	    if (arg == endMarker)
 	      break;
-	    if (arg instanceof Consumable)
-	      ((Consumable) arg).consume(out);
-	    else
-	      ctx.writeValue(arg);
+            if (stringIsText)
+                writeContentS(arg, out);
+            else
+                writeContent(arg, out);
 	  }
 	out.endAttribute();
       }
@@ -55,11 +57,11 @@ public class MakeAttribute extends NodeConstructor
     CodeAttr code = comp.getCode();
     code.emitLoad(consumer);
     code.emitDup();
-    args[0].compile(comp, Target.pushObject);
+    args[0].compile(comp, CheckedTarget.getInstance(Compilation.typeSymbol));
     // Stack:  consumer, consumer, tagtype
     code.emitInvokeStatic(startAttributeMethod);
     for (int i = 1;  i < nargs;  i++)
-      compileChild(args[i], comp, target);
+      compileChild(args[i], stringIsText, comp, target);
     code.emitInvokeInterface(endAttributeMethod);
   }
 

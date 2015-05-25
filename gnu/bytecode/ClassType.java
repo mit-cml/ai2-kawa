@@ -1,4 +1,4 @@
-// Copyright (c) 1997, 1998, 1999, 2001, 2002, 2004, 2005, 2008, 2009  Per M.A. Bothner.
+// Copyright (c) 1997, 1998, 1999, 2001, 2002, 2004, 2005, 2008, 2009, 2011  Per M.A. Bothner.
 // This is free software;  for terms and warranty disclaimer see ./COPYING.
 
 package gnu.bytecode;
@@ -15,6 +15,7 @@ public class ClassType extends ObjectType
   public static final int JDK_1_5_VERSION = 49 * 0x10000 + 0;
   public static final int JDK_1_6_VERSION = 50 * 0x10000 + 0;
   public static final int JDK_1_7_VERSION = 51 * 0x10000 + 0;
+  public static final int JDK_1_8_VERSION = 52 * 0x10000 + 0;
 
   // An old but generally valid default value.
   int classfileFormatVersion = JDK_1_1_VERSION;
@@ -68,11 +69,12 @@ public class ClassType extends ObjectType
   /** The super (base) class of the current class.
    * X.superClass == null means the superClass has not been specified,
    * and defaults to java.lang.Object. */
-  ClassType superClass;
+  private ClassType superClass;
   /** The constant pool index of the superClass, or -1 if unassigned. */
   int superClassIndex = -1;
 
   ClassType[] interfaces;
+  private ClassType[] allInterfaces;
   int[] interfaceIndexes;
   int access_flags;
 
@@ -123,29 +125,23 @@ public class ClassType extends ObjectType
           {
             return reflectClass.getSimpleName();
           }
-        catch (Throwable ex)
+        catch (Exception ex)
           { /* ... fall thorugh ... */ }
       }
     /* #endif */
     String name = getName();
+    if (enclosingMember instanceof ClassType)
+      {
+        String enclosingName = ((ClassType) enclosingMember).getName();
+        int enclosingLength;
+        if (enclosingName != null && name.startsWith(enclosingName)
+            && name.length() > (enclosingLength = enclosingName.length()) + 1
+            && name.charAt(enclosingLength) == '$')
+          return name.substring(enclosingLength+1);
+      }
     int dot = name.lastIndexOf('.');
     if (dot > 0)
       name = name.substring(dot+1);
-    int dollar = name.lastIndexOf('$');
-    if (dollar >= 0)
-      {
-        int len = name.length();
-        int start = dollar + 1;
-        while (start < len)
-          {
-            char ch = name.charAt(start);
-            if (ch >= '0' && ch <= '9')
-              start++;
-            else
-              break;
-          }
-        name = name.substring(start);
-      }
     return name;
   }
 
@@ -269,7 +265,7 @@ public class ClassType extends ObjectType
 
   /** Note that this class needs an other link ("this$0") field.
    * This is only allowed if !isExisting().
-   * Adjust any existing "<init>" methods to take the extra
+   * Adjust any existing {@code "<init>"} methods to take the extra
    * implicit parameter.
    * @param outer the outer class
    */
@@ -357,8 +353,12 @@ public class ClassType extends ObjectType
   public void setName (String name)
   {
     this_name = name;
-    setSignature("L"+name.replace('.', '/')+";");
+    setSignature(nameToSignature(name));
   }
+
+    public static String nameToSignature(String name) {
+        return "L"+name.replace('.', '/')+";";
+    }
 
   SourceDebugExtAttr sourceDbgExt;
 
@@ -388,6 +388,24 @@ public class ClassType extends ObjectType
       name = name.substring(slash+1);
     SourceFileAttr.setSourceFile(this, name);
   }
+
+    TypeVariable[] typeParameters;
+
+    public TypeVariable[] getTypeParameters() {
+	TypeVariable[] params = typeParameters;
+	if (params == null && (flags & EXISTING_CLASS) != 0
+	    && getReflectClass() != null) {
+	    java.lang.reflect.TypeVariable[] rparams
+		= reflectClass.getTypeParameters();
+	    int nparams = rparams.length;
+	    params = new TypeVariable[nparams];
+	    for (int i = 0;  i < nparams;  i++) {
+		params[i] = TypeVariable.make(rparams[i]);
+	    }
+	    typeParameters = params;
+	}
+	return params;
+    }
 
   /**
    * Set the superclass of the is class.
@@ -442,6 +460,39 @@ public class ClassType extends ObjectType
     return interfaces;
   }
 
+    /** Get all the interfaces this class implements.
+     * Includes those inherited from its superclass/superinterfaces.
+     */
+    public synchronized ClassType[] getAllInterfaces() {
+        if (allInterfaces == null) {
+            LinkedHashMap<String,ClassType> map =
+                new LinkedHashMap<String,ClassType>();
+            for (ClassType t = this; t != null; t = t.getSuperclass()) {
+                if (! t.addInterfaces(map))
+                    return null;
+            }
+            ClassType[] allInts = new ClassType[map.size()];
+            int i = 0;
+            for (ClassType intf : map.values()) {
+                allInts[i++] = intf;
+            }
+            allInterfaces = allInts;
+        }
+        return allInterfaces;
+    }
+
+    private boolean addInterfaces(LinkedHashMap<String,ClassType> map) {
+        ClassType[] intfs = getInterfaces();
+        if (intfs == null)
+            return false;
+        for (ClassType intf : intfs) {
+            if (map.put(intf.getName(), intf) == null
+                && ! intf.addInterfaces(map))
+                return false;
+        }
+        return true;
+    }
+
   public void setInterfaces (ClassType[] interfaces)
   { this.interfaces = interfaces; }
 
@@ -475,6 +526,12 @@ public class ClassType extends ObjectType
     if (val) access_flags |= Access.INTERFACE|Access.ABSTRACT;
     else access_flags &= ~Access.INTERFACE|Access.ABSTRACT;
   }
+
+  public final boolean isFinal ()
+  { return (getModifiers() & Access.FINAL) != 0; }
+
+  public final boolean isAnnotation ()
+  { return (getModifiers() & Access.ANNOTATION) != 0; }
 
   public ClassType () { }
 
@@ -594,7 +651,7 @@ public class ClassType extends ObjectType
   }
 
   /** Use reflection to add all the declared fields of this class.
-   * Does not add private or package-private fields.
+   * Does not add private fields.
    * Does not check for duplicate (already-known) fields.
    * Is not thread-safe if another thread may access this ClassType. */
   public synchronized void addFields()
@@ -615,8 +672,13 @@ public class ClassType extends ObjectType
         java.lang.reflect.Field field = fields[i];
         if ("this$0".equals(field.getName()))
           flags |= HAS_OUTER_LINK;
-        addField(field.getName(), Type.make(field.getType()),
-                 field.getModifiers());
+        int mods = field.getModifiers();
+        if ((mods & Access.PRIVATE) == 0) {
+            Field fld = addField(field.getName(),
+                                 null, // lazy type lookup
+                                 mods);
+            fld.rfield = field;
+        }
       }
     flags |= ADD_FIELDS_DONE;
   }
@@ -679,12 +741,15 @@ public class ClassType extends ObjectType
   {
     int modifiers = method.getModifiers();
     Class[] paramTypes = method.getParameterTypes();
+    java.lang.reflect.Type[] gparamTypes = method.getGenericParameterTypes();
     int j = paramTypes.length;
     Type[] args = new Type[j];
     while (--j >= 0)
-      args[j] = Type.make(paramTypes[j]);
-    Type rtype = Type.make(method.getReturnType());
-    return addMethod(method.getName(), modifiers, args, rtype);
+	args[j] = Type.make(paramTypes[j], gparamTypes[j]);
+    Type rtype = Type.make(method.getReturnType(), method.getGenericReturnType());
+    Method meth = addMethod(method.getName(), modifiers, args, rtype);
+    meth.rmethod = method;
+    return meth;
   }
 
   public Method addMethod (java.lang.reflect.Constructor method)
@@ -695,7 +760,9 @@ public class ClassType extends ObjectType
     Type[] args = new Type[j];
     while (--j >= 0)
       args[j] = Type.make(paramTypes[j]);
-    return addMethod("<init>", modifiers, args, Type.voidType);
+    Method meth = addMethod("<init>", modifiers, args, Type.voidType);
+    meth.rmethod = method;
+    return meth;
   }
 
   public Method addMethod (String name,  String signature, int flags)
@@ -839,7 +906,7 @@ public class ClassType extends ObjectType
 
       if (searchSupers > 1)
 	{
-	  ClassType[] interfaces = ctype.getInterfaces();
+	  ClassType[] interfaces = ctype.getAllInterfaces();
 	  if (interfaces != null)
 	    {
 	      for (int i = 0;  i < interfaces.length;  i++)
@@ -907,14 +974,15 @@ public class ClassType extends ObjectType
     return null;
   }
 
-  /** Get a method with matching name and number of arguments. */
-  public synchronized Method getDeclaredMethod(String name, int argCount)
+  synchronized Method getDeclaredMethod(String name, boolean mustBeStatic, int argCount)
   {
     Method result = null;
     int needOuterLinkArg = "<init>".equals(name) && hasOuterLink() ? 1 : 0;
     for (Method method = getDeclaredMethods();
 	 method != null;  method = method.next)
       {
+        if (mustBeStatic && ! method.getStaticFlag())
+          continue;
 	if (name.equals(method.getName())
 	    && argCount + needOuterLinkArg == method.getParameterTypes().length)
 	  {
@@ -927,38 +995,42 @@ public class ClassType extends ObjectType
       }
     return result;
   }
-
-  public synchronized Method getMethod(String name, Type[] arg_types)
+  /** Get a method with matching name and number of arguments. */
+  public Method getDeclaredMethod(String name, int argCount)
   {
-    ClassType cl = this;
-    for (;;)
-      {
-        Method method = cl.getDeclaredMethod(name, arg_types);
-	if (method != null)
-          return method;
-        cl = cl.getSuperclass();
-        if (cl == null)
-          break;
-      }
-    cl = this;
-    for (;;)
-      {
-        ClassType[] interfaces = cl.getInterfaces();
-        if (interfaces != null)
-          {
-            for (int i = 0;  i < interfaces.length;  i++)
-              {
-                Method method
-                  = interfaces[i].getDeclaredMethod(name, arg_types);
-                if (method != null)
-                  return method;
-              }
-          }
-        cl = cl.getSuperclass();
-        if (cl == null)
-          break;
-      }
-    return null;
+    return getDeclaredMethod(name, false, argCount);
+  }
+
+  /** Get a static method with matching name and number of arguments. */
+  public Method getDeclaredStaticMethod(String name, int argCount)
+  {
+    return getDeclaredMethod(name, true, argCount);
+  }
+
+    /** Looks for a method matching the name and types.
+     * Note looks for an exact match, unless a type is null,
+     * not necessarily the best match.
+     */
+    public synchronized Method getMethod(String name, Type[] arg_types) {
+        for (ClassType cl = this; cl != null; cl = cl.getSuperclass()) {
+            Method m = cl.getDeclaredMethod(name, arg_types);
+            if (m != null)
+                return m;
+        }
+        ClassType[] interfaces = getAllInterfaces();
+        if (interfaces != null) {
+            for (int i = 0;  i < interfaces.length;  i++) {
+                Method m = interfaces[i].getDeclaredMethod(name, arg_types);
+                if (m != null)
+                    return m;
+            }
+        }
+        return null;
+    }
+
+  public Method getDefaultConstructor ()
+  {
+    return getDeclaredMethod("<init>", Type.typeArray0);
   }
 
   /** Use reflection to add all the declared methods of this class.
@@ -1153,7 +1225,7 @@ public class ClassType extends ObjectType
 
     Attribute.writeAll (this, dstr);
 
-    flags |= ADD_FIELDS_DONE | ADD_METHODS_DONE;
+    flags |= ADD_FIELDS_DONE | ADD_METHODS_DONE | ADD_ENCLOSING_DONE;
   }
 
   public void writeToFile (String filename)
@@ -1264,8 +1336,9 @@ public class ClassType extends ObjectType
   {
     if (other.isInterface())
       return implementsInterface(other);
-    if ((this == toStringType && other == javalangStringType)
-	|| (this == javalangStringType && other == toStringType))
+    if ((this == javalangStringType && other == toStringType))
+      return true;
+    if (other == Type.javalangObjectType)
       return true;
     ClassType baseClass = this;
     while (baseClass != null)
@@ -1276,6 +1349,23 @@ public class ClassType extends ObjectType
       }
     return false;
   }
+
+    @Override
+    public int isCompatibleWithValue(Type valueType) {
+        if (this == objectType && valueType instanceof ObjectType)
+            return 2;
+        int comp = compare(valueType);
+        if (comp >= 0) {
+            if (valueType instanceof ClassType
+                || valueType instanceof ParameterizedType
+                || valueType instanceof TypeVariable)
+                return 2;
+            else
+                return 1;
+        } else
+            return comp == -3 ? -1 : 0;
+    }
+
 
   public int compare(Type other)
   {
@@ -1291,14 +1381,12 @@ public class ClassType extends ObjectType
       return -1;
     if (cother.isSubclass(this))
       return 1;
-    if (this == toStringType)
-      return cother == Type.javalangObjectType ? -1 : 1;
-    if (cother == toStringType)
-      return this == Type.javalangObjectType ? 1 : -1;
     if (this.isInterface())
-      return cother == Type.javalangObjectType ? -1 : -2;
+      return cother.isAnnotation() || cother.isFinal() ? -3
+        : cother == Type.javalangObjectType ? -1 : -2;
     if (cother.isInterface())
-      return this == Type.javalangObjectType ? 1 : -2;
+      return isAnnotation() || isFinal() ? -3
+        : this == Type.javalangObjectType ? 1 : -2;
     return -3;
   }
 

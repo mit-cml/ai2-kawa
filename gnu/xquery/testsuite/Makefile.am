@@ -10,6 +10,7 @@ java_sources = TestMisc.java TestSuite.java RunXQTS.java
 
 EXTRA_DIST = tab.xml.in maketab1.xql tab.html usemod.exp \
   multab.xql expectedmul.xml descend.xql expdescend.xml \
+  latin1a.xql latin1a.expected latin1b.xml \
   auction.xml.in outline.xml.in usemod.xql mod1.xql mod2.xql mod2a.xql \
   bad-1.xql expected-1.errs XQTS-trace.exp xsltest1.xsl xsltest1.expected\
   bib.xml.in use-cases.xml book1.xml.in reviews.xml.in report1.xml.in \
@@ -28,7 +29,7 @@ RunXQTS.class:  RunXQTS.java
 
 XQTS_DIR = @XQTS_PATH@
 XQTS_CATALOG = $(XQTS_DIR)/XQTSCatalog.xml
-XQTS_JAVA_FLAGS = -Xmx100m
+XQTS_JAVA_FLAGS = -Xmx120m
 
 check-XQTS: RunXQTS.class
 	CLASSPATH=$(KAWALIB) \
@@ -38,7 +39,7 @@ check-XQTS: RunXQTS.class
 	  else echo FAIL XQuery trace output mismatch; fi
 
 check-misc: TestMisc.class
-	CLASSPATH=$(KAWALIB) $(JAVA) gnu.xquery.testsuite.TestMisc
+	CLASSPATH=$(KAWALIB) $(JAVA) -Dsrcdir=$(srcdir) gnu.xquery.testsuite.TestMisc
 
 check-suite:  TestSuite.class
 	CLASSPATH=$(KAWALIB) \
@@ -50,7 +51,7 @@ maketab1.class:  maketab1.xql
 # Should not run $(JAVA) when built --with-gcj, as that runs
 # interpreter gij.  Instead, should compile to native.
 check-maketab1:  maketab1.class
-	CLASSPATH=.:$(KAWALIB) $(JAVA) maketab1 >tmp2
+	CLASSPATH=".$(CLASSPATH_SEPARATOR)$(KAWALIB)" $(JAVA) maketab1 >tmp2
 	@if diff -b $(srcdir)/tab.html tmp2; then echo '# maketab1 test passes'; else echo FAIL maketab1 test; fi
 
 # FIXME - this does not do the correct thing
@@ -61,7 +62,7 @@ multab.class:  multab.xql
 	$(KAWA) --main --xquery -C $<
 
 check-multab:  multab.class
-	CLASSPATH=.:$(KAWALIB) $(JAVA) multab \
+	CLASSPATH=".$(CLASSPATH_SEPARATOR)$(KAWALIB)" $(JAVA) multab \
 	  max=10 caption="Multiplication table " out:xml-indent=pretty >tmpmul
 	@if diff -b $(srcdir)/expectedmul.xml tmpmul; then echo '# multab test passes'; else echo FAIL multab test; fi
 
@@ -69,8 +70,12 @@ descend.class:  descend.xql
 	$(KAWA) --main --xquery -C $<
 
 check-descend:  descend.class
-	CLASSPATH=.:$(KAWALIB) $(JAVA) descend >tmpdesc
+	CLASSPATH=".$(CLASSPATH_SEPARATOR)$(KAWALIB)" $(JAVA) descend >tmpdesc
 	@if diff -b $(srcdir)/expdescend.xml tmpdesc; then echo '# descend test passes'; else echo FAIL descend test; fi
+
+check-latin1a:
+	$(KAWA) --xquery $(srcdir)/latin1a.xql >tmplatin1a
+	@if diff -b $(srcdir)/latin1a.expected tmplatin1a; then echo '# latin1a test passes'; else echo FAIL latin1a test; fi
 
 check-xsltest1:
 	$(KAWA) --xslt -f $(srcdir)/xsltest1.xsl outline.xml >tmp-xsltest1.log
@@ -92,7 +97,7 @@ check-format-users:
 usemod.class: usemod.xql ./Mod1/mod1.class ./Mod2/mod2.class ./Mod2/mod2a.class
 	$(CLASSPATH_ENV) $(KAWA) --main -C $<
 check-mod: usemod.class
-	CLASSPATH=.:$(KAWALIB) $(JAVA) usemod >tmp-usemod
+	CLASSPATH=".$(CLASSPATH_SEPARATOR)$(KAWALIB)" $(JAVA) usemod >tmp-usemod
 	@if diff -b $(srcdir)/usemod.exp tmp-usemod; \
 	  then echo '# usemod test passes'; \
 	  else echo FAIL usemod test; fi
@@ -106,7 +111,8 @@ check-bad-1: bad-1.log
 	  else echo FAIL bad-1 test; fi
 
 check-without-XQTS:  check-misc check-suite check-maketab1 check-multab \
-	  check-descend check-format-users check-mod check-bad-1 check-xsltest1
+	  check-descend check-latin1a \
+	  check-format-users check-mod check-bad-1 check-xsltest1
 
 if WITH_XQTS
 check: check-without-XQTS check-XQTS

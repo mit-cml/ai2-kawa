@@ -4,6 +4,7 @@
 package gnu.expr;
 import gnu.bytecode.*;
 import gnu.mapping.Values;
+import gnu.kawa.reflect.LazyType;
 
 public class StackTarget extends Target
 {
@@ -19,6 +20,34 @@ public class StackTarget extends Target
             : new StackTarget(type));
   }
 
+    protected StackTarget getClonedInstance(Type type) {
+        return new StackTarget(type);
+    }
+
+    public static void forceLazyIfNeeded(Compilation comp, Type stackType, Type type) {
+	CodeAttr code = comp.getCode();
+	if (LazyType.maybeLazy(stackType) && ! LazyType.maybeLazy(type)) {
+            Type rawType = type.getRawType();
+            if (rawType.compare(stackType.getRawType()) < 0) {
+                Method forceMethod;
+                if (stackType instanceof LazyType) {
+                    forceMethod = LazyType.lazyType.getDeclaredMethod("getValue", 0);
+                } else {
+                    int nargsforce;
+                    if (rawType instanceof ClassType) {
+                        nargsforce = 2;
+                        comp.loadClassRef((ClassType) rawType);
+                    } else
+                        nargsforce = 1;
+                    forceMethod = ClassType.make("gnu.mapping.Promise")
+                        .getDeclaredStaticMethod("force", nargsforce);
+                }
+                code.emitInvoke(forceMethod);
+                stackType = stackType instanceof LazyType ? ((LazyType) stackType).getValueType() : Type.objectType;
+            }
+        }
+    }
+
   protected boolean compileFromStack0(Compilation comp, Type stackType)
   {
     return compileFromStack0(comp, stackType, type);
@@ -26,9 +55,11 @@ public class StackTarget extends Target
 
   static boolean compileFromStack0(Compilation comp, Type stackType, Type type)
   {
-    if (type == stackType)
-      return true;
     CodeAttr code = comp.getCode();
+    forceLazyIfNeeded(comp, stackType, type);
+
+    if (type == stackType || ! code.reachableHere())
+      return true;
     if (stackType.isVoid())
       {
 	comp.compileConstant (Values.empty);
@@ -51,8 +82,7 @@ public class StackTarget extends Target
         type.emitConvertFromPrimitive(stackType, code);
 	stackType = code.topType();
       }
-    return ! CodeAttr.castNeeded(stackType.getImplementationType(),
-                                 type.getImplementationType());
+    return type.isCompatibleWithValue(stackType) > 1;
   }
 
   public static void convert(Compilation comp, Type stackType, Type targetType)
@@ -79,9 +109,20 @@ public class StackTarget extends Target
       }
   }
 
-  public void compileFromStack(Compilation comp, Type stackType)
-  {
-    if (! compileFromStack0(comp, stackType))
-      emitCoerceFromObject(type, comp);
-  }
+    public void compileFromStack(Compilation comp, Type stackType) {
+        if (type instanceof LazyType && ! (stackType instanceof LazyType)) {
+            LazyType ltype = (LazyType) type;
+            if (! LazyType.maybeLazy(stackType))
+                getClonedInstance(ltype.getValueType()).compileFromStack(comp, stackType);
+            Method wrapMethod = ClassType.make("gnu.mapping.Promise").getDeclaredStaticMethod("coerceToLazy", 1);
+            comp.getCode().emitInvokeStatic(wrapMethod);
+            comp.getCode().emitCheckcast(ltype.getRawType());
+        }
+        else if (! compileFromStack0(comp, stackType))
+            doCoerce(comp);
+    }
+
+    protected void doCoerce(Compilation comp) {
+        emitCoerceFromObject(type, comp);
+    }
 }

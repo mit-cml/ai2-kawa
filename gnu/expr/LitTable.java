@@ -3,8 +3,7 @@ import java.io.*;
 import gnu.bytecode.*;
 import java.lang.reflect.Array;
 import java.util.*;
-import gnu.mapping.Table2D;
-import gnu.mapping.Values;
+import gnu.mapping.*;
 /* #ifdef use:java.util.regex */
 import java.util.regex.*;
 /* #endif */
@@ -39,7 +38,7 @@ public class LitTable implements ObjectOutput
 
   int literalsCount;
 
-  /** Rembembers literals to initialize (in <clinit>). */
+  /** Remembers literals to initialize (in <clinit>). */
   Literal literalsChain;
 
   public LitTable(Compilation comp)
@@ -332,7 +331,7 @@ public class LitTable implements ObjectOutput
 			    if (value == litValue)
 			      literal = lit;
 			  }
-			catch (Throwable ex)
+			catch (Exception ex)
 			  {
 			    error("caught "+ex+" getting static field "+fld);
 			  }
@@ -598,10 +597,17 @@ public class LitTable implements ObjectOutput
 	// We need to special case ClassTypes that are (currently)
 	// non-existing, because the corresponding reflective Class
 	// needs to be loaded using the correct ClassLoader.
-	comp.loadClassRef((ClassType) literal.value);
-        Method meth = Compilation.typeType.getDeclaredMethod("valueOf", 1);
-        if (meth == null)
-          meth = Compilation.typeType.getDeclaredMethod("make", 1);
+        ClassType ct = (ClassType) literal.value;
+        boolean isPair = literal.value instanceof PairClassType;
+        ClassType typeType = isPair ? ClassType.make("gnu.expr.PairClassType")
+            : Compilation.typeType;
+        Type[] atypes = new Type[isPair ? 2 : 1];
+        for (int i = atypes.length;  --i >= 0; )
+            atypes[i] = Type.javalangClassType;
+        Method meth = typeType.getDeclaredMethod("make", atypes);
+	comp.loadClassRef((ClassType) ct);
+        if (isPair)
+            comp.loadClassRef(((PairClassType) ct).instanceType);
 	code.emitInvokeStatic(meth);
 	code.emitCheckcast(Compilation.typeClassType);
 	store(literal, ignore, code);
@@ -617,8 +623,10 @@ public class LitTable implements ObjectOutput
 	    // Look for matching "valueOf" or "make" method.
             // (For backward compatibility for we prefer Symbol's 'make'
             // method over 'valueOf' - they differ in argument order.)
-            if (! (literal.value instanceof gnu.mapping.Symbol))
-              method = getMethod(type, "valueOf", literal, true);
+              if (! (literal.value instanceof Symbol))
+                method = getMethod(type, "valueOf", literal, true);
+              else if (literal.value instanceof SimpleSymbol)
+                method = getMethod(Compilation.typeSymbol, "valueOf", literal, true);
             if (method == null
                 // Values.make has return type Object, so use the constructor.
                 && ! (literal.value instanceof Values))
@@ -641,7 +649,9 @@ public class LitTable implements ObjectOutput
 	  }
 	if (useDefaultInit)
 	  {
-	    method = getMethod(type, "set", literal, false);
+	    method = getMethod(type, "init", literal, false);
+            if (method == null)
+                method = getMethod(type, "set", literal, false);
 	    // otherwise error;
 	  }
 	if (method == null && literal.argTypes.length > 0)

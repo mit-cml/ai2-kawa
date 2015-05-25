@@ -1,4 +1,4 @@
-(test-init "Objects" 135)
+(test-init "Objects" 143)
 
 ;; Force procedure to be applied without being inlined:
 (define-syntax force-eval
@@ -159,8 +159,11 @@
 
 (define-variable internal-node-name list)
 (require <module2>)
+(test "fun2" fun1)
+(test "fun1" 'fun2 (fun2))
+(test '("fun1" "fun2") fun1fun2)
 (test 4 list-length-1 '(a b c d))
-(test 2 list-length-3 '(a b))
+(test 2 list-length-5 '(a b))
 (test 0 length (classify))
 
 (test 3 length-diff1 "abcdef" "abc")
@@ -180,6 +183,14 @@
 (define-variable dvar2 3)
 (require <module3>)
 
+(test 13 'Savannah-bug-40822 (macro2))
+
+(let* ((all0 (all-zeros))
+       (nlen (gnu.lists.LList:listLength all0 #t)))
+  (test "#0=(0 . #0#) len:-1" 'Savannah-bug-43233
+        (format #f "~w len:~d" all0 nlen)))
+
+
 (define-variable dvar3 4)
 (test '(2 3 13) 'dvar-test-1 dvar-test-1)
 (set! dvar1 1)
@@ -192,6 +203,11 @@
 	(set3-mod0-v2 (+ 100 v2))
 	(list v2 (get3-mod0-v2))))
 (test 25 'test-mod2-v5  mod2-v5)
+
+;; Test for Savannah bug #34004: Nullpointer exception in compiler
+(test 1 check-thunk)
+
+(test '(1 2) 'counter-test-result counter-test-result)
 
 (define ts1 (make <MyTimestamp> 10 1))
 (define ts2 (make <MyTimestamp> 10 2))
@@ -247,6 +263,7 @@
 (test #t slot-ref (as <SimpleA> obj1) 'happy)
 (set! (field obj1 'happy) #f)
 (test #f field obj1 'happy)
+(test "a:5 b:(10 15)" 'with-var-arg (obj1:withVarArg 5 10 15))
 
 (define obj2 (make <SimpleB>))
 (test 4 field obj2 'a)
@@ -269,7 +286,7 @@
 (test 44 'obj4-f (invoke obj4 'f 2))
 
 (define (make-ClsD) (make <ClsD>))
-(define obj5 (make-ClsD))
+(define obj5 (let ((x ::cls-d (make-ClsD))) x))
 (test 23 'obj5-d (slot-ref obj5 'd))
 
 (define obj6 (make <ClsE>))

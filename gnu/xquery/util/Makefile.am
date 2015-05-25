@@ -26,11 +26,15 @@ java_sources = \
   RelativeStepFilter.java \
   SequenceUtils.java \
   StringUtils.java \
-  SubList.java \
   TimeUtils.java \
-  ValuesEvery.java \
   ValuesFilter.java \
   XQException.java
 
+java_SCM = Xutils.scm
+
 PACKAGE_FNAME = gnu-xquery-util
-all: Makefile java-classes.stamp $(@GCJ_COMPILED_SELECTED@)
+SCM_COMPILE_FLAGS = --warn-undefined-variable --warn-unknown-member --warn-as-error
+
+ALL = java-classes.stamp scm-classes.stamp $(@GCJ_COMPILED_SELECTED@)
+all: Makefile $(ALL)
+

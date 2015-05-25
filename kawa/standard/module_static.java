@@ -10,8 +10,8 @@ public class module_static extends Syntax
   public static final module_static module_static = new module_static();
   static { module_static.setName("module-static"); }
 
-  public boolean scanForDefinitions (Pair st, java.util.Vector forms,
-                                     ScopeExp defs, Translator tr)
+  @Override
+  public boolean scanForDefinitions(Pair st, ScopeExp defs, Translator tr)
   {
     Object list = st.getCdr();
     if (! (defs instanceof ModuleExp))
@@ -32,10 +32,11 @@ public class module_static extends Syntax
     else if (list instanceof Pair
              && (st = (Pair) list).getCdr() == LList.Empty
              && st.getCar() instanceof Pair
-             && tr.matches((st = (Pair) st.getCar()).getCar(), Scheme.quote_sym))
+             && tr.matches((st = (Pair) st.getCar()).getCar(), Scheme.quote_str))
       {
-        if ((st = (Pair)st.getCdr()) != LList.Empty
-            && st.getCar() instanceof SimpleSymbol
+        Object cdr = st.getCdr();
+        if (cdr != LList.Empty
+            && (st = (Pair) cdr).getCar() instanceof SimpleSymbol
             && st.getCar().toString() == "init-run")
           {
             // (module-static 'init-run) implies (module-static #t)

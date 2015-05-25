@@ -5,11 +5,9 @@ package gnu.mapping;
 
 /** A Location that can be used as an entry in an Environment. */
 
-public abstract class NamedLocation extends IndirectableLocation
+public abstract class NamedLocation<T> extends IndirectableLocation<T>
   implements
-  /* #ifdef JAVA2 */
-  java.util.Map.Entry /* <EnvironmentKey, Object> */,
-  /* #endif */
+  java.util.Map.Entry<EnvironmentKey, T>,
   EnvironmentKey
 {
   NamedLocation next;
@@ -69,7 +67,7 @@ public abstract class NamedLocation extends IndirectableLocation
     return Symbol.equals(symbol, this.name) && property == this.property;
   }
 
-  public final Object /*<EnvironmentKey>*/ getKey ()
+  public final EnvironmentKey getKey ()
   {
     if (property == null)
       return name;
@@ -104,19 +102,19 @@ public abstract class NamedLocation extends IndirectableLocation
     return h;
   }
 
-  public synchronized Object setWithSave (Object newValue)
-  {
-    if (value == INDIRECT_FLUIDS)
-      return base.setWithSave(newValue);
-    ThreadLocation thloc = ThreadLocation.makeAnonymous(name);
-    thloc.global.base = base;
-    thloc.global.value = value;
-    setAlias(thloc);
-    NamedLocation entry = thloc.getLocation();
-    entry.value = newValue;
-    entry.base = null;
-    return thloc.global;
-  }
+    public synchronized Object setWithSave(T newValue) {
+        Object old;
+        if (base != null) {        
+            if (value == INDIRECT_FLUIDS)
+                return base.setWithSave(newValue);
+            old = base;
+            base = null;
+        } else {
+            old = value;
+        }
+        value = newValue;
+        return old;
+    }
 
   public synchronized void setRestore (Object oldValue)
   {

@@ -45,6 +45,7 @@
 (define (get-car8 (p <pair>))  p:car)
 (define (get-car9 p)  (Pair3:.car p))
 (define (get-car10 p)  (<pair>:.car p))
+(define (get-car11 p::pair) (car p))
 
 (define (is-pair1 x) (<pair>:instance? x))
 (define (is-pair2 x) (gnu.lists.Pair:instance? x))
@@ -63,11 +64,11 @@
 (define (is-pair16 x) (Pair3? x))
 
 (define (cast-to-pair1 x) (<pair>:@ x))
-(define (cast-to-pair2 x) (gnu.lists.Pair:@ x))
+(define (cast-to-pair2 x) (->gnu.lists.Pair x))
 (define (cast-to-pair3 x) (<gnu.lists.Pair>:@ x))
 (define (cast-to-pair4 x) (Pair1:@ x))
 (define (cast-to-pair5 x) (Pair2:@ x))
-(define (cast-to-pair6 x) (Pair3:@ x))
+(define (cast-to-pair6 x) (->Pair3 x))
 (define (cast-to-pair7 x) (as <pair> x))
 (define (cast-to-pair9 x) (as <gnu.lists.Pair> x))
 (define (cast-to-pair10 x) (as Pair1:<> x))
@@ -141,6 +142,14 @@
 (define (varargs3 argtypes)
   (invoke gnu.math.IntNum 'getMethod "valueOf" argtypes))
 
+
+(define (top-level-recurse1 x::pair)
+  (set-car! x 123) 
+  (top-level-recurse1 x))
+
+(define (top-level-recurse2 a b)
+  (top-level-recurse2 b a))
+
 (define-namespace xx "XX")
 (define xx:two 222)
 (define list-two (list 'xx:Two))
@@ -187,7 +196,7 @@
                 (if x (g) (f)))))
     (f)))
 
-(define (check-even (x :: int))
+(define (check-even (x :: int)) ::boolean
   (letrec ((even?
 	    (lambda ((n1 :: int))
 	      (if (= n1 0)
@@ -199,3 +208,225 @@
 		  #f
 		  (even? (- n2 1))))))
     (even? x)))
+
+;; Same as check-even, but without return-type specifier
+(define (check-even-unspec-return (x :: int))
+  (letrec ((even?
+	    (lambda ((n1 :: int))
+	      (if (= n1 0)
+		  #t
+		  (odd? (- n1 1)))))
+	   (odd?
+	    (lambda ((n2 :: int))
+	      (if (= n2 0)
+		  #f
+		  (even? (- n2 1))))))
+    (even? x)))
+
+(define (constant-propagation1)
+  (define x :: int 6)
+  (define x2 (* x 2))
+  (+ x x2))
+
+(define (constant-propagation2)
+  (let ((cont2 (lambda (j::int) (+ 10 j))))
+    (cont2 3)))
+
+;; FIXME constant-folding is not done as well as we'd like.
+;; Partly caused by setting dval=null in InlineCalls:visitReferenceExp.
+;; The other problem is we visit a called Lambda (here cont2) before
+;; visiting the argument (here i).  That also means we visit the
+;; arguments without using the required parameter type.
+(define (constant-propagation3)
+  (let* ((i::int 2)
+         (cont2 (lambda (j::int) (+ i j))))
+    (cont2 i)))
+
+(define (factorial-infer1 (x ::int))
+  ;; The type of r should be inferred as integer.
+  (define r 1)
+  (do ((i ::int 1 (+ i 1)))
+      ((> i x) r)
+    (set! r (* r i))))
+
+;; FUTURE - would like to infer type of r as integer
+(define (factorial-infer2 (x ::int))
+  (do ((i ::int 1 (+ i 1)) (r 1 (* r i)))
+      ((> i x) r)))
+
+(define (get-from-vector1 x::gnu.lists.FVector[java.lang.Integer] i::int)
+  (x:get i))
+(define (get-from-vector2 x::gnu.lists.FVector[java.lang.Integer] i::int)
+  (x i))
+
+(define (sum1 n::integer)
+  (let loop ((i 0) (sum 0))
+    (if (< i n)
+        sum
+        (loop (+ i 1) (+ i sum)))))
+
+(define (sum2 n::double) ::double
+  (let loop ((i 0.0d0) (sum 0))
+    (if (< i n)
+        sum
+        (loop (+ i 1) (+ i sum)))))
+
+(define (numcomp1 x y) ::int
+  (if (< x y) 5 6))
+
+(define(numcomp2 x y) ::int
+  (let ((b (<= x y)))
+    (if b 4 5)))
+
+(define (numcomp3 x y z) ::int
+  (if (> x y z) 3 2))
+
+(define (numcomp4 x y z) ::int
+  (if (> x 10 y 5 z) 6 3))
+
+(define (numcomp5 x y z) ::int
+  (let ((b (> x 10 y 5 z)))
+    (if b 4 3)))
+
+(define (eqv1 x y)
+  (eqv? y x))
+
+(define (raise1 x::int y)
+  (if (< x 0) (raise y) (* x 2)))
+
+(define (read1 p::input-port) ::int
+  (let ((ch (read-char p)))
+    (cond ((eof-object? ch) 1)
+          ((char=? ch #\space) 2)
+          ((and (char-ci>=? ch #\A) (char-ci<=? ch #\Z)) 3)
+          (else 4))))
+
+(define (handle-char ch::character)::void
+  (format #t "{~w}" ch))
+(define (string-for-each1 str::string)::void
+  (string-for-each (lambda (x) (if (char>? x #\Space) (handle-char x))) str))
+(define (string-for-each2 str::string)::void
+  (string-for-each handle-char str))
+(import (kawa string-cursors))
+(define (string-for-each3 str::string)::void
+  (string-cursor-for-each (lambda (x) (if (char>? x #\Space) (handle-char x)))
+                          str))
+(define (string-for-each4 str::string
+                          start::string-cursor end::string-cursor)::void
+  (string-cursor-for-each handle-char str start end))
+(define (string-for-each5 str::string
+                          start::int end::int)::void
+  (srfi-13-string-for-each handle-char str start end))
+(define (string-for-each6 str::string)::void
+  (string-for-each
+   (lambda (x y z) (handle-char x) (handle-char y) (handle-char z))
+   str "BCDE" str))
+
+(define (string-append1 (str::gnu.lists.FString) (ch::char))
+  (string-append! str ch))
+
+(define (string-append2 (str::gnu.lists.FString) (ch::character))
+  (string-append! str ch))
+(define (string-append3 (str::gnu.lists.FString) (ch::gnu.lists.FString))
+  (string-append! str ch))
+(define (string-append4 (str::gnu.lists.FString) (ch::gnu.text.Char))
+  (string-append! str ch))
+(define (string-append5 (str::gnu.lists.FString) (ch::java.lang.Character))
+  (string-append! str ch))
+(define (string-append6 (str::gnu.lists.FString) ch)
+  (string-append! str ch))
+(define (string-append7 (str::gnu.lists.FString) ch1 (ch2::character))
+  (string-append! str ch1 ch2))
+
+(define (translate-space-to-newline str::string)::string
+  (let ((result (make-string 0)))
+    (string-for-each
+     (lambda (ch)
+       (string-append! result
+                       (if (char=? ch #\Space) #\Newline ch)))
+     str)
+    result))
+
+(define (case01)
+  (let ((key 5))
+    (case key
+      ((1 2 3 4) '1to4)
+      ((5 6 7 8) '5to8))))
+
+(define (case02)
+  (let ((key (* 2 3)))
+    (case key
+      ((1 2 3 4) '1to4)
+      ((5 6 7 8) '5to8))))
+
+(define (case03)
+  (let ((key 'five))
+    (case key
+      ((one two three four) '1to4)
+      ((five six seven eight) '5to8))))
+
+(define (case04 key)
+  (case key
+    ((1 2 3 4) (+ 5 (* 2 3)))
+    ((5 6 7 8) (* 2 (+ 3 4)))
+    (else (+ (* 3 2) 6))))
+
+(define (case05 key::int)
+  (case key
+    ((1 2 3 4) (+ 5 (* 2 3)))
+    ((5 6 7 8) (* 2 (+ 3 4)))
+    (else (+ (* 3 2) 6))))
+
+(define (case06 key::long)
+  (case key
+    ((1 2 3 4) (+ 5 (* 2 3)))
+    ((5 6 7 8) (* 2 (+ 3 4)))
+    (else (+ (* 3 2) 6))))
+
+(define (case07 key)
+  (case key
+    ((1 2 3 4) 1)
+    ((5 6 7 8) 2)
+    (else 3)))
+
+(define (case08 key::int)
+  (case key
+    ((1 2 3 4) 1)
+    ((5 6 7 8) 2)
+    (else 3)))
+
+(define (case09 key::long)
+  (case key
+    ((1 2 3 4) 1)
+    ((5 6 7 8) 2)
+    (else 3)))
+
+(define (case10 key)
+  (case key
+    ((1 2 3 4) '1to4)
+    ((5 6 7 8) '5to8)
+    (else 3)))
+
+(define (case11 key::int)
+  (case key
+    ((1 2 3 4) '1to4)
+    ((5 6 7 8) '5to8)
+    (else 3)))
+
+(define (case12 key::long)
+  (case key
+    ((1 2 3 4) '1to4)
+    ((5 6 7 8) '5to8)
+    (else 3)))
+
+(define (case13 key::integer)
+   (case key
+     ((1 2 3 4) 1)
+     ((5 6 7 8) 2)
+     (else 3)))
+
+(define (case14 key::char)
+   (case key
+     ((#\a #\b #\c #\d) 1)
+     ((#\e #\f #\g #\h) 2)
+     (else 3)))

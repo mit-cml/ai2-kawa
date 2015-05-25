@@ -1,3 +1,56 @@
+2014-05-07  Per Bothner  <per@bothner.com>
+
+	* Q2Translator.java (applyFunction): New method.
+	(makeApply): Remove method.
+
+2013-11-26  Per Bothner  <per@bothner.com>
+
+	* Q2Apply.java (apply): Use Values.writeValues.  This makes
+	SRFI-108 and SRFI-109 literals work in Q2.
+
+2013-08-25  Per Bothner  <per@bothner.com>
+
+	* Q2.lang (createReadTable): Update ReaderDispatch.create call.
+
+2012-09-18  Per Bothner  <per@bothner.com>
+
+	* Q2Read.java: Make a bit more robust for erroneous input.
+
+2011-07-11  Per Bothner  <per@bothner.com>
+
+	* Q2Read.java (readIndentCommand): Use updated LispReader API.
+
+2011-04-03  Per Bothner  <per@bothner.com>
+
+	* Q2Translator.java (isApplyFunction): New method.
+
+	* Q2Translator.java (makeApply): Make return type more precise.
+
+2011-03-18  Per Bothner  <per@bothner.com>
+
+	* Q2.java (getName): New method.
+
+2011-01-19  Per Bothner  <per@bothner.com>
+
+	* Q2.java (makeBody): Remove method.
+	(appendBodyValues): New method.
+	* Q2Translator.java: Change to extend SchemeCompilation.
+
+2011-01-17  Per Bothner  <per@bothner.com>
+
+	* Q2.java (getCompilationClass): New method.
+	(getCompilation): Removed method.
+	(makeApply): Moved method ...
+	* Q2Translator.java (makeApply): ... to here.
+
+2010-11-14  Per Bothner  <per@bothner.com>
+
+	* Operator.java: New class, extends Syntax.
+	* Q2Translator.java: New class - extends kawa.lang.Translator.
+	* Makefile.am: Update accordingly.
+	* Q2.java: Various fixes.
+	* Q2Read.java: Major changes to support new intentation parsing.
+
 2010-10-21  Per Bothner  <per@bothner.com>
 
 	* Q2.java (compareIndentation): New static method.

@@ -2,9 +2,11 @@ package kawa.lang;
 import gnu.mapping.*;
 import gnu.expr.*;
 import gnu.kawa.reflect.*;
-import gnu.bytecode.Type;
-import gnu.bytecode.ClassType;
 import gnu.bytecode.ArrayClassLoader;
+import gnu.bytecode.ClassType;
+import gnu.bytecode.Field;
+import gnu.bytecode.Member;
+import gnu.bytecode.Type;
 import gnu.bytecode.ZipLoader;
 import gnu.text.SourceMessages;
 import gnu.lists.*;
@@ -12,7 +14,17 @@ import gnu.kawa.lispexpr.*;
 import java.util.*;
 import gnu.kawa.functions.GetNamedPart;
 import gnu.kawa.functions.CompileNamedPart;
+import gnu.kawa.functions.MakeSplice;
+import gnu.kawa.functions.MultiplyOp;
+import gnu.kawa.xml.XmlNamespace;
+import gnu.math.DFloNum;
+import gnu.math.IntNum;
+import gnu.math.Unit;
+import kawa.standard.Scheme;
+import kawa.standard.expt;
+import gnu.text.Char;
 import gnu.text.SourceLocator;
+import gnu.text.StandardNamedChars;
 /* #ifdef enable:XML */
 import gnu.xml.NamespaceBinding;
 /* #endif */
@@ -40,15 +52,21 @@ public class Translator extends Compilation
 
   public Declaration templateScopeDecl;
 
+  /** A "mark" created for the current macro application.
+   * This is (more-or-less) the mark specified by the syntax-case
+   * specification (in r6rs-lib), applied to the output of a transformer.
+   * However, instead of "applying" a mark to the transformer output,
+   * we remember in the TemplateScope an object unique to the application.
+   */
+  Object currentMacroMark = null;
+
   /** A variable to hold the matched values for syntax-case
    * pattern variables. */
   public Declaration matchArray;
 
   /** A stack of aliases pushed by <code>pushRenamedAlias</code>. */
-  Stack renamedAliasStack;
+  private Stack<Declaration> renamedAliasStack;
 
-  public Stack formStack = new Stack();
-  public int firstForm;
   public Object pendingForm;
 
   public LambdaExp curMethodLambda;
@@ -69,13 +87,20 @@ public class Translator extends Compilation
 
   private static Expression errorExp = new ErrorExp ("unknown syntax error");
 
-  public Translator (Language language, SourceMessages messages, NameLookup lexical)
-  {
-    super(language, messages, lexical);
-    this.env = Environment.getCurrent();
-  }
+    public Translator(Language language, SourceMessages messages,
+                      NameLookup lexical, Environment env) {
+        super(language, messages, lexical);
+        this.env = env;
+    }
 
-  public final Environment getGlobalEnvironment() { return env; }
+    public Translator(Language language, SourceMessages messages,
+                      NameLookup lexical) {
+        super(language, messages, lexical);
+        this.env = Environment.getCurrent();
+    }
+
+    @Override
+    public final Environment getGlobalEnvironment() { return env; }
 
   public Expression parse (Object input)
   {
@@ -87,15 +112,14 @@ public class Translator extends Compilation
     if (syntax == null || syntax.getScope() == current_scope
 	|| pair.getCar() instanceof SyntaxForm)
       return rewrite_car(pair, false);
-    ScopeExp save_scope = current_scope;
+    ScopeExp save_scope = setPushCurrentScope(syntax.getScope());
     try
       {
-	setCurrentScope(syntax.getScope());
 	return rewrite_car(pair, false);
       }
     finally
       {
-	setCurrentScope(save_scope);
+	setPopCurrentScope(save_scope);
       }
   }
 
@@ -107,6 +131,24 @@ public class Translator extends Compilation
     else
       return rewrite (car, function);
   }
+
+    /** Similar to rewrite_car.
+     * However, we check for (quasiquote exp) specially, and handle that
+     * directly.  This is in case quasiquote isn't in scope.
+     */
+    public final Expression rewrite_car_for_lookup(Pair pair) {
+        Object car = pair.getCar();
+        if (car instanceof Pair) {
+            Pair pcar = (Pair) car;
+            if (pcar.getCar() == LispLanguage.quasiquote_sym) {
+                Object pos = pushPositionOf(pair);
+                Expression ret = Quote.quasiQuote.rewrite(pcar.getCdr(), this);
+                popPositionOf(pos);
+                return ret;
+            }
+        }
+        return rewrite_car(pair, false);
+    }
 
   Syntax currentSyntax;
   public Syntax getCurrentSyntax() { return currentSyntax; }
@@ -152,6 +194,10 @@ public class Translator extends Compilation
       }
     return null;
   }
+
+    public final boolean keywordsAreSelfEvaluating() {
+        return ((LispLanguage) getLanguage()).keywordsAreSelfEvaluating();
+    }
 
   public final boolean selfEvaluatingSymbol (Object obj)
   {
@@ -207,7 +253,7 @@ public class Translator extends Compilation
 
   public Object matchQuoted (Pair pair)
   {
-    if (matches(pair.getCar(), LispLanguage.quote_sym)
+    if (matches(pair.getCar(), LispLanguage.quote_str)
         && pair.getCdr() instanceof Pair
         && (pair = (Pair) pair.getCdr()).getCdr() == LList.Empty)
       return pair.getCar();
@@ -268,6 +314,10 @@ public class Translator extends Compilation
               macroContext = ((TemplateScope) current_scope).macroContext;
             obj = dval.eval(env);
           }
+        catch (Error ex)
+          {
+            throw ex;
+          }
         catch (Throwable ex)
           {
             ex.printStackTrace();
@@ -284,7 +334,17 @@ public class Translator extends Compilation
 
   public Expression rewrite_pair (Pair p, boolean function)
   {
-    Expression func = rewrite_car (p, true);
+    Object p_car = p.getCar();
+    Expression func;
+    boolean useHelper = true;
+    if (p_car instanceof Pair
+        && ((Pair) p_car).getCar() == LispLanguage.splice_sym) {
+        func = gnu.kawa.reflect.MakeAnnotation.makeAnnotationMaker
+            (rewrite_car((Pair) ((Pair) p_car).getCdr(), false));
+        useHelper = false;
+    }
+    else
+        func = rewrite_car (p, true);
     Object proc = null;
     if (func instanceof QuoteExp)
       {
@@ -335,6 +395,21 @@ public class Translator extends Compilation
 	  {
             Declaration saveContext = macroContext;
             Syntax syntax = check_if_Syntax (decl);
+            if (syntax == null)
+            {
+                Expression dval = Declaration.followAliases(decl).getValue();
+                Object val = dval == null ? null : dval.valueIfConstant();
+                SimpleSymbol eqmacSymbol = Symbol.valueOf("equivalent-syntax");
+                Object syn;
+                if (dval instanceof LambdaExp)
+                    syn = ((LambdaExp) dval).getProperty(eqmacSymbol, null);
+                else if (val instanceof Procedure)
+                    syn = ((Procedure) val).getProperty(eqmacSymbol, null);
+                else
+                    syn = null;
+                if (syn instanceof Procedure)
+                    syntax = new Macro(null, (Procedure) syn);
+            }
             if (syntax != null)
               {
                 Expression e = apply_rewrite (syntax, p);
@@ -348,73 +423,108 @@ public class Translator extends Compilation
 	  func.setFlag(ReferenceExp.PREFER_BINDING2);
       }
 
+    boolean isNamedPartDecl = func instanceof ReferenceExp
+        && (((ReferenceExp) func).getBinding()==getNamedPartDecl);
+    if (isNamedPartDecl)
+      useHelper = false;
+
     Object cdr = p.getCdr();
     int cdr_length = listLength(cdr);
 
-    if (cdr_length == -1)
-      return syntaxError("circular list is not allowed after "+p.getCar());
     if (cdr_length < 0)
-      return syntaxError("dotted list ["+cdr+"] is not allowed after "+p.getCar());
+      return syntaxError
+          ("improper list (circular or dotted) is not allowed here");
+    Expression applyFunction =  useHelper ? applyFunction(func) : null;
 
-    boolean mapKeywordsToAttributes = false;
     Stack vec = new Stack();
+    if (applyFunction != null) {
+        vec.add(func);
+        func = applyFunction;
+    }
 
     ScopeExp save_scope = current_scope;
+    int first_keyword = -1;
+    int last_keyword = -1;
+    int firstSpliceArg = -1;
     for (int i = 0; i < cdr_length;)
       {
 	if (cdr instanceof SyntaxForm)
 	  {
 	    SyntaxForm sf = (SyntaxForm) cdr;
 	    cdr = sf.getDatum();
+	    // I.e. first time do equivalent of setPushCurrentScope
+            if (current_scope == save_scope)
+              lexical.pushSaveTopLevelRedefs();
 	    setCurrentScope(sf.getScope());
 	  }
+        Object save_pos = pushPositionOf(cdr);
 	Pair cdr_pair = (Pair) cdr;
-	Expression arg = rewrite_car (cdr_pair, false);
+        Object cdr_car = cdr_pair.getCar();
+        Expression arg;
+        if (cdr_car instanceof Keyword) {
+            if (first_keyword < 0)
+                first_keyword = i;
+            else if (keywordsAreSelfEvaluating())
+                ;
+            else if (i == last_keyword + 1 || i + 1 == cdr_length)
+                error('w', "missing keyword value");
+            else if (i != last_keyword + 2)
+                error('w', "keyword separated from other keyword arguments");
+            last_keyword = i;
+            arg = QuoteExp.getInstance(cdr_car, this);
+            arg.setFlag(QuoteExp.IS_KEYWORD);
+        }
+        else {
+            if (cdr_car instanceof Pair
+                && ((Pair) cdr_car).getCar() == LispLanguage.splice_sym) {
+                arg = rewrite_car((Pair) ((Pair) cdr_car).getCdr(), false);
+                arg = new ApplyExp(MakeSplice.quoteInstance, arg);
+                if (firstSpliceArg < 0)
+                    firstSpliceArg = i + (applyFunction != null ? 1 : 0);
+            }
+            else 
+                arg = rewrite_car (cdr_pair, false);
+        }
         i++;
-
-        if (mapKeywordsToAttributes)
-          {
-            if ((i & 1) == 0) // Previous iteration was a keyword
-              {
-                Expression[] aargs = new Expression[2];
-                aargs[0] = (Expression) vec.pop();
-                aargs[1] = arg;
-                arg = new ApplyExp(gnu.kawa.xml.MakeAttribute.makeAttribute, aargs);
-              }
-            else
-              {
-                Object value;
-                if (arg instanceof QuoteExp
-                    && (value = ((QuoteExp) arg).getValue()) instanceof Keyword
-                    && i < cdr_length)
-                  arg = new QuoteExp(((Keyword) value).asSymbol());
-                else
-                  mapKeywordsToAttributes = false;
-              }
-          }
 
         vec.addElement(arg);
 	cdr = cdr_pair.getCdr();
+        popPositionOf(save_pos);
       }
+
+
     Expression[] args = new Expression[vec.size()];
     vec.copyInto(args);
 
     if (save_scope != current_scope)
-      setCurrentScope(save_scope);
+      setPopCurrentScope(save_scope);
 
-    if (func instanceof ReferenceExp
-        && (((ReferenceExp) func).getBinding()==getNamedPartDecl))
+    if (isNamedPartDecl)
+        return rewrite_lookup(args[0], args[1], function);
+
+    ApplyExp app = new ApplyExp(func, args);
+    app.firstSpliceArg = firstSpliceArg;
+    if (first_keyword >= 0)
       {
-        Expression part1 = args[0];
-        Expression part2 = args[1];
+        app.numKeywordArgs = (last_keyword - first_keyword) / 2 + 1;
+        app.firstKeywordArgIndex = first_keyword + (applyFunction != null ? 2 : 1);
+      }
+    return app;
+  }
+
+    public Expression rewrite_lookup(Expression part1, Expression part2, boolean function) {
         Symbol sym = namespaceResolve(part1, part2);
         if (sym != null)
           return rewrite(sym, function);
         // FIXME don't copy the args array in makeExp ...
         return CompileNamedPart.makeExp(part1, part2);
-      }
-    return ((LispLanguage) getLanguage()).makeApply(func, args);
-  }
+    }
+
+    /** A language-dependent "apply" function for generic application.
+     */
+    public Expression applyFunction(Expression func) {
+        return null;
+    }
 
   public Namespace namespaceResolvePrefix (Expression context)
   {
@@ -492,7 +602,7 @@ public class Translator extends Compilation
    * Returns Integer.MIN_VALUE for cyclic lists.
    * For impure lists returns the negative of one more than
    * the number of pairs before the "dot".
-   * Similar to LList.listLength, but descends into SyntaxForm. */
+   * Similar to LList.listLength, but handles SyntaxForm more efficiently. */
   public static int listLength(Object obj)
   {
     // Based on list-length implementation in
@@ -532,16 +642,27 @@ public class Translator extends Compilation
     if (exp instanceof SyntaxForm)
       {
 	SyntaxForm sf = (SyntaxForm) exp;
-	ScopeExp save_scope = current_scope;
+	ScopeExp save_scope = setPushCurrentScope(sf.getScope());
 	try
 	  {
-	    setCurrentScope(sf.getScope());
 	    rewriteInBody(sf.getDatum());
 	  }
 	finally
 	  {
-	    setCurrentScope(save_scope);
+	    setPopCurrentScope(save_scope);
 	  }
+      }
+    else if (exp instanceof ValuesFromLList)
+      {
+          // Optimization of following case.
+          // More importantly, we make use of the line number information.
+          for (Object vs = ((ValuesFromLList) exp).values;
+               vs != LList.Empty; )
+          {
+              Pair p = (Pair) vs;
+              pushForm(rewrite_car(p, false));
+              vs = p.getCdr();
+          }
       }
     else if (exp instanceof Values)
       {
@@ -550,260 +671,546 @@ public class Translator extends Compilation
 	  rewriteInBody(vals[i]);
       }
     else
-      formStack.add(rewrite(exp, false));
+      pushForm(rewrite(exp, false));
   }
 
-  /**
-   * Re-write a Scheme expression in S-expression format into internal form.
-   */
-  public Expression rewrite (Object exp)
-  {
-    return rewrite(exp, false);
-  }
-
-  public Object namespaceResolve (Object name)
-  {
-    if (! (name instanceof SimpleSymbol))
-      {
+    public Object namespaceResolve(Object name) {
+        Object prefix = null;
+        Expression part2 = null;
         Pair p;
         if (name instanceof Pair
             && safeCar(p = (Pair) name) == LispLanguage.lookup_sym
             && p.getCdr() instanceof Pair
-            && (p = (Pair) p.getCdr()).getCdr() instanceof Pair)
-          {
-            Expression part1 = rewrite(p.getCar());
-            Expression part2 = rewrite(((Pair) p.getCdr()).getCar());
+            && (p = (Pair) p.getCdr()).getCdr() instanceof Pair) {
+            prefix = namespaceResolve(p.getCar());
+            if (! (stripSyntax(prefix) instanceof Symbol))
+                return name;
+            part2 = rewrite_car_for_lookup((Pair) p.getCdr());
+        }
+        else if (name instanceof Symbol) {
+            Symbol s = (Symbol) name;
+            if (s.hasUnknownNamespace()) {
+                String loc = s.getLocalPart();
+                prefix = Symbol.valueOf(s.getPrefix());
+                part2 = QuoteExp.getInstance(Symbol.valueOf(s.getLocalPart()));
+            }
+        }
+        if (part2 != null) {
+            Expression part1 = rewrite(prefix);
             Symbol sym = namespaceResolve(part1, part2);
             if (sym != null)
-              return sym;
+                return sym;
             String combinedName = CompileNamedPart.combineName(part1, part2);
             if (combinedName != null)
-              return Namespace.EmptyNamespace.getSymbol(combinedName);
-          }
-      }
-    return name;
-  }
+                return Namespace.EmptyNamespace.getSymbol(combinedName);
+        }
+        return name;
+    }
 
-  /**
-   * Re-write a Scheme expression in S-expression format into internal form.
-   */
-  public Expression rewrite (Object exp, boolean function)
-  {
-    if (exp instanceof SyntaxForm)
-      {
-	SyntaxForm sf = (SyntaxForm) exp;
-	ScopeExp save_scope = current_scope;
-	try
-	  {
-	    setCurrentScope(sf.getScope());
-	    Expression s = rewrite(sf.getDatum(), function);
-	    return s;
-	  }
-	finally
-	  {
-	    setCurrentScope(save_scope);
-	  }
-      }
-    if (exp instanceof PairWithPosition)
-      return rewrite_with_position (exp, function, (PairWithPosition) exp);
-    else if (exp instanceof Pair)
-      return rewrite_pair((Pair) exp, function);
-    else if (exp instanceof Symbol && ! selfEvaluatingSymbol(exp))
-      {
-	Declaration decl = lexical.lookup(exp, function);
-        Declaration cdecl = null;
+    /**
+     * Re-write a Scheme expression in S-expression format into internal form.
+     */
+    public Expression rewrite(Object exp) {
+        return rewrite(exp, 'N');
+    }
 
-        // If we're nested inside a class (in a ClassExp) then the field
-        // and methods names of this class and super-classes/interfaces
-        // need to be searched.
-        ScopeExp scope = current_scope;
-        int decl_nesting = decl == null ? -1 : ScopeExp.nesting(decl.context);
-        String dname;
-        if (exp instanceof Symbol && ((Symbol) exp).hasEmptyNamespace())
-          dname = exp.toString();
-        else
-          {
-            dname = null;
-            scope = null;
-          }
-        for (;scope != null; scope = scope.outer)
-          {
-            if (scope instanceof LambdaExp
-                && scope.outer instanceof ClassExp // redundant? FIXME
-                && ((LambdaExp) scope).isClassMethod())
-              {
-                if (decl_nesting >= ScopeExp.nesting(scope.outer))
-                  break;
-                LambdaExp caller = (LambdaExp) scope;
-                ClassExp cexp = (ClassExp) scope.outer;
-                ClassType ctype = (ClassType) cexp.getClassType();
-                Object part = SlotGet.lookupMember(ctype, dname, ctype);
-                boolean contextStatic
-                  = (caller == cexp.clinitMethod
-                     || (caller != cexp.initMethod 
-                         && caller.nameDecl.isStatic()));
-                if (part == null)
-                  {
-                    char mode = contextStatic ? 'S' : 'V';
-                    PrimProcedure[] methods
-                      = ClassMethods.getMethods(ctype, dname,
-                                                mode, ctype, language);
-                    if (methods.length == 0)
-                      continue;
-                  }
-                Expression part1;
-                // FIXME We're throwing away 'part', which is wasteful.
-                if (contextStatic)
-                  part1 = new ReferenceExp(((ClassExp) caller.outer).nameDecl);
-                else
-                  part1 = new ThisExp(caller.firstDecl());
-                return CompileNamedPart.makeExp(part1,
-                                            QuoteExp.getInstance(dname));
-              }
-          }
+    /**
+     * Re-write a Scheme expression in S-expression format into internal form.
+     */
+    public Expression rewrite(Object exp, boolean function) {
+        return rewrite(exp, function ? 'F' : 'N');
+    }
 
-	Object nameToLookup;
-	if (decl != null)
-	  {
-	    nameToLookup = decl.getSymbol();
-	    exp = null;
-	    ReferenceExp rexp = getOriginalRef(decl);
-	    if (rexp != null)
-	      {
-		decl = rexp.getBinding();
-		if (decl == null)
-		  {
-		    exp = rexp.getSymbol();
-		    nameToLookup = exp;
-		  }
-	      }
-	  }
-	else
-	  {
-	    nameToLookup = exp;
-	  }
-	Symbol symbol = (Symbol) exp;
-	boolean separate = getLanguage().hasSeparateFunctionNamespace();
-        if (decl != null)
-          {
-            if (current_scope instanceof TemplateScope && decl.needsContext())
-              cdecl = ((TemplateScope) current_scope).macroContext;
-            else if (decl.getFlag(Declaration.FIELD_OR_METHOD)
-                     && ! decl.isStatic())
-              {
-                scope = currentScope();
-                for (;;)
-                  {
-                    if (scope == null)
-                      throw new Error("internal error: missing "+decl);
-                    if (scope.outer == decl.context) // I.e. same class.
-                      break;
-                    scope = scope.outer;
-                  }
-                cdecl = scope.firstDecl();
-              }
-          }
-        else
-          {
-	    Location loc
-	      = env.lookup(symbol,
-			   function && separate ? EnvironmentKey.FUNCTION
-			   : null);
-	    if (loc != null)
-	      loc = loc.getBase();
-            if (loc instanceof FieldLocation)
-              {
-                FieldLocation floc = (FieldLocation) loc;
-                try
-                  {
-                    decl = floc.getDeclaration();
-                    if (! inlineOk(null)
-                        // A kludge - we get a bunch of testsuite failures
-                        // if we don't inline $lookup$.  FIXME.
-                        && (decl != getNamedPartDecl
-                            && ! ("objectSyntax".equals(floc.getMemberName())
-                                  // Another kludge to support "object" as a
-                                  // type specifier.
-                                  && "kawa.standard.object".equals(floc. getDeclaringClass().getName()))))
-                      decl = null;
-                    else if (immediate)
-                      {
-                        if (! decl.isStatic())
-                          {
-                            cdecl = new Declaration("(module-instance)");
-                            cdecl.setValue(new QuoteExp(floc.getInstance()));
-                          }
-                      }
-                    else if (decl.isStatic())
-                      {
-                        // If the class has been loaded through ZipLoader
-                        // or ArrayClassLoader then it might not be visible
-                        // if loaded through some other ClassLoader.
-                        Class fclass = floc.getRClass();
-                        ClassLoader floader;
-                        if (fclass == null
-                            || ((floader = fclass.getClassLoader())
-                                instanceof ZipLoader)
-                            || floader instanceof ArrayClassLoader)
-                          decl = null;
-                      }
+    /** Re-write a Scheme expression in S-expression format into internal form.
+     * @param mode either 'N' (normal), 'F' (function application context),
+     *  or 'M' (macro-checking).
+     */
+    public Expression rewrite(Object exp, char mode) {
+        if (exp instanceof SyntaxForm) {
+            SyntaxForm sf = (SyntaxForm) exp;
+            ScopeExp save_scope = setPushCurrentScope(sf.getScope());
+            try {
+                Expression s = rewrite(sf.getDatum(), mode);
+                return s;
+            } finally {
+                setPopCurrentScope(save_scope);
+            }
+        }
+        boolean function = mode != 'N';
+        if (exp instanceof PairWithPosition)
+            return rewrite_with_position (exp, function, (PairWithPosition) exp);
+        else if (exp instanceof Pair)
+            return rewrite_pair((Pair) exp, function);
+        else if (exp instanceof Symbol && ! selfEvaluatingSymbol(exp)) {
+            Symbol s = (Symbol) exp;
+            if (s.hasUnknownNamespace()) {
+                String loc = s.getLocalPart();
+                return rewrite_lookup(rewrite(Symbol.valueOf(s.getPrefix()), false),
+                                      QuoteExp.getInstance(Symbol.valueOf(s.getLocalPart())),
+                                      function);
+            }
+            Declaration decl = lexical.lookup(exp, function);
+            Declaration cdecl = null;
+
+            // If we're nested inside a class (in a ClassExp) then the field
+            // and methods names of this class and super-classes/interfaces
+            // need to be searched.
+            ScopeExp scope = current_scope;
+            int decl_nesting = decl == null ? -1 : ScopeExp.nesting(decl.context);
+            String dname;
+            if (exp instanceof SimpleSymbol)
+                dname = exp.toString();
+            else {
+                dname = null;
+                scope = null;
+            }
+            for (;scope != null; scope = scope.getOuter()) {
+                if (scope instanceof LambdaExp
+                    && scope.getOuter() instanceof ClassExp // redundant? FIXME
+                    && ((LambdaExp) scope).isClassMethod()
+                    && mode != 'M') {
+                    if (decl_nesting >= ScopeExp.nesting(scope.getOuter()))
+                        break;
+                    LambdaExp caller = (LambdaExp) scope;
+                    ClassExp cexp = (ClassExp) scope.getOuter();
+                    ClassType ctype = (ClassType) cexp.getClassType();
+                    // BUG: lookupMember doesn't work if ctype
+                    // is a class that hasn't been compiled yet,
+                    // such that ClassExp#declareParts hasn't been called.
+                    Member part = SlotGet.lookupMember(ctype, dname, ctype);
+                    boolean contextStatic
+                        = (caller == cexp.clinitMethod
+                           || (caller != cexp.initMethod 
+                               && caller.nameDecl.isStatic()));
+                    if (part == null) {
+                        PrimProcedure[] methods
+                            = ClassMethods.getMethods(ctype, dname,
+                                                      contextStatic ? 'S' : 'V',
+                                                      ctype, language);
+                        if (methods.length == 0)
+                            continue;
+                    } else if (decl != null && ! dname.equals(part.getName())) {
+                        continue;
+                    }
+                    Expression part1;
+                    // FIXME We're throwing away 'part', which is wasteful.
+                    if (contextStatic)
+                        part1 = new ReferenceExp(((ClassExp) caller.getOuter()).nameDecl);
                     else
-                      decl = null;
-                  }
-                catch (Throwable ex)
-                  {
-                    error('e',
-                          "exception loading '" + exp
-                          + "' - " + ex.getMessage());
-                    decl = null;
-                  }
-              }
-            else if (loc == null || ! loc.isBound())
-              {
-                Expression e
-                  = ((LispLanguage) getLanguage()).checkDefaultBinding(symbol, this);
-                if (e != null)
-                  return e;
-              }
-	    /*
-            else if (Compilation.inlineOk && function)
-              {
-		// Questionable.  fail with new set_b implementation,
-		// which just call rewrite_car on the lhs,
-		// if we don't require function to be true.  FIXME.
-                decl = Declaration.getDeclaration(proc);
-              }
-            */
-          }
-	if (decl != null)
-          {
-            // A special kludge to deal with the overloading between the
-            // object macro and object as being equivalent to java.lang.Object.
-            // A cleaner solution would be to use an identifier macro.
-            if (! function
-                && decl.getConstantValue() instanceof kawa.standard.object)
-              return QuoteExp.getInstance(Object.class);
+                        part1 = new ThisExp(caller.firstDecl());
+                    return CompileNamedPart.makeExp(part1,
+                                                    QuoteExp.getInstance(dname));
+                }
+            }
 
-            if (decl.getContext() instanceof PatternScope)
-              return syntaxError("reference to pattern variable "+decl.getName()+" outside syntax template");
-          }
+            Object nameToLookup;
+            if (decl != null) {
+                nameToLookup = decl.getSymbol();
+                exp = null;
+                ReferenceExp rexp = getOriginalRef(decl);
+                if (rexp != null) {
+                    decl = rexp.getBinding();
+                    if (decl == null) {
+                        exp = rexp.getSymbol();
+                        nameToLookup = exp;
+                    }
+                }
+            } else {
+                nameToLookup = exp;
+            }
+            Symbol symbol = (Symbol) exp;
+            boolean separate = getLanguage().hasSeparateFunctionNamespace();
+            if (decl != null) {
+                if (current_scope instanceof TemplateScope && decl.needsContext())
+                    cdecl = ((TemplateScope) current_scope).macroContext;
+                else if (decl.getFlag(Declaration.FIELD_OR_METHOD)
+                         && ! decl.isStatic()) {
+                    scope = currentScope();
+                    for (;;) {
+                        if (scope == null)
+                            throw new Error("internal error: missing "+decl);
+                        if (scope.getOuter() == decl.context) // I.e. same class.
+                            break;
+                        scope = scope.getOuter();
+                    }
+                    cdecl = scope.firstDecl();
+                }
+            } else {
+                Location loc
+                    = env.lookup(symbol,
+                                 function && separate ? EnvironmentKey.FUNCTION
+                                 : null);
+                if (loc != null)
+                    loc = loc.getBase();
+                if (loc instanceof FieldLocation) {
+                    FieldLocation floc = (FieldLocation) loc;
+                    try {
+                        decl = floc.getDeclaration();
+                        if (! inlineOk(null)
+                            // A kludge - we get a bunch of testsuite failures
+                            // if we don't inline $lookup$.  FIXME.
+                            && (decl != getNamedPartDecl
+                                // Another kludge to support "object" as a
+                                // type specifier.
+                                && ! isObjectSyntax(floc.getDeclaringClass(),
+                                                    floc.getMemberName())))
+                            decl = null;
+                        else if (immediate) {
+                            if (! decl.isStatic()) {
+                                cdecl = new Declaration("(module-instance)");
+                                cdecl.setValue(new QuoteExp(floc.getInstance()));
+                            }
+                        } else if (decl.isStatic()) {
+                            // If the class has been loaded through ZipLoader
+                            // or ArrayClassLoader then it might not be visible
+                            // if loaded through some other ClassLoader.
+                            Class fclass = floc.getRClass();
+                            ClassLoader floader;
+                            if (fclass == null
+                                || ((floader = fclass.getClassLoader())
+                                    instanceof ZipLoader)
+                                || floader instanceof ArrayClassLoader)
+                                decl = null;
+                        } else
+                            decl = null;
+                    } catch (Exception ex) {
+                        error('e',
+                              "exception loading '" + exp
+                              + "' - " + ex.getMessage());
+                        decl = null;
+                    }
+                }
+                else if (mode != 'M' && (loc == null || ! loc.isBound()))
+                {
+                    Expression e = checkDefaultBinding(symbol, this);
+                    if (e != null)
+                        return e;
+                }
+                /*
+                else if (Compilation.inlineOk && function) {
+                    // Questionable.  fail with new set_b implementation,
+                    // which just call rewrite_car on the lhs,
+                    // if we don't require function to be true.  FIXME.
+                    decl = Declaration.getDeclaration(proc);
+                }
+                */
+            }
+            if (decl != null) {
+                // A special kludge to deal with the overloading between the
+                // object macro and object as being equivalent to java.lang.Object.
+                // A cleaner solution would be to use an identifier macro.
+                Field dfield = decl.field;
+                if (! function && dfield != null
+                    && isObjectSyntax(dfield.getDeclaringClass(),
+                                      dfield.getName()))
+                    return QuoteExp.getInstance(Object.class);
 
-	ReferenceExp rexp = new ReferenceExp (nameToLookup, decl);
-        rexp.setContextDecl(cdecl);
-        rexp.setLine(this);
-	if (function && separate)
-	  rexp.setFlag(ReferenceExp.PREFER_BINDING2);
-	return rexp;
-      }
-    else if (exp instanceof LangExp)
-      return rewrite(((LangExp) exp).getLangValue(), function);
-    else if (exp instanceof Expression)
-      return (Expression) exp;
-    else if (exp == Special.abstractSpecial)
-      return QuoteExp.abstractExp;
-    else
-      return QuoteExp.getInstance(Quote.quote(exp, this), this);
-  }
+                if (decl.getContext() instanceof PatternScope)
+                    return syntaxError("reference to pattern variable "+decl.getName()+" outside syntax template");
+            }
+
+            if (decl == null && function
+                && nameToLookup==LispLanguage.lookup_sym)
+                decl = getNamedPartDecl;
+            ReferenceExp rexp = new ReferenceExp (nameToLookup, decl);
+            rexp.setContextDecl(cdecl);
+            rexp.setLine(this);
+            if (function && separate)
+                rexp.setFlag(ReferenceExp.PREFER_BINDING2);
+            return rexp;
+        } else if (exp instanceof LangExp)
+            return rewrite(((LangExp) exp).getLangValue(), function);
+        else if (exp instanceof Expression)
+            return (Expression) exp;
+        else if (exp == Special.abstractSpecial)
+            return QuoteExp.abstractExp;
+        else if (exp == Special.nativeSpecial)
+            return QuoteExp.nativeExp;
+        else {
+            if (exp instanceof Keyword && ! keywordsAreSelfEvaluating())
+                error('w', "keyword should be quoted if not in argument position");
+
+            return QuoteExp.getInstance(Quote.quote(exp, this), this);
+        }
+    }
+
+    /** 
+     * If a symbol is lexically unbound, look for a default binding.
+     * The default implementation does the following:
+     * 
+     * If the symbol is the name of an existing Java class, return that class.
+     * Handles both with and without (semi-deprecated) angle-brackets:
+     *   {@code <java.lang.Integer>} and {@code java.lang.Integer}.
+     * Also handles arrays, such as {@code java.lang.String[]}.
+     *
+     * If the symbol starts with {@code '@'} parse as an annotation class.
+     *
+     * Recognizes quanties with units, such as {@code 2m} and {@code 3m/s^2}.
+     *
+     * Handles the xml and unit namespaces.
+     *
+     * @return null if no binding, otherwise an Expression.
+     * 
+     * FIXME: This method should be refactored. The quantities parsing should
+     *        be moved to its own method at least.
+     */
+    public Expression checkDefaultBinding(Symbol symbol, Translator tr) {
+        Namespace namespace = symbol.getNamespace();
+        String local = symbol.getLocalPart();
+        String name = symbol.toString();
+        int len = name.length();
+
+        if (namespace instanceof XmlNamespace)
+            return makeQuoteExp(((XmlNamespace) namespace).get(local));
+        String namespaceName = namespace.getName();
+        if (namespaceName == LispLanguage.unitNamespace.getName()) {
+            Object val = Unit.lookup(local);
+            if (val != null)
+                return makeQuoteExp(val);
+        }
+        if (namespaceName == LispLanguage.entityNamespace.getName()) {
+            Object val = lookupStandardEntity(local);
+            if (val != null)
+                return makeQuoteExp(val);
+            tr.error('e', "unknown entity name "+local);
+        }
+
+        char ch0 = name.charAt(0);
+
+        if (ch0 == '@') { // Deprecated - reader now returns ($splice$ ATYPE).
+            String rest = name.substring(1);
+            Expression classRef = tr.rewrite(Symbol.valueOf(rest));
+            return MakeAnnotation.makeAnnotationMaker(classRef);
+        }
+
+        // Look for quantities.
+        if (ch0 == '-' || ch0 == '+' || Character.digit(ch0, 10) >= 0) {
+            // 1: initial + or -1 seen.
+            // 2: digits seen
+            // 3: '.' seen
+            // 4: fraction seen
+            // 5: [eE][=+]?[0-9]+ seen
+            int state = 0;
+            int i = 0;
+      
+            for (; i < len; i++) {
+                char ch = name.charAt(i);
+                if (Character.digit(ch, 10) >= 0)
+                    state = state < 3 ? 2 : state < 5 ? 4 : 5;
+                else if ((ch == '+' || ch == '-') && state == 0)
+                    state = 1;
+                else if (ch == '.' && state < 3)
+                    state = 3;
+                else if ((ch == 'e' || ch == 'E') && (state == 2 || state == 4)
+                         && i + 1 < len) {
+                    int j = i + 1;
+                    char next = name.charAt(j);
+                    if ((next == '-' || next == '+') && ++j < len)
+                        next = name.charAt(j);
+                    if (Character.digit(next, 10) < 0)
+                        break;
+                    state = 5;
+                    i = j + 1;
+                }
+                else
+                    break;
+            }
+            tryQuantity:
+            if (i < len && state > 1) {
+                DFloNum num = new DFloNum(name.substring(0, i));
+                boolean div = false;
+                Vector vec = new Vector();
+                for (; i < len;) {
+                    char ch = name.charAt(i++);
+                    if (ch == '*') {
+                        if (i == len)
+                            break tryQuantity;
+                        ch = name.charAt(i++);
+                    } else if (ch == '/') {
+                        if (i == len || div)
+                            break tryQuantity;
+                        div = true;
+                        ch = name.charAt(i++);
+                    }
+                    int unitStart = i - 1;
+                    int unitEnd;
+                    for (;;) {
+                        if (!Character.isLetter(ch)) {
+                            unitEnd = i - 1;
+                            if (unitEnd == unitStart)
+                                break tryQuantity;
+                            break;
+                        }
+                        if (i == len) {
+                            unitEnd = i;
+                            ch = '1';
+                            break;
+                        }
+                        ch = name.charAt(i++);
+                    }
+                    vec.addElement(name.substring(unitStart, unitEnd));
+                    boolean expRequired = false;
+                    if (ch == '^') {
+                        expRequired = true;
+                        if (i == len)
+                            break tryQuantity;
+                        ch = name.charAt(i++);
+                    }
+                    boolean neg = div;
+                    if (ch == '+') {
+                        expRequired = true;
+                        if (i == len)
+                            break tryQuantity;
+                        ch = name.charAt(i++);
+                    } else if (ch == '-') {
+                        expRequired = true;
+                        if (i == len)
+                            break tryQuantity;
+                        ch = name.charAt(i++);
+                        neg = !neg;
+                    }
+                    int nexp = 0;
+                    int exp = 0;
+                    for (;;) {
+                        int dig = Character.digit(ch, 10);
+                        if (dig <= 0) {
+                            i--;
+                            break;
+                        }
+                        exp = 10 * exp + dig;
+                        nexp++;
+                        if (i == len)
+                            break;
+                        ch = name.charAt(i++);
+                    }
+                    if (nexp == 0) {
+                        exp = 1;
+                        if (expRequired)
+                            break tryQuantity;
+                    }
+                    if (neg)
+                        exp = -exp;
+                    vec.addElement(IntNum.make(exp));
+                }
+                if (i == len) {
+                    int nunits = vec.size() >> 1;
+                    Expression[] units = new Expression[nunits];
+                    for (i = 0; i < nunits; i++) {
+                        String uname = (String) vec.elementAt(2 * i);
+                        Symbol usym = LispLanguage.unitNamespace.getSymbol(uname.intern());
+                        Expression uref = tr.rewrite(usym);
+                        IntNum uexp = (IntNum) vec.elementAt(2 * i + 1);
+                        if (uexp.longValue() != 1)
+                            uref = new ApplyExp(expt.expt,
+                                                new Expression[] {
+                                    uref, makeQuoteExp(uexp)
+                                });
+                        units[i] = uref;
+                    }
+                    Expression unit;
+                    if (nunits == 1)
+                        unit = units[0];
+                    else
+                        unit = new ApplyExp(MultiplyOp.$St, units);
+                    return new ApplyExp(MultiplyOp.$St,
+                                        new Expression[] {
+                            makeQuoteExp(num),
+                            unit
+                        });
+                }
+            }
+        }
+
+        boolean sawAngle;
+        if (len > 2 && ch0 == '<' && name.charAt(len - 1) == '>') {
+            name = name.substring(1, len - 1);
+            len -= 2;
+            sawAngle = true;
+        } else
+            sawAngle = false;
+        int rank = 0;
+        while (len > 2 && name.charAt(len - 2) == '['
+               && name.charAt(len - 1) == ']') {
+            len -= 2;
+            rank++;
+        }
+        //(future) String cname = (namespace == LispPackage.ClassNamespace) ? local : name;
+        String cname = name;
+        if (rank != 0)
+            cname = name.substring(0, len);
+        try {
+            Type type = getLanguage().getNamedType(cname);
+            if (rank > 0 && (!sawAngle || type == null)) {
+                Symbol tsymbol = namespace.getSymbol(cname.intern());
+                Expression texp = tr.rewrite(tsymbol, false);
+                texp = InlineCalls.inlineCalls(texp, tr);
+                if (!(texp instanceof ErrorExp))
+                    type = tr.getLanguage().getTypeFor(texp);
+            }
+            if (type != null) {
+                // Somewhat inconsistent: Types named by getNamedType are Type,
+                // while standard type/classes are Class.  FIXME.
+                while (--rank >= 0) {
+                    type = gnu.bytecode.ArrayType.make(type);
+                }
+                return makeQuoteExp(type);
+            }
+            Class clas;
+            type = Type.lookupType(cname);
+            if (type instanceof gnu.bytecode.PrimType)
+                clas = type.getReflectClass();
+            else {
+                if (cname.indexOf('.') < 0)
+                    cname = (tr.classPrefix
+                             + Compilation.mangleNameIfNeeded(cname));
+                if (rank == 0) {
+                    ModuleManager mmanager = ModuleManager.getInstance();
+                    ModuleInfo typeInfo = mmanager.searchWithClassName(cname);
+                    if (typeInfo != null) {
+                        Compilation tcomp = typeInfo.getCompilation();
+                        if (tcomp != null && tcomp.mainClass != null) {
+                            QuoteExp qexp = new QuoteExp(tcomp.mainClass,
+                                                         Type.javalangClassType);
+                            qexp.setLocation(this);
+                            return qexp;
+                        }
+                    }
+                }
+
+                clas = ClassType.getContextClass(cname);
+            }
+            if (clas != null) {
+                if (rank > 0) {
+                    type = Type.make(clas);
+                    while (--rank >= 0) {
+                        type = gnu.bytecode.ArrayType.make(type);
+                    }
+                    clas = type.getReflectClass();
+                }
+                return makeQuoteExp(clas);
+            }
+        } catch (ClassNotFoundException ex) {
+            Package pack = gnu.bytecode.ArrayClassLoader.getContextPackage(name);
+            if (pack != null)
+                return makeQuoteExp(pack);
+        } catch (NoClassDefFoundError ex) {
+            tr.error('w', "error loading class " + cname + " - " + ex.getMessage() + " not found");
+        } catch (Exception ex) {
+        }
+        return null;
+    }
+
+    static Map<String,String> standardEntities;
+    public static synchronized String lookupStandardEntity(String key) {
+        if (standardEntities == null) {
+            standardEntities = new HashMap<String,String>();
+            Char.addNamedChars(standardEntities);
+        }
+        String val = standardEntities.get(key);
+        if (val != null)
+            return val;
+        return val = StandardNamedChars.instance.get(key);
+    }
 
   public static void setLine(Expression exp, Object location)
   {
@@ -822,25 +1229,29 @@ public class Translator extends Compilation
   /** Note current line number position from a PairWithPosition.
    * Return an object to pass to popPositionOf.
    */
-  public Object pushPositionOf(Object pair)
+  public Object pushPositionOf(Object pos)
   {
-    if (pair instanceof SyntaxForm)
-      pair = ((SyntaxForm) pair).getDatum();
-    if (! (pair instanceof PairWithPosition))
+    if (pos instanceof SyntaxForm)
+      pos = ((SyntaxForm) pos).getDatum();
+    PairWithPosition pair;
+    if (pos instanceof PairWithPosition)
+        pair = (PairWithPosition) pos;
+    else if (pos instanceof SourceLocator)
+        pair = new PairWithPosition((SourceLocator) pos, null, null);
+    else
       return null;
-    PairWithPosition ppair = (PairWithPosition) pair;
     Object saved;
     if (positionPair == null
 	|| positionPair.getFileName() != getFileName()
 	|| positionPair.getLineNumber() != getLineNumber()
 	|| positionPair.getColumnNumber() != getColumnNumber())
       {
-        saved = new PairWithPosition(this, Special.eof, positionPair);
+        saved = new PairWithPosition(this, this, positionPair);
       }
     else
       saved = positionPair;
-    setLine(pair);
-    positionPair = ppair;
+    setLine(pos);
+    positionPair = pair;
     return saved;
   }
 
@@ -853,9 +1264,20 @@ public class Translator extends Compilation
       return;
     setLine(saved);
     positionPair = (PairWithPosition) saved;
-    if (positionPair.getCar() == Special.eof)
+    if (positionPair.getCar() == this)
       positionPair = (PairWithPosition) positionPair.getCdr();
   }
+
+    public void errorWithPosition(String message, Object form) {
+        Object save = pushPositionOf(form);
+        error('e', message);
+        popPositionOf(save);
+    }
+
+    public void errorIfNonEmpty(Object form) {
+        if (form != LList.Empty)
+            error('e', "invalid improper (dotted) list");
+    }
 
   /** Set the line position of the argument to the current position. */
 
@@ -865,17 +1287,22 @@ public class Translator extends Compilation
     // call to QuoteExp.getInstance at end of re-write) for normal ones.
     if (exp instanceof QuoteExp) 
       return;
-    exp.setLocation(this);
+    if (exp.getLineNumber() <= 0)
+        exp.setLocation(this);
   }
 
   /** Extract a type from the car of a pair. */
   public Type exp2Type(Pair typeSpecPair)
   {
+    return exp2Type(typeSpecPair, null, null);
+  }
+
+  public Type exp2Type(Pair typeSpecPair, Declaration decl, SyntaxForm syntax)
+  {
     Object saved = pushPositionOf(typeSpecPair);
     try
       {
-	Expression texp = rewrite_car(typeSpecPair, false);
-        texp = InlineCalls.inlineCalls(texp, this);
+	Expression texp = rewrite_car(typeSpecPair, syntax);
 	if (texp instanceof ErrorExp)
 	  return null;
         Type type = getLanguage().getTypeFor(texp);
@@ -889,6 +1316,10 @@ public class Translator extends Compilation
                 else if (t instanceof Type)
                   type = (Type) t;
               }
+            catch (Error ex)
+              {
+                throw ex;
+              }
             catch (Throwable ex)
               {
               }
@@ -901,9 +1332,11 @@ public class Translator extends Compilation
 	     else
 	       error('e',
 		 "invalid type spec (must be \"type\" or 'type or <type>)");
-	     return Type.pointer_type;
+	     type = Type.pointer_type;
 	   }
-	 return type;
+        if (decl != null)
+          decl.setType(texp, type);
+        return type;
       }
     finally
       {
@@ -939,23 +1372,14 @@ public class Translator extends Compilation
       return SyntaxForms.fromDatumIfNeeded(form, syntax);
   }
 
-  public Object popForms (int first)
+  /** Pop from formStack all forms that come after beforeFirst.
+   */
+  public Values popForms(Pair beforeFirst)
   {
-    int last = formStack.size();
-    if (last == first)
+    Object tail = formStack.popTail(beforeFirst);
+    if (tail == LList.Empty)
       return Values.empty;
-    Object r;
-    if (last == first + 1)
-      r = formStack.elementAt(first);
-    else
-      {
-	Values vals = new Values();
-	for (int i = first; i < last;  i++)
-	  vals.writeObject(formStack.elementAt(i));
-	r = vals;
-      }
-    formStack.setSize(first);
-    return r;
+    return new ValuesFromLList((LList) tail);
   }
 
   public void scanForm (Object st, ScopeExp defs)
@@ -963,24 +1387,35 @@ public class Translator extends Compilation
     if (st instanceof SyntaxForm)
       {
 	SyntaxForm sf = (SyntaxForm) st;
-	ScopeExp save_scope = currentScope();
+	ScopeExp save_scope = setPushCurrentScope(sf.getScope());
 	try
 	  {
-	    setCurrentScope(sf.getScope());
-	    int first = formStack.size();
+	    Pair beforeFirst = formStack.last;
 	    scanForm(sf.getDatum(), defs);
-	    formStack.add(wrapSyntax(popForms(first), sf));
+	    pushForm(wrapSyntax(popForms(beforeFirst), sf));
 	    return;
 	  }
 	finally
 	  {
-	    setCurrentScope(save_scope);
+	    setPopCurrentScope(save_scope);
 	  }
       }
     if (st instanceof Values)
       {
 	if (st == Values.empty)
 	  st = QuoteExp.voidExp; // From #!void
+        else if (st instanceof ValuesFromLList)
+        {
+          for (Object vs = ((ValuesFromLList) st).values;
+               vs != LList.Empty; )
+            {
+              Pair p = (Pair) vs;
+              Object save = pushPositionOf(p);
+              scanForm(p.getCar(), defs);
+              popPositionOf(save);
+              vs = p.getCdr();
+            }
+        }
 	else
 	  {
 	    Object[] vals = ((Values) st).getValues();
@@ -1004,7 +1439,7 @@ public class Translator extends Compilation
             if (obj instanceof SyntaxForm)
               {
                 SyntaxForm sf = (SyntaxForm) st_pair.getCar();
-                setCurrentScope(sf.getScope());
+                savedScope = setPushCurrentScope(sf.getScope());
                 obj = sf.getDatum();
               }
             Pair p;
@@ -1014,7 +1449,7 @@ public class Translator extends Compilation
                 && (p = (Pair) p.getCdr()).getCdr() instanceof Pair)
               {
                 Expression part1 = rewrite(p.getCar());
-                Expression part2 = rewrite(((Pair) p.getCdr()).getCar());
+                Expression part2 = rewrite_car_for_lookup((Pair) p.getCdr());
                 Object value1 = part1.valueIfConstant();
                 Object value2 = part2.valueIfConstant();
                 if (value1 instanceof Class && value2 instanceof Symbol)
@@ -1025,7 +1460,7 @@ public class Translator extends Compilation
                         if (obj instanceof Syntax)
                           syntax = (Syntax) obj;
                       }
-                    catch (Throwable ex)
+                    catch (Exception ex)
                       {
                         obj = null;
                       }
@@ -1033,10 +1468,9 @@ public class Translator extends Compilation
                 else
                   obj = namespaceResolve(part1, part2);
               }
-            
             if (obj instanceof Symbol && ! selfEvaluatingSymbol(obj))
               {
-                Expression func = rewrite(obj, true);
+                Expression func = rewrite(obj, 'M');
                 if (func instanceof ReferenceExp)
                   {
                     Declaration decl = ((ReferenceExp) func).getBinding();
@@ -1051,15 +1485,16 @@ public class Translator extends Compilation
                   }
               }
             // Recognize deferred begin created in scanBody for pendingForms.
-            // A seemingly-cleaned (obj instanceof Syntax) causes problems
+            // A seemingly-cleaner (obj instanceof Syntax) causes problems
             // with some Syntax forms, such as define.
-            else if (obj == kawa.standard.begin.begin)
+            else if (obj == kawa.standard.begin.begin
+                     || obj == kawa.standard.define_library.define_library_scan)
               syntax = (Syntax) obj;
           }
         finally
           {
             if (savedScope != current_scope)
-              setCurrentScope(savedScope);
+              setPopCurrentScope(savedScope);
             popPositionOf(savedPosition);
           }
 	if (syntax != null)
@@ -1080,7 +1515,7 @@ public class Translator extends Compilation
 	      }
 	  }
       }
-    formStack.add(st);
+    pushForm(st);
   }
 
   /** Recursive helper method for rewrite_body.
@@ -1101,11 +1536,11 @@ public class Translator extends Compilation
 	if (body instanceof SyntaxForm)
 	  {
 	    SyntaxForm sf = (SyntaxForm) body;
-	    ScopeExp save_scope = current_scope;
+	    ScopeExp save_scope = setPushCurrentScope(sf.getScope());
 	    try
 	      {
-		setCurrentScope(sf.getScope());
-		int first = formStack.size();
+		Pair first = formStack.last;
+
 		LList f = scanBody(sf.getDatum(), defs, makeList);
                 if (makeList)
                   {
@@ -1115,19 +1550,21 @@ public class Translator extends Compilation
                     lastPair.setCdrBackdoor(f);
                     return list;
                   }
-		formStack.add(wrapSyntax(popForms(first), sf));
+		pushForm(wrapSyntax(popForms(first), sf));
 		return null;
 	      }
 	    finally
 	      {
-		setCurrentScope(save_scope);
+		setPopCurrentScope(save_scope);
 	      }
 	  }
 	else if (body instanceof Pair)
 	  {
 	    Pair pair = (Pair) body;
-	    int first = formStack.size();
+	    Pair first = formStack.last;
+            Object savePos = pushPositionOf(pair);
 	    scanForm(pair.getCar(), defs);
+            popPositionOf(savePos);
             if (getState() == Compilation.PROLOG_PARSED)
               {
                 // We've seen a require form during the initial pass when
@@ -1136,28 +1573,26 @@ public class Translator extends Compilation
                 if (pair.getCar() != pendingForm)
                   pair = makePair(pair, pendingForm, pair.getCdr());
                 pendingForm = new Pair(kawa.standard.begin.begin, pair);
+                if (makeList)
+                  formStack.pushAll(list);
                 return LList.Empty;
               }
-	    int fsize = formStack.size();
 	    if (makeList)
 	      {
-		for (int i = first;  i < fsize;  i++)
-		  {
-		    Pair npair
-		      = makePair(pair, formStack.elementAt(i), LList.Empty);
-		    if (lastPair == null)
-		      list = npair;
-		    else
-		      lastPair.setCdrBackdoor(npair);
-		    lastPair = npair;
-		  }
-		formStack.setSize(first);
+                Pair last = formStack.lastPair();
+                LList nlist = (LList) formStack.popTail(first);
+                if (lastPair == null)
+		  list = nlist;
+		else
+		  lastPair.setCdrBackdoor(nlist);
+                if (last != first)
+                  lastPair = last;
 	      }
 	    body = pair.getCdr();
 	  }
 	else
 	  {
-	    formStack.add(syntaxError ("body is not a proper list"));
+	    pushForm(syntaxError("body is not a proper list"));
 	    break;
 	  }
       }
@@ -1180,29 +1615,35 @@ public class Translator extends Compilation
     // NOTE we have both a rewrite_body and a rewriteBody.
     // This is confusing, at the least.  FIXME.
     Object saved = pushPositionOf(exp);
-    LetExp defs = new LetExp(null);
-    int first = formStack.size();
-    defs.outer = current_scope;
+    LetExp defs = new LetExp();
+    int renamedAliasOldSize =
+        renamedAliasStack == null ? 0 : renamedAliasStack.size();
+    Pair first = formStack.last;
+    defs.setOuter(current_scope);
     current_scope = defs;
     try
       {
         LList list = scanBody(exp, defs, true);
 	if (list.isEmpty())
-	  formStack.add(syntaxError ("body with no expressions"));
-	int ndecls = defs.countNonDynamicDecls();
-	if (ndecls != 0)
-	  {
-	    Expression[] inits = new Expression[ndecls];
-	    for (int i = ndecls;  --i >= 0; )
-	      inits[i] = QuoteExp.undefined_exp;
-	    defs.inits = inits;
-	  }
+	  pushForm(syntaxError("body with no expressions"));
+        int ndecls = 0;
+        for (Declaration decl = defs.firstDecl(); decl != null; decl = decl.nextDecl())
+          {
+            if (! decl.getFlag(Declaration.IS_DYNAMIC))
+              {
+                ndecls++;
+                decl.setInitValue(QuoteExp.undefined_exp);
+              }
+          }
         rewriteBody(list);
+        int renamedAliasNewSize =
+            renamedAliasStack == null ? 0 : renamedAliasStack.size();
+        popRenamedAlias((renamedAliasNewSize - renamedAliasOldSize) >> 1);
 	Expression body = makeBody(first, null);
 	setLineOf(body);
 	if (ndecls == 0)
 	  return body;
-	defs.body = body;
+	defs.setBody(body);
 	setLineOf(defs);
 	return defs;
       }
@@ -1212,8 +1653,8 @@ public class Translator extends Compilation
 	popPositionOf(saved);
       }
   }
-
-  private void rewriteBody (LList forms)
+  
+  protected void rewriteBody (LList forms)
   {
     while (forms != LList.Empty)
       {
@@ -1232,27 +1673,38 @@ public class Translator extends Compilation
   }
 
   /** Combine a list of zero or more expression forms into a "body". */
-  private Expression makeBody(int first, ScopeExp scope)
+  protected Expression makeBody(Pair head, ScopeExp scope)
   {
-    int nforms = formStack.size() - first;
+    Object tail = formStack.popTail(head);
+    int nforms = LList.length(tail);
     if (nforms == 0)
-      return QuoteExp.voidExp; 
-    else if (nforms == 1)
+      return QuoteExp.voidExp;
+    Pair first = (Pair) tail;
+     if (nforms == 1)
       {
-	return (Expression) formStack.pop();
+	return (Expression) first.getCar();
       }
     else
       {
 	Expression[] exps = new Expression[nforms];
-	for (int i = 0; i < nforms; i++)
-	  exps[i] = (Expression) formStack.elementAt(first + i);
-	formStack.setSize(first);
-	if (scope instanceof ModuleExp)
+        first.toArray(exps);
+        if (scope instanceof ModuleExp)
 	  return new ApplyExp(gnu.kawa.functions.AppendValues.appendValues,
 			      exps);
 	else
-	  return ((LispLanguage) getLanguage()).makeBody(exps);
+	  return makeBody(exps);
       }
+  }
+
+  public boolean appendBodyValues () { return false; }
+
+  /** Combine a <body> consisting of a list of expression. */
+  public Expression makeBody(Expression[] exps)
+  {
+    if (appendBodyValues())
+      return new ApplyExp(gnu.kawa.functions.AppendValues.appendValues, exps);
+    else
+      return new BeginExp (exps);
   }
 
   /** Storage used by noteAccess and processAccesses. */
@@ -1284,7 +1736,12 @@ public class Translator extends Compilation
 	Object name = notedAccess.elementAt(i);
 	ScopeExp scope = (ScopeExp) notedAccess.elementAt(i+1);
 	if (current_scope != scope)
-	  setCurrentScope(scope);
+          {
+            // I.e. first time do equivalent of setPushCurrentScope
+            if (current_scope == saveScope)
+              lexical.pushSaveTopLevelRedefs();
+	    setCurrentScope(scope);
+          }
 	Declaration decl =  (Declaration) lexical.lookup(name, -1);
 	if (decl != null && ! decl.getFlag(Declaration.IS_UNKNOWN))
 	  {
@@ -1295,7 +1752,7 @@ public class Translator extends Compilation
 	  }
       }
     if (current_scope != saveScope)
-      setCurrentScope(saveScope);
+      setPopCurrentScope(saveScope);
   }
 
   public void finishModule(ModuleExp mexp)
@@ -1316,7 +1773,7 @@ public class Translator extends Compilation
 	    error('e', decl, msg1, msg2);
 	  }
 	if (mexp.getFlag(ModuleExp.EXPORT_SPECIFIED)
-            || (generateMain && ! immediate))
+            || (generateMainMethod() && ! immediate))
 	  {
 	    if (decl.getFlag(Declaration.EXPORT_SPECIFIED))
 	      {
@@ -1328,7 +1785,7 @@ public class Translator extends Compilation
 		    decl.setPrivate(false);
 		  }
 	      }
-	    else
+	    else if (! kawa.standard.IfFeature.isProvide(decl))
 	      decl.setPrivate(true);
 	  }
 	if (moduleStatic)
@@ -1339,49 +1796,40 @@ public class Translator extends Compilation
 		 || mexp.getFlag(ModuleExp.SUPERTYPE_SPECIFIED))
 	  decl.setFlag(Declaration.NONSTATIC_SPECIFIED);
       }
-  }
-
-  static void vectorReverse (Vector vec, int start, int count)
-  {
-    // See http://www.azillionmonkeys.com/qed/case8.html
-    int j = count / 2;
-    int last = start + count - 1;
-    for (int i = 0; i < j; i++)
-      {
-        Object tmp = vec.elementAt(start + i);
-        vec.setElementAt(vec.elementAt(last - i), start+i);
-        vec.setElementAt(tmp, last - i);
-      }
+    if (mexp.getFlag(ModuleExp.SUPERTYPE_SPECIFIED))
+        mexp.setFlag(false, ModuleExp.USE_DEFINED_CLASS);
   }
 
   public void resolveModule(ModuleExp mexp)
   {
+    setLine(null, -1, -1);
     int numPending = pendingImports == null ? 0 : pendingImports.size();
     for (int i = 0;  i < numPending;  )
       {
         ModuleInfo info = (ModuleInfo) pendingImports.elementAt(i++);
         ScopeExp defs = (ScopeExp) pendingImports.elementAt(i++);
         Expression posExp = (Expression) pendingImports.elementAt(i++);
-        Integer savedSize = (Integer) pendingImports.elementAt(i++);
+        Pair beforeGoal = (Pair) pendingImports.elementAt(i++);
         if (mexp == defs)
           {
             // process(BODY_PARSED);
             Expression savePos = new ReferenceExp((Object) null);
             savePos.setLine(this);
             setLine(posExp);
-            int beforeSize = formStack.size();
+            Pair beforeImports = formStack.last;
             kawa.standard.require.importDefinitions(null, info, null,
                                                     formStack, defs, this);
-            int desiredPosition = savedSize.intValue();
-            if (savedSize != beforeSize)
+            if (beforeGoal != beforeImports
+                && beforeImports != formStack.last)
               {
-                // Move the forms resulting from the import to desiredPosition:
-                int curSize = formStack.size();
-                int count = curSize - desiredPosition;
-                // See http://www.azillionmonkeys.com/qed/case8.html
-                vectorReverse(formStack, desiredPosition, beforeSize-desiredPosition);
-                vectorReverse(formStack, beforeSize, curSize - beforeSize);
-                vectorReverse(formStack, desiredPosition, count);
+                // Move forms derived from the import forwards in the list,
+                // just following beforeGoal.
+                Object firstGoal = beforeGoal.getCdr();
+                Object firstImports = beforeImports.getCdr();
+                beforeGoal.setCdrBackdoor(firstImports);
+                formStack.last.setCdrBackdoor(firstGoal);
+                beforeImports.setCdrBackdoor(LList.Empty);
+                formStack.last = beforeImports;
               }
             setLine(savePos);
           }
@@ -1394,11 +1842,21 @@ public class Translator extends Compilation
     Compilation save_comp = Compilation.setSaveCurrent(this);
     try
       {
-        rewriteInBody(popForms(firstForm));
+        Pair firstForm = formStack.getHead();
+        rewriteBody((LList) formStack.popTail(firstForm));
 	mexp.body = makeBody(firstForm, mexp);
-        // In immediate mode need to preseve Declaration for current "seesion".
+        // In immediate mode need to preserve Declaration for current "session".
         if (! immediate)
 	  lexical.pop(mexp);
+
+        // Patch up renamed exports - see export.
+        for (Declaration decl = mexp.firstDecl();  decl != null;
+             decl = decl.nextDecl()) {
+            if (decl.getSymbol() == null
+                && decl.getFlag(Declaration.EXPORT_SPECIFIED)) {
+                decl.patchSymbolFromSet();
+            }
+        }
       }
     finally
       {
@@ -1448,22 +1906,21 @@ public class Translator extends Compilation
    * So that such references can resolve to <code>decl</code>, we
    * create an alias in <code>templateScope</code> that points
    * to <code>decl</code>.  We record that we did this in the
-   * <code> renamedLiasStack</code>, so we can remove the alias later.
+   * <code>renamedAliasStack</code>, so we can remove the alias later.
    */
   public void pushRenamedAlias (Declaration alias)
   {
     Declaration decl = getOriginalRef(alias).getBinding();
     ScopeExp templateScope = alias.context;
     decl.setSymbol(null);
-    Declaration old = templateScope.lookup(decl.getSymbol());
+    Declaration old = templateScope.lookup(alias.getSymbol());
     if (old != null)
       templateScope.remove(old);
     templateScope.addDeclaration(alias);
     if (renamedAliasStack == null)
-      renamedAliasStack = new Stack();
+      renamedAliasStack = new Stack<Declaration>();
     renamedAliasStack.push(old);
     renamedAliasStack.push(alias);
-    renamedAliasStack.push(templateScope);
   }
 
   /** Remove one or more aliases created by <code>pushRenamedAlias</code>. */
@@ -1471,28 +1928,125 @@ public class Translator extends Compilation
   {
     while (--count >= 0)
       {
-	ScopeExp templateScope = (ScopeExp) renamedAliasStack.pop();
 	Declaration alias = (Declaration) renamedAliasStack.pop();
+        ScopeExp templateScope = alias.getContext();
 	Declaration decl = getOriginalRef(alias).getBinding();
 	decl.setSymbol(alias.getSymbol());
 	templateScope.remove(alias);
-	Object old = renamedAliasStack.pop();
+	Declaration old = renamedAliasStack.pop();
 	if (old != null)
-	  templateScope.addDeclaration((Declaration) old);
+	  templateScope.addDeclaration(old);
       }
   }
 
-  public Declaration define (Object name, SyntaxForm nameSyntax, ScopeExp defs)
+    public Declaration define(Object name, SyntaxForm nameSyntax,
+                              ScopeExp defs) {
+        ScopeExp scope = nameSyntax != null ? nameSyntax.getScope()
+            : currentScope();
+        boolean aliasNeeded = scope != defs;
+        Object declName = aliasNeeded
+            ? Symbol.makeUninterned(name.toString())
+            : name;
+        Declaration decl = defs.getDefine(declName, 'w', this);
+        if (aliasNeeded) {
+            Declaration alias = makeRenamedAlias(name, decl, scope);
+            if (defs instanceof LetExp)
+                pushRenamedAlias(alias);
+            else
+                scope.addDeclaration(alias);
+        }
+        push(decl);
+        return decl;
+    }
+
+  static boolean isObjectSyntax (ClassType declaringClass, String fieldName)
   {
-    boolean aliasNeeded = nameSyntax != null && nameSyntax.getScope() != currentScope();
-    Object declName = aliasNeeded ? new String(name.toString()) : name;
-    Declaration decl = defs.getDefine(declName, 'w', this);
-    if (aliasNeeded)
-      {
-	Declaration alias = makeRenamedAlias(name, decl, nameSyntax.getScope());
-        nameSyntax.getScope().addDeclaration(alias);
-      }
-    push(decl);
-    return decl;
+    return "objectSyntax".equals(fieldName)
+      &&  "kawa.standard.object".equals(declaringClass.getName());
   }
+
+    public FormStack formStack = new FormStack(this);
+    public void pushForm(Object value) { formStack.push(value); }
+  
+    /** A list of "forms" to be further processed.
+     * It is implemented as an LList so we can save position information.
+     */
+    public static class FormStack extends Pair {
+        private Pair last = this;
+        SourceLocator sloc;
+    
+        public FormStack(SourceLocator sloc) {
+            this.sloc = sloc;
+            this.cdr = LList.Empty;
+        }
+
+        /** Return the "head" of the list.
+         * The cdr of the head is the first element.
+         */
+        public Pair getHead() { return this; }
+        public Object getFirst() { return cdr; }
+        /** The Pair whose car is the last form in the list.
+         * If the list is empty, this returns the list head.
+         */
+        @Override
+        public Pair lastPair() { return last; }
+
+        /* DEBUGGING:
+        public void dump() {
+            int i=0;
+            System.err.println("formStack len:"+LList.length(getFirst()));
+            for(Object x = getFirst(); x instanceof Pair; i++) {
+                Pair p = (Pair) x;
+                //if (! (p.getCar() instanceof SetExp))
+                    System.err.println("- #"+i+": "+p.getCar());
+                x = p.getCdr();
+            }
+        }
+        */
+
+        public Object popTail(Pair oldTail) {
+            Object r = oldTail.getCdr();
+            oldTail.setCdrBackdoor(LList.Empty);
+            last = oldTail;
+            return r;
+        }
+    
+        public void push(Object value) {
+            Pair pair = new PairWithPosition(sloc, value, LList.Empty);
+            last.setCdrBackdoor(pair);
+            last = pair;
+        }
+
+        public void pushAll(LList values) {
+            if (values == LList.Empty)
+                return;
+            last.setCdrBackdoor(values);
+            last = ((Pair) values).lastPair();
+        }
+    
+        public void pushAll(LList values, Pair valuesLast) {
+            if (values == LList.Empty)
+                return;
+            last.setCdrBackdoor(values);
+            last = valuesLast;
+        }
+    
+        public void pushAfter(Object value, Pair position) {
+            Pair pair = new PairWithPosition(sloc, value, position.getCdr());
+            position.setCdrBackdoor(pair);
+            if(last == position)
+                last = pair;
+        }
+    }
+
+    /** An implementationof Values using a linked list.
+     */
+    public static class ValuesFromLList extends Values.FromList<Object> {
+        public LList values;
+
+        public ValuesFromLList(LList values) {
+            super(values);
+            this.values = values;
+        }
+    }
 }

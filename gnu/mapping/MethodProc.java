@@ -4,6 +4,7 @@
 package gnu.mapping;
 import gnu.bytecode.Type;
 import gnu.bytecode.ArrayType;
+import gnu.expr.PrimProcedure;
 
 /** Similar to a CLOS method.
  * Can check if arguments "match" before committing to calling method. */
@@ -14,27 +15,45 @@ public abstract class MethodProc extends ProcedureN
    * Usually either an Type[] or a String encoding. */
   protected Object argTypes;
 
-  /** Test if method is applicable to an invocation with given arguments.
-   * Returns -1 if no; 1 if yes; 0 if need to check at run-time. */
-  public int isApplicable(Type[] argTypes)
-  {
-    int argCount = argTypes.length;
-    int num = numArgs();
-    if (argCount < (num & 0xFFF)
-	|| (num >= 0 && argCount > (num >> 12)))
-      return -1;
-    int result = 1;
-    for (int i = argCount;  --i >= 0; )
-      {
-        Type ptype = getParameterType(i);
-        int code = ptype.compare(argTypes[i]);
-        if (code == -3)
-          return -1;
-        if (code < 0)
-          result = 0;
-      }
-    return result;
-  }
+    /** Test if method is applicable to an invocation with given arguments.
+     * @param argTypes array of known "single" arguments.
+     * @param restType If null, the arguments are fully  specified by argTypes.
+     *   If non-null, there may be an unknown number of extra arguments
+     *   of the given restType.  This is used for splices, where we usually
+     *   don't know at compile-time how many argument values we have.
+     * @return -1 if no; 1 if yes; 0 if need to check at run-time.
+     */
+    public int isApplicable(Type[] argTypes, Type restType) {
+        int argCount = argTypes.length;
+        int num = numArgs();
+        int min = Procedure.minArgs(num);
+        int max = Procedure.maxArgs(num);
+        if ((argCount < min && restType == null)
+            || (num >= 0 && argCount > max))
+            return -1;
+        int result = 1;
+        for (int i = 0;  ; i++ )  {
+            if (i >= argCount && (restType == null || i >= min))
+                break;
+            Type ptype = getParameterType(i);
+            boolean toStringTypeHack = ptype == Type.toStringType;
+            // Treat Type.toString as if it might need a narrowing cast, even
+            // though it always succeeds, so as to prefer methods that don't
+            // require the toString converstion.
+            if (toStringTypeHack)
+                ptype = Type.javalangStringType;
+            int code = ptype.compare(i < argCount ? argTypes[i] : restType);
+            if (code == -3) {
+                if (toStringTypeHack)
+                    result = 0;
+                else
+                    return -1;
+            }
+            else if (code < 0)
+                result = 0;
+        }
+        return result;
+    }
 
   /** Return number of parameters, including optional and rest arguments. */
   public int numParameters()
@@ -131,7 +150,7 @@ public abstract class MethodProc extends ProcedureN
       return null;
     int num1 = proc1.numParameters();
     int num2 = proc2.numParameters();
-    int limit = num1 > num2 ? num1 : num2;
+    int limit = num1 < num2 ? num1 : num2;
     if (max1 != max2)
       {
         if (max1 < 0)
@@ -164,60 +183,18 @@ public abstract class MethodProc extends ProcedureN
     return not2 ? proc1 : not1 ? proc2 : null;
   }
 
-  /** Return the index of the most specific method. */
-  public static int mostSpecific(MethodProc[] procs, int length)
-  {
-    if (length <= 1) // Handles length==0 and length==1.
-      return length - 1;
-    // best is non-null if there is a single most specific method.
-    MethodProc best = procs[0];
-    // This array (which is allocated lazily) is used if there is is a set
-    // of bestn methods none of which are more specific than the others.
-    MethodProc[] bests = null;
-    // If best==null, then the index of the most specific method;
-    // otherwise the active length of the bests array.
-    int bestn = 0;
-  outer:
-    for (int i = 1;  i < length;  i++)
-      {
-        MethodProc method = procs[i];
-	if (best != null)
-	  {
-	    MethodProc winner = mostSpecific(best, method);
-	    if (winner == null)
-	      {
-		if (bests == null)
-		  bests = new MethodProc[length];
-		bests[0] = best;
-		bests[1] = method;
-		bestn = 2;
-		best = null;
-	      }
-	    else if (winner == method)
-	      {
-		best = method;
-		bestn = i;
-	      }
-	  }
-	else
-	  {
-	    for (int j = 0;  j < bestn;  j++)
-	      {
-		MethodProc old = bests[j];
-		MethodProc winner = mostSpecific(old, method);
-		if (winner == old)
-		  continue outer;
-		if (winner == null)
-		  {
-		    bests[bestn++] = method;
-		    continue outer;
-		  }
-	      }
-	    // At this point method is more specific than bests[0..bestn-1].
-	    best = method;
-	    bestn = i;
-	  }
-      }
-    return best == null ? -1 : bestn;
-  }
+    /** An approximation of "override-equivalent" as defined in the JLS. */
+    public static boolean overrideEquivalent(MethodProc proc1, MethodProc proc2) {
+        int num1 = proc1.numParameters();
+        int num2 = proc2.numParameters();
+        if (num1 != num2)
+            return false;
+        for (int i = 1;  i < num1;  i++) {
+            Type t1 = proc1.getParameterType(i);
+            Type t2 = proc2.getParameterType(i);
+            if (t1.compare(t2) != 0)
+                return false;
+        }
+        return true;
+    }
 }

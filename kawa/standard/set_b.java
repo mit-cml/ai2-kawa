@@ -49,7 +49,7 @@ public class set_b extends Syntax
         int skip = 0;
         Expression func = aexp.getFunction();
         if (args.length > 0 && func instanceof ReferenceExp
-            && ((ReferenceExp) func).getBinding() == Scheme.applyFieldDecl)
+            && ((ReferenceExp) func).getBinding() == SchemeCompilation.applyFieldDecl)
           {
             skip = 1;
             nargs--;
@@ -76,7 +76,7 @@ public class set_b extends Syntax
 	sexp.setBinding(decl);
 	decl = Declaration.followAliases(decl);
 	if (decl != null)
-	  decl.noteValue (value);
+          decl.noteValueFromSet(sexp);
 	if (decl.getFlag(Declaration.IS_CONSTANT))
 	  return tr.syntaxError ("constant variable "+decl.getName()+" is set!");
         else if (decl.context != tr.mainLambda

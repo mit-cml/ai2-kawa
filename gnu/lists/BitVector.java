@@ -90,11 +90,10 @@ public class BitVector extends SimpleVector implements Externalizable
     return Convert.toObject(data[index]);
   }
 
-  public Object setBuffer(int index, Object value)
+  @Override
+  public void setBuffer(int index, Object value)
   {
-    boolean old = data[index];
     data[index] = Convert.toBoolean(value);
-    return Convert.toObject(old);
   }
 
   public final void setBooleanAt(int index, boolean value)
@@ -121,15 +120,6 @@ public class BitVector extends SimpleVector implements Externalizable
   }
 
   public String getTag() { return "b"; }
-
-  public boolean consumeNext(int ipos, Consumer out)
-  {
-    int index = ipos >>> 1;
-    if (index >= size)
-      return false;
-    out.writeBoolean(data[index]);
-    return true;
-  }
 
   public void consumePosRange(int iposStart, int iposEnd, Consumer out)
   {

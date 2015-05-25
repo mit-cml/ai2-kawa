@@ -5,6 +5,8 @@ import gnu.text.Printable;
 import gnu.text.SourceLocator;
 import gnu.lists.Consumer;
 import java.io.PrintWriter;
+import gnu.kawa.io.CharArrayOutPort;
+import gnu.kawa.io.OutPort;
 import gnu.kawa.util.IdentityHashTable;
 import gnu.kawa.reflect.OccurrenceType;
 
@@ -270,22 +272,11 @@ public abstract class Expression extends Procedure0
   /** Helper method to create a `while' statement. */
   public static Expression makeWhile(Object cond, Object body, Compilation parser)
   {
-    Expression[] inits = new Expression[1];
-    LetExp let = new LetExp(inits);
-    String fname = "%do%loop";
-    Declaration fdecl = let.addDeclaration(fname);
-    Expression recurse = new ApplyExp(new ReferenceExp(fdecl), noExpressions);
-    LambdaExp lexp = new LambdaExp();
-    parser.push(lexp);
-    lexp.body = new IfExp(parser.parse(cond),
-			  new BeginExp(parser.parse(body), recurse),
-			  QuoteExp.voidExp);
-    lexp.setName(fname);
-    parser.pop(lexp);
-    inits[0] = lexp;
-    fdecl.noteValue(lexp);
-    let.setBody(new ApplyExp(new ReferenceExp(fdecl), noExpressions));
-    return let;
+    parser.loopStart();
+    parser.loopEnter();
+    parser.loopCond(parser.parse(cond));
+    parser.loopBody(parser.parse(body));
+    return parser.loopRepeatDone();
   }
   
   /** Copies the current location. */
@@ -300,6 +291,12 @@ public abstract class Expression extends Procedure0
     setLocation(old);
     return this;
   }
+
+    public final Expression maybeSetLine(Expression old) {
+        if (position == 0 && old != null && old.position != 0)
+            setLocation(old);
+        return this;
+    }
 
   public final void setFile (String filename)
   {
@@ -362,11 +359,52 @@ public abstract class Expression extends Procedure0
 
   public boolean isStableSourceLocation() { return true; }
 
+  protected Type type;
+
   /** Return the Type used to represent the values of this Expression. */
-  public Type getType()
+  public final Type getType()
+  {
+    if (type == null)
+      {
+        type = Type.objectType; // to guard against cycles
+        type = calculateType();
+      }
+    return type;
+  }
+
+  protected Type calculateType ()
   {
     return Type.pointer_type;
   }
+
+    public final Type getTypeRaw() {
+        return type;
+    }
+
+    public void setType(Type type) {
+        this.type = type;
+    }
+
+    /** True if the expression provably never returns.
+     * Currently, this is very limited, not handling infinite recursion
+     * (tail- or otherwise), but better analysis is planned.
+     */
+    public boolean neverReturns() {
+        return getType() == Type.neverReturnsType;
+    }
+
+    /** Is this a keyword argument?
+     * In the future this will return non-null only for explicit
+     * literal non-quoted Keywords.
+     */
+    public Keyword checkLiteralKeyword() {
+        if (this instanceof QuoteExp) {
+            Object val = ((QuoteExp) this).getValue();
+            if (val instanceof Keyword)
+                return (Keyword) val;
+        }
+        return null;
+    }
 
   public boolean isSingleValue()
   {

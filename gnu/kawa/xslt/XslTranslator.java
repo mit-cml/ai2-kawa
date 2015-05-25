@@ -10,6 +10,8 @@ import gnu.text.*;
 import gnu.mapping.*;
 import java.util.Stack;
 import gnu.xml.*;
+import gnu.kawa.io.CharArrayInPort;
+import gnu.kawa.io.InPort;
 import gnu.kawa.xml.*;
 import gnu.xquery.lang.*;
 import gnu.kawa.functions.AppendValues;
@@ -218,7 +220,7 @@ public class XslTranslator extends Lexer implements Consumer
 	Expression[] args
 	  = { new QuoteExp(select), resolveQNameExpression(mode) };
 	comp.exprStack.pop();
-	push(new ApplyExp(new QuoteExp(applyTemplatesProc), args));
+	push(new ApplyExp(ApplyTemplates.applyTemplatesProc, args));
       }
     else if (xslTag == "if")
       {
@@ -304,7 +306,7 @@ public class XslTranslator extends Lexer implements Consumer
 	else
 	  throw new InternalError("too many xpath expressions"); // FIXME
       }
-    catch (Throwable ex)
+    catch (Exception ex)
       {
 	ex.printStackTrace();
 	throw new InternalError ("caught "+ex);
@@ -528,8 +530,4 @@ public class XslTranslator extends Lexer implements Consumer
     = new PrimProcedure(defineTemplateMethod);
   static final PrimProcedure runStylesheetProc
     = new PrimProcedure(runStylesheetMethod);
-  static final Method applyTemplatesMethod
-    = typeXSLT.getDeclaredMethod("applyTemplates", 2);
-  static final PrimProcedure applyTemplatesProc
-    = new PrimProcedure(applyTemplatesMethod);
 }

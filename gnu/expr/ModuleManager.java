@@ -1,12 +1,13 @@
 package gnu.expr;
 import java.net.*;
+import gnu.kawa.io.Path;
+import gnu.kawa.io.URLPath;
 import gnu.mapping.WrappedException;
 import gnu.bytecode.ClassType;
-import gnu.text.*;
 
 /** A database of known modules as represented by {@link ModuleInfo}.
- * Current there is only a single global instanceof {@code ModuleManager};
- * in the future each different "applications" may have their own.
+ * Currently there is only a single global instance of {@code ModuleManager};
+ * in the future each different "application" may have their own.
  */
 
 public class ModuleManager
@@ -33,8 +34,32 @@ public class ModuleManager
    * Later, might have multiple managers. */
   public static ModuleManager getInstance() { return instance; }
 
+    int interactiveCounter;
+
+    int evalCounter;
+
+    public static final String interactiveClassPrefix = "atInteractiveLevel$";
+    public String evalClassPrefix = "atEvalLevel$";
+
+    /** Used to generate unique class names for interactive REPLs and loads.
+     * This is incremented from Shell.run.
+     * Unique class names are essential for {@link Compilation#usedClass}.
+     * They're also desirable for debugging.
+     */
+    public synchronized String getNewInteractiveName() {
+        return interactiveClassPrefix + (++interactiveCounter);
+    }
+
+    /** Used to generate unique class names for other evals.
+     * Equivalent in functionality to getNewInteractiveName, but with
+     * a different prefix, for better user-friendliness.
+     */
+    public synchronized String getNewEvalName() {
+        return evalClassPrefix + (++evalCounter);
+    }
+
   public static final long LAST_MODIFIED_CACHE_TIME = 1000;
-  /** Number millseconds before we re-check file's modified time. */
+  /** Number of milliseconds before we re-check file's modified time. */
   public long lastModifiedCacheTime = LAST_MODIFIED_CACHE_TIME;
 
   /** List of all modules managed by this ModuleManager. */
@@ -54,9 +79,7 @@ public class ModuleManager
     Path sourceAbsPath = ModuleInfo.absPath(fileName);
     ModuleInfo info = findWithSourcePath(sourceAbsPath, fileName);
     info.setClassName(ctype.getName());
-    info.exp = mexp;
-    comp.minfo = info;
-    info.comp = comp;
+    info.setCompilation(comp);
     return info;
   }
 
@@ -72,6 +95,13 @@ public class ModuleManager
       }
     modules[numModules++] = info;
   }
+
+    public ModuleInfo createWithClassName(String className) {
+        ModuleInfo info = new ModuleInfo();
+        info.setClassName(className);
+        add(info);
+        return info;
+    }
 
   public synchronized ModuleInfo searchWithClassName (String className)
   {
@@ -104,7 +134,7 @@ public class ModuleManager
       {
         return findWithClass(ClassType.getContextClass(className));
       }
-    catch (Throwable ex)
+    catch (Exception ex)
       {
         throw WrappedException.wrapIfNeeded(ex);
       }
@@ -189,7 +219,7 @@ public class ModuleManager
             info.sourceAbsPath = sourceAbsPath;
             info.sourceAbsPathname = sourceAbsPath.toString();
           }
-        catch (Throwable ex)
+        catch (Exception ex)
           {
             return;
           }

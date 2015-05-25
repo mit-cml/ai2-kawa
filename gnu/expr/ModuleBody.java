@@ -2,12 +2,15 @@ package gnu.expr;
 import gnu.mapping.*;
 import gnu.lists.*;
 import gnu.kawa.reflect.ClassMemberLocation;
+import gnu.kawa.io.OutPort;
+import gnu.kawa.io.WriterManager;
+import gnu.kawa.util.ExitCalled;
 
 /**
  * Class for the dummy top-level function of a module.
  */
 
-public abstract class ModuleBody extends Procedure0
+public abstract class ModuleBody extends Procedure0 implements RunnableModule
 {
   public void apply (CallContext ctx)  throws Throwable
   {
@@ -67,11 +70,7 @@ public abstract class ModuleBody extends Procedure0
     ctx.consumer = save;
     if (th != null)
       {
-	if (th instanceof RuntimeException)
-	  throw (RuntimeException) th;
-	if (th instanceof Error)
-	  throw (Error) th;
-	throw new WrappedException(th);
+        WrappedException.rethrow(th);
       }
   }
 
@@ -109,7 +108,7 @@ public abstract class ModuleBody extends Procedure0
    * Thus if you start up AWT, the JVM will wait for the AWT to finish,
    * even if there are no other non-daemon threads.
    * So call exitIncrement() each time a Freme is created,
-   * and call exitDecrement() a Frame is closed. */
+   * and call exitDecrement() when a Frame is closed. */
   public static synchronized void exitDecrement()
   {
     int counter = exitCounter;
@@ -128,32 +127,48 @@ public abstract class ModuleBody extends Procedure0
   /** This is invoked by main when ModuleBody is compiled with --main. */
   public final void runAsMain ()
   {
-    gnu.text.WriterManager.instance.registerShutdownHook();
+    runAsMain(this);
+  }
+
+  /** This is invoked by main when ModuleBody is compiled with --main. */
+  public static void runAsMain (RunnableModule module)
+  {
+    boolean registered = WriterManager.instance.registerShutdownHook();
     try
       {
+        ExitCalled.push();
 	CallContext ctx = CallContext.getInstance();
 	if (getMainPrintValues())
 	  {
 	    OutPort out = OutPort.outDefault();
 	    ctx.consumer = kawa.Shell.getOutputConsumer(out);
-	    run(ctx);
+	    module.run(ctx);
 	    ctx.runUntilDone();
 	    out.freshLine();
 	  }
 	else
 	  {
-	    run();
+            ctx.consumer = VoidConsumer.instance;
+            module.run(ctx);
 	    ctx.runUntilDone();
 	  }
-	// Redundant if registerShutdownHook succeeded (e.g on JDK 1.3).
-	gnu.mapping.OutPort.runCleanups();
+        if (! registered)
+          gnu.kawa.io.OutPort.runCleanups();
 	exitDecrement();
+      }
+    catch (ExitCalled ex)
+      {
+         throw ex; // handled by ExitCalled.pop below.
       }
     catch (Throwable ex)
       {
 	ex.printStackTrace();
-	gnu.mapping.OutPort.runCleanups();
+	gnu.kawa.io.OutPort.runCleanups();
 	System.exit(-1);
+      }
+    finally
+      {
+        ExitCalled.pop();
       }
   }
 
@@ -271,6 +286,7 @@ public abstract class ModuleBody extends Procedure0
 	//ctx.proc = this; 	ctx.pc = proc.selector;
 	return 0;
       }
+    ctx.where = 0;
     Object[] args = { arg1 };
     return matchN(proc, args, ctx);
   }
@@ -296,6 +312,7 @@ public abstract class ModuleBody extends Procedure0
 	ctx.proc = proc;
 	return 0;
       }
+    ctx.where = 0;
     Object[] args = { arg1, arg2 };
     return matchN(proc, args, ctx);
   }
@@ -324,6 +341,7 @@ public abstract class ModuleBody extends Procedure0
 	// ctx.proc = this; ctx.pc = proc.selector;
 	return 0;
       }
+    ctx.where = 0;
     Object[] args = { arg1, arg2, arg3 };
     return matchN(proc, args, ctx);
   }
@@ -354,6 +372,7 @@ public abstract class ModuleBody extends Procedure0
 	//ctx.proc = this;	ctx.pc = proc.selector;
 	return 0;
       }
+    ctx.where = 0;
     Object[] args = { arg1, arg2, arg3, arg4 };
     return matchN(proc, args, ctx);
   }

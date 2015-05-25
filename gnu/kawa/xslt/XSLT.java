@@ -7,6 +7,7 @@ import gnu.lists.*;
 import gnu.expr.*;
 import gnu.text.*;
 import gnu.xquery.lang.*;
+import gnu.kawa.io.InPort;
 import gnu.kawa.xml.*;
 
 /** New Kawa language XSLT (XML Stylesheet Language Tranformations). */
@@ -176,19 +177,5 @@ public class XSLT extends XQuery
 	pos.push(doc.sequence, doc.ipos);
 	process((TreeList) doc.sequence, pos, ctx);
       }
-  }
-
-  public static void applyTemplates(String select, Symbol mode)
-    throws Throwable
-  {
-    if (mode == null)
-      mode = nullMode;
-    TemplateTable table = TemplateTable.getTemplateTable(mode);
-    CallContext ctx = CallContext.getInstance();
-    Focus pos = Focus.getCurrent();
-    TreeList doc = (TreeList) pos.sequence;
-    pos.push(doc, doc.firstChildPos(pos.ipos));
-    process(doc, pos, ctx);
-    pos.pop();
   }
 }

@@ -21,11 +21,16 @@ public abstract class Attribute
   public final void setContainer(AttrContainer container)
   { this.container = container; }
 
-  Attribute next;
+  private Attribute next;
   /** Get the next Attribute belonging to getContainer(). */
   public final Attribute getNext() { return next; }
   /** Set the next Attribute in the chain belonging to getContainer(). */
   public final void setNext(Attribute next) { this.next = next; }
+
+  public ConstantPool getConstants ()
+  {
+    return getContainer().getConstants();
+  }
 
   /** Add this to (the front of) of the specified attribute container. */
   public void addToFrontOf(AttrContainer container)

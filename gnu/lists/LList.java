@@ -16,8 +16,8 @@ import java.io.*;
  * @author	Per Bothner
  */
 
-public class LList extends ExtSequence
-  implements Sequence, Externalizable
+public class LList extends ExtSequence<Object>
+  implements Sequence<Object>, Externalizable
   /* #ifdef JAVA2 */
   , Comparable
   /* #endif */
@@ -25,13 +25,13 @@ public class LList extends ExtSequence
   /** Do not use - only public for serialization! */
   public LList () { }
 
-  static public final LList Empty = new LList ();
+  static public final EmptyList Empty = EmptyList.emptyList;
 
   /**
    * A safe function to count the length of a list.
    * @param obj the putative list to measure
    * @param allowOtherSequence if a non-List Sequence is seen, allow that
-   * @return the length, or -1 for a circular list, or -2 for an improper list
+   * @return the length, or -1 for a circular list, or -2 for a dotted list
    */
   static public int listLength(Object obj, boolean allowOtherSequence)
   {
@@ -387,18 +387,6 @@ public class LList extends ExtSequence
     return prev;
   }
 
-  public static Object listTail(Object list, int count)
-  {
-    while (--count >= 0)
-      {
-	if (! (list instanceof Pair))
-	  throw new IndexOutOfBoundsException("List is too short.");
-	Pair pair = (Pair) list;
-	list = pair.cdr;
-      }
-    return list;
-  }
-
   /** SRFI-1's cons* and Common Lisp's list* function. */
   public static Object consX (Object[] args)
   {
@@ -439,8 +427,8 @@ public class LList extends ExtSequence
 	if (rest instanceof Pair)
 	  {
 	    Pair pair = (Pair) rest;
-	    sbuf.append(pair.car);
-	    rest = pair.cdr;
+            sbuf.append(pair.getCar());
+	    rest = pair.getCdr();
 	  }
 	else
 	  {

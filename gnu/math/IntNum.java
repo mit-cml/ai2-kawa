@@ -256,7 +256,7 @@ public class IntNum extends RatNum implements Externalizable
   {
     if (obj instanceof IntNum)
       return compare (this, (IntNum) obj);
-    return ((RealNum)obj).compareReversed (this);
+    return ((Numeric)obj).compareReversed (this);
   }
 
   public final boolean isOdd ()
@@ -887,7 +887,7 @@ public class IntNum extends RatNum implements Externalizable
 	if (y == 0)
 	  return one ();
 	else
-	  throw new Error ("negative exponent");
+	  throw new IllegalArgumentException("negative exponent");
       }
     if (x.isZero ())
       return x;
@@ -1119,12 +1119,12 @@ public class IntNum extends RatNum implements Externalizable
 
   public static long shift (long x, int count)
   {
-    if (count >= 32)
+    if (count >= 64)
       return 0;
     if (count >= 0)
       return x << count;
     count = -count;
-    if (count >= 32)
+    if (count >= 64)
         return x < 0 ? -1 : 0;
     return x >> count;
   }
@@ -1350,9 +1350,9 @@ public class IntNum extends RatNum implements Externalizable
     if (len + radix <= 28)
       {
         /* #ifndef JAVA7 */
-        if (len > 1 && s.charAt(0) == '+'
-            && Character.digit(s.charAt(1), radix) >= 0)
-          s = s.substring(1);
+        // if (len > 1 && s.charAt(0) == '+'
+        //     && Character.digit(s.charAt(1), radix) >= 0)
+        //   s = s.substring(1);
         /* #endif */
         return IntNum.make (Long.parseLong (s, radix));
       }

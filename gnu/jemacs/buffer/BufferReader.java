@@ -1,8 +1,10 @@
 package gnu.jemacs.buffer;
 import gnu.mapping.*;
 import java.io.*;
+import gnu.kawa.io.InPort;
+import gnu.kawa.io.NullReader;
+import gnu.kawa.io.Path;
 import gnu.lists.CharBuffer;
-import gnu.text.*;
 
 public class BufferReader extends InPort
 {
@@ -12,7 +14,7 @@ public class BufferReader extends InPort
 
   public BufferReader(CharBuffer content, Path path, int start, int count)
   {
-    super(gnu.text.NullReader.nullReader, path);
+    super(NullReader.nullReader, path);
     this.content = content;
     buffer = content.getArray();
     rangeStart = start;
@@ -56,12 +58,12 @@ public class BufferReader extends InPort
 
   public void reset ()  throws IOException
   {
-    if (readAheadLimit <= 0)
+    if (readAheadLimit < 0)
       throw new IOException ("mark invalid");
     if (pos >= content.gapEnd && markPos <= content.gapStart)
       limit = content.gapEnd;
     pos = markPos;
-    readAheadLimit = 0;
+    readAheadLimit = -1;
   }
 
   public int getLineNumber ()

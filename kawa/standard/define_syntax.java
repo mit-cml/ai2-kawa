@@ -10,21 +10,31 @@ import gnu.lists.*;
 
 public class define_syntax extends Syntax
 {
+  int flags;
+
   public static final define_syntax define_macro
     = new define_syntax("%define-macro", false);
 
   public static final define_syntax define_syntax
     = new define_syntax("%define-syntax", true);
 
+  public static final define_syntax define_rewrite_syntax
+    = new define_syntax("define-rewrite-syntax", Macro.HYGIENIC|Macro.SKIP_SCAN_FORM);
+
   public define_syntax ()
   {
-    this.hygienic = true;
+    flags = Macro.HYGIENIC;
+  }
+
+  public define_syntax (Object name, int flags)
+  {
+    super(name);
+    this.flags = flags;
   }
 
   public define_syntax (Object name, boolean hygienic)
   {
-    super(name);
-    this.hygienic = hygienic;
+    this(name, hygienic ? Macro.HYGIENIC : 0);
   }
 
   static ClassType typeMacro = ClassType.make("kawa.lang.Macro");
@@ -32,14 +42,15 @@ public class define_syntax extends Syntax
     = new PrimProcedure(typeMacro.getDeclaredMethod("make", 3));
   static PrimProcedure makeNonHygienic
     = new PrimProcedure(typeMacro.getDeclaredMethod("makeNonHygienic", 3));
+  static PrimProcedure makeSkipScanForm
+    = new PrimProcedure(typeMacro.getDeclaredMethod("makeSkipScanForm", 3));
   static PrimProcedure setCapturedScope
     = new PrimProcedure(typeMacro.getDeclaredMethod("setCapturedScope", 1));
   static {
     makeHygienic.setSideEffectFree();
     makeNonHygienic.setSideEffectFree();
+    makeSkipScanForm.setSideEffectFree();
   }
-
-  boolean hygienic;
 
   public Expression rewriteForm (Pair form, Translator tr)
   {
@@ -74,12 +85,12 @@ public class define_syntax extends Syntax
     name = tr.namespaceResolve(name);
     if (! (name instanceof Symbol))
       {
-        tr.formStack.addElement(tr.syntaxError("missing macro name for "+Translator.safeCar(st)));
+        tr.pushForm(tr.syntaxError("missing macro name for "+Translator.safeCar(st)));
         return;
       }
     if (p == null || Translator.safeCdr(p) != LList.Empty)
       {
-        tr.formStack.addElement(tr.syntaxError("invalid syntax for "+getName()));
+        tr.pushForm(tr.syntaxError("invalid syntax for "+getName()));
         return;
       }
 
@@ -89,7 +100,7 @@ public class define_syntax extends Syntax
 
     Macro savedMacro = tr.currentMacroDefinition;
     Macro macro = Macro.make(decl);
-    macro.setHygienic(hygienic);
+    macro.setFlags(flags);
     tr.currentMacroDefinition = macro;
     Expression rule = tr.rewrite_car((Pair) p, syntax);
     tr.currentMacroDefinition = savedMacro;
@@ -97,12 +108,21 @@ public class define_syntax extends Syntax
 
     if (rule instanceof LambdaExp)
       ((LambdaExp) rule).setFlag(LambdaExp.NO_FIELD);
-    Expression args[] = new Expression[3];
-    args[0] = new QuoteExp(name);
-    args[1] = rule;
-    args[2] = ThisExp.makeGivingContext(defs);
-    rule = new ApplyExp(hygienic ? makeHygienic : makeNonHygienic,
-			args);
+    Procedure makeMacroProc =
+        (flags & Macro.SKIP_SCAN_FORM) != 0 ? makeSkipScanForm
+        : (flags & Macro.HYGIENIC) != 0 ? makeHygienic
+        : makeNonHygienic;
+    // A top-level macro needs (in general) to be compiled into the
+    // class-file, but for a non-top-level macro it is better to use
+    // the quoted macro directly to get the right nesting, as we
+    // do for letrec-syntax.
+    if (decl.context instanceof ModuleExp || makeMacroProc != makeHygienic)
+      rule = new ApplyExp(makeMacroProc,
+                          new QuoteExp(name),
+                          rule,
+                          ThisExp.makeGivingContext(defs));
+    else
+        rule = new QuoteExp(macro);
     decl.noteValue(rule);
     decl.setProcedureDecl(true);
   
@@ -113,14 +133,13 @@ public class define_syntax extends Syntax
 	if (tr.getLanguage().hasSeparateFunctionNamespace())
 	  result.setFuncDef(true);
 
-	tr.formStack.addElement(result);
+	tr.pushForm(result);
 
         if (tr.immediate)
           {
-            args = new Expression[2];
-            args[0] = new ReferenceExp(decl);
-            args[1] = new QuoteExp(defs);
-            tr.formStack.addElement(new ApplyExp(setCapturedScope, args));
+            Expression[] args =
+                { new ReferenceExp(decl), new QuoteExp(defs) };
+            tr.pushForm(new ApplyExp(setCapturedScope, args));
           }
       }
   }

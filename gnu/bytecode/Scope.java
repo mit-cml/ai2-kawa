@@ -2,7 +2,7 @@
 // This is free software;  for terms and warranty disclaimer see ./COPYING.
 
 package gnu.bytecode;
-
+import java.util.HashMap;
 public class Scope
 {
   /** The enclosing scope. */
@@ -12,6 +12,8 @@ public class Scope
 
   /** If true, don't call freeLocal on our variables (yet). */
   boolean preserved;
+
+    boolean autoPop;
 
   Label start;
   Label end;
@@ -32,6 +34,9 @@ public class Scope
   public final Variable firstVar () { return vars; }
 
   public VarEnumerator allVars () { return new VarEnumerator (this); }
+
+    public Label getStartLabel() { return start; }
+    public Label getEndLabel() { return end; }
 
   /** Link this scope as the next child of its parent scope. */
   public void linkChild (Scope parent)
@@ -101,6 +106,26 @@ public class Scope
     return var;
   }
 
+    /** Fix duplicate names.
+     * This is needed for Android, since otherwise dex complains.
+     */
+    public void fixParamNames(HashMap<String,Variable> map) {
+        for (Variable var = firstVar();  var != null;
+             var = var.nextVar()) {
+            String name = var.getName();
+            if (name != null) {
+                String xname = name;
+                Variable old;
+                for (int i = 0; (old = map.get(xname)) != null;  i++)
+                    xname = name + '$' + i;
+                if (name != xname)
+                    var.setName(xname);
+                map.put(xname, var);
+            }
+        }
+    }
+
+
   static boolean equals (byte[] name1, byte[] name2) {
     if (name1.length != name2.length)
       return false;
@@ -125,7 +150,6 @@ public class Scope
   public void noteStartFunction(CodeAttr code)
   {
     setStartPC(code);
-    start.setTypes(code);
   }
 
   /**

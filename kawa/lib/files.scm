@@ -5,11 +5,11 @@
 (require <kawa.lib.ports>)
 
 (define (path? path) :: <boolean>
-  (instance? path <gnu.text.Path>))
+  (instance? path gnu.kawa.io.Path))
 (define (filepath? path) :: <boolean>
-  (instance? path <gnu.text.FilePath>))
+  (instance? path gnu.kawa.io.FilePath))
 (define (URI? path) :: <boolean>
-  (instance? path <gnu.text.URIPath>))
+  (instance? path gnu.kawa.io.URIPath))
 (define (absolute-path? (path :: path)) :: <boolean>
   (path:isAbsolute))
 (define (path-scheme (p :: path))
@@ -58,6 +58,42 @@
 (simplify-path)
 |#
 
+(define-procedure path-bytes
+  setter: (lambda ((p ::path) b::bytevector)::void
+                  (let ((out (p:openOutputStream)))
+                    (try-finally
+                     (b:writeTo 0 (b:size) out)
+                     (out:close))))
+  (lambda (p ::path) ::bytevector name: 'path-bytes
+          (gnu.lists.U8Vector (p:readAllBytes))))
+
+(define (path-data-setter (p ::path) newvalue)::void
+  (let ((out (p:openOutputStream))
+        (in (gnu.kawa.functions.RunProcess:getInputStreamFrom newvalue)))
+    (gnu.kawa.functions.RunProcess:copyStream in out #t)))
+
+(define (path-data-appender (p ::filepath) newvalue)::void
+  (let ((out (p:openAppendStream))
+        (in (gnu.kawa.functions.RunProcess:getInputStreamFrom newvalue)))
+    (gnu.kawa.functions.RunProcess:copyStream in out #t)))
+
+(define-procedure path-data
+  setter: path-data-setter
+  (lambda (p ::path) ::gnu.lists.Blob name: 'path-data
+           (gnu.lists.Blob (p:readAllBytes))))
+
+(define-syntax path-data-setter-curried
+  (syntax-rules ()
+    ((_ p) (lambda (newvalue) ::void (path-data-setter p newvalue)))))
+
+(define-syntax path-data-appender-curried
+  (syntax-rules ()
+    ((_ p) (lambda (newvalue) ::void (path-data-appender p newvalue)))))
+
+(define-simple-constructor PD path-data $string$)
+(define-simple-constructor set_PD path-data-setter-curried $string$)
+(define-simple-constructor append_PD path-data-appender-curried $string$)
+
 (define (file-exists? (file :: path)) :: <boolean>
   (file:exists))
 
@@ -74,22 +110,20 @@
 ;  (filename:getLastModified))
 
 (define (delete-file (file :: filepath)) :: <void>
-  (if (not (file:delete))
-      (primitive-throw (<java.io.IOException>:new
-			((format #f "cannot delete ~a" file):toString)))))
+  (file:deleteFile))
 
 (define (rename-file (oldname :: filepath) (newname :: filepath))
   ((oldname:toFile):renameTo (newname:toFile)))
 
 (define (copy-file (from :: path) (to :: path)) :: <void>
-  (let ((in (open-input-file from))
-	(out (open-output-file to)))
-    (do ((ch (read-char in) (read-char in)))
-	((eof-object? ch)
-	 (close-output-port out)
-	 (close-input-port in)
-	 #!void)
-      (write-char ch out))))
+  (let ((in (from:openInputStream))
+        (out (to:openOutputStream))
+        (buf (byte[] length: 8192)))
+    (let loop ()
+      (let ((n (in:read buf)))
+        (cond ((>= n 0)
+               (out:write buf 0 n)
+               (loop)))))))
 
 (define (create-directory (dirname :: filepath))
   ((dirname:toFile):mkdir))
@@ -124,6 +158,15 @@
   (base:resolve uri))
 
 ; From MzLib.  Scsh has (create-temp-file [prefix]).
-(define (make-temporary-file #!optional (fmt :: <string> "kawa~d.tmp"))
+(define (make-temporary-file #!optional (format :: <string> "kawa~d.tmp"))
   :: filepath
-  (filepath (gnu.kawa.functions.FileUtils:createTempFile (fmt:toString))))
+  (let* ((fmt (format:toString))
+         (tilde (fmt:indexOf #\~))
+         (prefix::java.lang.String (if (< tilde 0) fmt (fmt:substring 0 tilde)))
+         (suffix (if (< tilde 0) ".tmp" (fmt:substring (+ 2 tilde))))
+         (sep (prefix:indexOf java.io.File:separatorChar))
+         (directory #!null))
+    (cond ((>= sep 0)
+           (set! directory (java.io.File (prefix:substring 0 sep)))
+           (set! prefix (prefix:substring (+ sep 1)))))
+    (java.io.File:createTempFile prefix suffix directory)))

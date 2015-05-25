@@ -1,4 +1,8 @@
-;; Copyright (c) 2005, 2006, 2007 Per Bothner
+;; Copyright (c) 2005, 2006, 2007, 2012, 2013 Per Bothner
+;; Added "full" support for Chicken, Gauche, Guile and SISC.
+;;   Alex Shinn, Copyright (c) 2005.
+;; Modified for Scheme Spheres by Álvaro Castro-Castilla, Copyright (c) 2012.
+;; Support for Guile 2 by Mark H Weaver <mhw@netris.org>, Copyright (c) 2014.
 ;;
 ;; Permission is hereby granted, free of charge, to any person
 ;; obtaining a copy of this software and associated documentation
@@ -23,6 +27,12 @@
 (cond-expand
  (chicken
   (require-extension syntax-case))
+ (guile-2
+  (use-modules (srfi srfi-9)
+               ;; In 2.0.9, srfi-34 and srfi-35 are not well integrated
+               ;; with either Guile's native exceptions or R6RS exceptions.
+               ;;(srfi srfi-34) (srfi srfi-35)
+               (srfi srfi-39)))
  (guile
   (use-modules (ice-9 syncase) (srfi srfi-9)
 	       ;;(srfi srfi-34) (srfi srfi-35) - not in Guile 1.6.7
@@ -57,7 +67,7 @@
  test-approximate test-assert test-error test-apply test-with-runner
  test-match-nth test-match-all test-match-any test-match-name
  test-skip test-expect-fail test-read-eval-string
- test-runner-group-path test-group-with-cleanup
+ test-runner-group-path test-group test-group-with-cleanup
  test-result-ref test-result-set! test-result-clear test-result-remove
  test-result-kind test-passed?
  test-log-to-file
@@ -156,20 +166,20 @@
 )
 
 (define (test-runner-reset runner)
-    (test-result-alist! runner '())
-    (test-runner-pass-count! runner 0)
-    (test-runner-fail-count! runner 0)
-    (test-runner-xpass-count! runner 0)
-    (test-runner-xfail-count! runner 0)
-    (test-runner-skip-count! runner 0)
-    (%test-runner-total-count! runner 0)
-    (%test-runner-count-list! runner '())
-    (%test-runner-run-list! runner #t)
-    (%test-runner-skip-list! runner '())
-    (%test-runner-fail-list! runner '())
-    (%test-runner-skip-save! runner '())
-    (%test-runner-fail-save! runner '())
-    (test-runner-group-stack! runner '()))
+  (test-result-alist! runner '())
+  (test-runner-pass-count! runner 0)
+  (test-runner-fail-count! runner 0)
+  (test-runner-xpass-count! runner 0)
+  (test-runner-xfail-count! runner 0)
+  (test-runner-skip-count! runner 0)
+  (%test-runner-total-count! runner 0)
+  (%test-runner-count-list! runner '())
+  (%test-runner-run-list! runner #t)
+  (%test-runner-skip-list! runner '())
+  (%test-runner-fail-list! runner '())
+  (%test-runner-skip-save! runner '())
+  (%test-runner-fail-save! runner '())
+  (test-runner-group-stack! runner '()))
 
 (define (test-runner-group-path runner)
   (reverse (test-runner-group-stack runner)))
@@ -233,7 +243,7 @@
 	 (else #t)))
     r))
 
-(define (%test-specificier-matches spec runner)
+(define (%test-specifier-matches spec runner)
   (spec runner))
 
 (define (test-runner-create)
@@ -244,7 +254,7 @@
     (let loop ((l list))
       (cond ((null? l) result)
 	    (else
-	     (if (%test-specificier-matches (car l) runner)
+	     (if (%test-specifier-matches (car l) runner)
 		 (set! result #t))
 	     (loop (cdr l)))))))
 
@@ -464,7 +474,7 @@
 	  (if test-name (%test-write-result1 test-name log))
 	  (if source-file (%test-write-result1 source-file log))
 	  (if source-line (%test-write-result1 source-line log))
-	  (if source-file (%test-write-result1 source-form log))))))
+	  (if source-form (%test-write-result1 source-form log))))))
 
 (define-syntax test-result-ref
   (syntax-rules ()
@@ -563,7 +573,12 @@
   (define-syntax %test-evaluate-with-catch
     (syntax-rules ()
       ((%test-evaluate-with-catch test-expression)
-       (catch #t (lambda () test-expression) (lambda (key . args) #f))))))
+       (catch #t
+         (lambda () test-expression)
+         (lambda (key . args)
+           (test-result-set! (test-runner-current) 'actual-error
+                             (cons key args))
+           #f))))))
  (kawa
   (define-syntax %test-evaluate-with-catch
     (syntax-rules ()
@@ -606,6 +621,21 @@
 	   (line-pair (if line (list (cons 'source-line line)) '())))
       (cons (cons 'source-form (syntax-object->datum form))
 	    (if file (cons (cons 'source-file file) line-pair) line-pair)))))
+ (guile-2
+  (define (%test-source-line2 form)
+    (let* ((src-props (syntax-source form))
+           (file (and src-props (assq-ref src-props 'filename)))
+           (line (and src-props (assq-ref src-props 'line)))
+           (file-alist (if file
+                           `((source-file . ,file))
+                           '()))
+           (line-alist (if line
+                           `((source-line . ,(+ line 1)))
+                           '())))
+      (datum->syntax (syntax here)
+                     `((source-form . ,(syntax->datum form))
+                       ,@file-alist
+                       ,@line-alist)))))
  (else
   (define (%test-source-line2 form)
     '())))
@@ -636,10 +666,16 @@
 			   (%test-on-test-end r (comp exp res)))))
 		   (%test-report-result)))))
 
-(define (%test-approximimate= error)
+(define (%test-approximate= error)
   (lambda (value expected)
-    (and (>= value (- expected error))
-         (<= value (+ expected error)))))
+    (let ((rval (real-part value))
+          (ival (imag-part value))
+          (rexp (real-part expected))
+          (iexp (imag-part expected)))
+      (and (>= rval (- rexp error))
+           (>= ival (- iexp error))
+           (<= rval (+ rexp error))
+           (<= ival (+ iexp error))))))
 
 (define-syntax %test-comp1body
   (syntax-rules ()
@@ -653,12 +689,12 @@
        (%test-report-result)))))
 
 (cond-expand
- ((or kawa mzscheme)
+ ((or kawa mzscheme guile-2)
   ;; Should be made to work for any Scheme with syntax-case
   ;; However, I haven't gotten the quoting working.  FIXME.
   (define-syntax test-end
     (lambda (x)
-      (syntax-case (list x (list 'quote (%test-source-line2 x))) ()
+      (syntax-case (list x (list (syntax quote) (%test-source-line2 x))) ()
 	(((mac suite-name) line)
 	 (syntax
 	  (%test-end suite-name line)))
@@ -667,7 +703,7 @@
 	  (%test-end #f line))))))
   (define-syntax test-assert
     (lambda (x)
-      (syntax-case (list x (list 'quote (%test-source-line2 x))) ()
+      (syntax-case (list x (list (syntax quote) (%test-source-line2 x))) ()
 	(((mac tname expr) line)
 	 (syntax
 	  (let* ((r (test-runner-get))
@@ -680,7 +716,7 @@
 	    (test-result-alist! r line)
 	    (%test-comp1body r expr)))))))
   (define (%test-comp2 comp x)
-    (syntax-case (list x (list 'quote (%test-source-line2 x)) comp) ()
+    (syntax-case (list x (list (syntax quote) (%test-source-line2 x)) comp) ()
       (((mac tname expected expr) line comp)
        (syntax
 	(let* ((r (test-runner-get))
@@ -700,18 +736,18 @@
     (lambda (x) (%test-comp2 (syntax equal?) x)))
   (define-syntax test-approximate ;; FIXME - needed for non-Kawa
     (lambda (x)
-      (syntax-case (list x (list 'quote (%test-source-line2 x))) ()
+      (syntax-case (list x (list (syntax quote) (%test-source-line2 x))) ()
       (((mac tname expected expr error) line)
        (syntax
 	(let* ((r (test-runner-get))
 	       (name tname))
 	  (test-result-alist! r (cons (cons 'test-name tname) line))
-	  (%test-comp2body r (%test-approximimate= error) expected expr))))
+	  (%test-comp2body r (%test-approximate= error) expected expr))))
       (((mac expected expr error) line)
        (syntax
 	(let* ((r (test-runner-get)))
 	  (test-result-alist! r line)
-	  (%test-comp2body r (%test-approximimate= error) expected expr))))))))
+	  (%test-comp2body r (%test-approximate= error) expected expr))))))))
  (else
   (define-syntax test-end
     (syntax-rules ()
@@ -756,16 +792,30 @@
   (define-syntax test-approximate
     (syntax-rules ()
       ((test-approximate tname expected expr error)
-       (%test-comp2 (%test-approximimate= error) tname expected expr))
+       (%test-comp2 (%test-approximate= error) tname expected expr))
       ((test-approximate expected expr error)
-       (%test-comp2 (%test-approximimate= error) expected expr))))))
+       (%test-comp2 (%test-approximate= error) expected expr))))))
 
 (cond-expand
  (guile
   (define-syntax %test-error
     (syntax-rules ()
       ((%test-error r etype expr)
-       (%test-comp1body r (catch #t (lambda () expr) (lambda (key . args) #t)))))))
+       (cond ((%test-on-test-begin r)
+              (let ((et etype))
+                (test-result-set! r 'expected-error et)
+                (%test-on-test-end r
+                                   (catch #t
+                                     (lambda ()
+                                       (test-result-set! r 'actual-value expr)
+                                       #f)
+                                     (lambda (key . args)
+                                       ;; TODO: decide how to specify expected
+                                       ;; error types for Guile.
+                                       (test-result-set! r 'actual-error
+                                                         (cons key args))
+                                       #t)))
+                (%test-report-result))))))))
  (mzscheme
   (define-syntax %test-error
     (syntax-rules ()
@@ -818,15 +868,15 @@
 		   (and (condition? ex) (condition-has-type? ex etype)))
 		  ((procedure? etype)
 		   (etype ex))
-		  ((equal? type #t)
+		  ((equal? etype #t)
 		   #t)
 		  (else #t))
-	      expr))))))
+	      expr #f))))))
  (srfi-34
   (define-syntax %test-error
     (syntax-rules ()
       ((%test-error r etype expr)
-       (%test-comp1body r (guard (ex (else #t)) expr))))))
+       (%test-comp1body r (guard (ex (else #t)) expr #f))))))
  (else
   (define-syntax %test-error
     (syntax-rules ()
@@ -837,11 +887,11 @@
 	 (%test-report-result)))))))
 
 (cond-expand
- ((or kawa mzscheme)
+ ((or kawa mzscheme guile-2)
 
   (define-syntax test-error
     (lambda (x)
-      (syntax-case (list x (list 'quote (%test-source-line2 x))) ()
+      (syntax-case (list x (list (syntax quote) (%test-source-line2 x))) ()
 	(((mac tname etype expr) line)
 	 (syntax
 	  (let* ((r (test-runner-get))
@@ -862,11 +912,17 @@
   (define-syntax test-error
     (syntax-rules ()
       ((test-error name etype expr)
-       (test-assert name (%test-error etype expr)))
+       (let ((r (test-runner-get)))
+         (test-result-alist! r `((test-name . ,name)))
+         (%test-error r etype expr)))
       ((test-error etype expr)
-       (test-assert (%test-error etype expr)))
+       (let ((r (test-runner-get)))
+         (test-result-alist! r '())
+         (%test-error r etype expr)))
       ((test-error expr)
-       (test-assert (%test-error #t expr)))))))
+       (let ((r (test-runner-get)))
+         (test-result-alist! r '())
+         (%test-error r #t expr)))))))
 
 (define (test-apply first . rest)
   (if (test-runner? first)
@@ -875,7 +931,7 @@
 	(if r
 	    (let ((run-list (%test-runner-run-list r)))
 	      (cond ((null? rest)
-		     (%test-runner-run-list! r (reverse! run-list))
+		     (%test-runner-run-list! r (reverse run-list))
 		     (first)) ;; actually apply procedure thunk
 		    (else
 		     (%test-runner-run-list!
@@ -975,7 +1031,9 @@
   (let* ((port (open-input-string string))
 	 (form (read port)))
     (if (eof-object? (read-char port))
-	(eval form)
+	(cond-expand
+	 (guile (eval form (current-module)))
+	 (else (eval form)))
 	(cond-expand
 	 (srfi-23 (error "(not at eof)"))
 	 (else "error")))))

@@ -3,7 +3,9 @@
 
 package gnu.expr;
 import gnu.bytecode.*;
-import gnu.mapping.*;
+import gnu.kawa.io.OutPort;
+import gnu.mapping.CallContext;
+import gnu.mapping.Values;
 
 /**
  * This class represents a conditional.
@@ -75,6 +77,10 @@ public class IfExp extends Expression
 	else
 	  falseLabel = ((ConditionalTarget) target).ifFalse;
       }
+    /*
+    // This is a minor optimization, useful for syntax-case switches.
+    // However, there are some tricky bits setting reachabilty correctly,
+    // and getting it right doesn't seem worth the complication.
     else if (else_clause instanceof ExitExp
              && ((ExitExp) else_clause).result instanceof QuoteExp
              && (block = ((ExitExp) else_clause).block).exitTarget instanceof IgnoreTarget
@@ -82,6 +88,7 @@ public class IfExp extends Expression
       {
         falseInherited = true;
       }
+    */
     else
       falseInherited = false;
     if (falseLabel == null)
@@ -108,7 +115,7 @@ public class IfExp extends Expression
       ctarget.trueBranchComesFirst = false;
     test.compile(comp, ctarget);
     code.emitIfThen();
-    if (! trueInherited /* && trueLabel.hasFixups()*/)
+    if (! trueInherited && trueLabel.isUsed())
       {
 	trueLabel.define(code);
         // An alternative to saving and restoring callContextVar
@@ -118,20 +125,23 @@ public class IfExp extends Expression
 	then_clause.compileWithPosition(comp, target);
         comp.callContextVar = callContextSave;
       }
-    if (! falseInherited /* && falseLabel.hasFixups()*/)
+    if (! falseInherited)
       {
-	code.emitElse();
-	falseLabel.define(code);
-        // See note above for then_clause.
-        Variable callContextSave = comp.callContextVar;
-	if (else_clause == null)
-	  comp.compileConstant(Values.empty, target);
-	else
-	  else_clause.compileWithPosition(comp, target);
-        comp.callContextVar = callContextSave;
+        code.emitElse();
+        if (falseLabel.isUsed())
+          {
+            falseLabel.define(code);
+            // See note above for then_clause.
+            Variable callContextSave = comp.callContextVar;
+            if (else_clause == null)
+              comp.compileConstant(Values.empty, target);
+            else
+              else_clause.compileWithPosition(comp, target);
+            comp.callContextVar = callContextSave;
+          }
+        else
+          code.setUnreachable();
       }
-    else
-      code.setUnreachable();
     code.emitFi();
   }
 
@@ -149,7 +159,7 @@ public class IfExp extends Expression
       else_clause = visitor.visitAndUpdate(else_clause, d);
   }
 
-  public gnu.bytecode.Type getType()
+  protected gnu.bytecode.Type calculateType()
   {
     Type t1 = then_clause.getType();
     Type t2 = else_clause == null ? Type.voidType : else_clause.getType();
@@ -170,4 +180,11 @@ public class IfExp extends Expression
       }
     out.endLogicalBlock(")");
   }
+
+    /* DEBUGGING:
+    private static int counter;
+    protected int id = ++counter;
+
+    public String toString() { return "IfExp#"+id; }
+    */
 }

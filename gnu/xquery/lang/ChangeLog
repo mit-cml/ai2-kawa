@@ -1,3 +1,84 @@
+2014-11-16  Per Bothner  <per@bothner.com>
+
+	* XQParser.java (parse): Test for duplicate import.
+
+2014-07-02  Per Bothner  <per@bothner.com>
+
+	* XQParser.java (treatAs): Update for new Convert handling.
+
+2014-05-21  Per Bothner  <per@bothner.com>
+
+	* XQParser.java (parseContent): Literal direct attribute or element
+	content is now presented by a quoted FString, to fix some corner cases.
+
+2014-05-03  Per Bothner  <per@bothner.com>
+
+	* XQResolveNames.java (visitReference): Update to use KawaServlet.
+	Belated fix needed because of 2010 servlet changes.
+
+2014-02-23  Per Bothner  <per@bothner.com>
+
+	* XQParser.java: Handle encoding declaration.
+
+2014-02-16  Per Bothner  <per@bothner.com>
+
+	* XQParser.java: Make sure Error is uncaught or re-thrown.
+
+2013-11-10  Per Bothner  <per@bothner.com>
+
+	* XQParser.java: Update for new FormStack APIs.
+
+2013-11-02  Per Bothner  <per@bothner.com>
+
+	* XQResolveNames.java: Mark docCached method as side-effect free.
+	This avoids a long timeout in XQTS's K2-SeqDocFunc-13 test.
+
+2012-10-20  Charles Turner <chturne@gmail.com>
+	    Per Bothner  <per@bothner.com>
+
+	Re-factor type lookup to avoid Scheme dependencies.
+	* XQuery.java (getStandardType): Make non-static.
+	* XQResolveNames.java: Access current langauge rather than Scheme.
+	Use getTypeFor rather than string2Type.
+
+2012-10-06  Per Bothner  <per@bothner.com>
+
+	Implement check for a cycle in variale initialization.
+	* XQResolveNames.java (CycleDetector): New helper member class.
+	(resolveModule): Check for cycle.
+
+2012-07-15  Per Bothner  <per@bothner.com>
+
+	* XQParser.java (makeBinary): Update OP_RANGE_TO.
+
+2012-07-14  Per Bothner  <per@bothner.com>
+
+	* XQuery.java (initXQuery): Update sublist and subsequence.
+
+2012-07-10  Per Bothner  <per@bothner.com>
+
+	* XQuery.java (initXQuery): Update implementation of 'count'.
+	* XQParser.java (parseQuantifiedExpr): Update some/every implementation.
+
+	* XQuery.java (initXQuery): Implementation of "count" method changed.
+
+2011-03-16  Per Bothner  <per@bothner.com>
+
+	* XQParser.java (parseFLWRInner): If !isFor, use the Compilation
+	helper methods letStart, letVariable, letEnter, and letDone.
+
+	* XQResolveNames.java (visitApplyExp): Remove setting of
+	incorrect return type for COLLECTION_BUILTIN.
+
+2011-01-27  Per Bothner  <per@bothner.com>
+
+	* XQuery.java: Update to use new Declaration#noteValueUnknown.
+	* XQParser.java: Likewise.
+
+2010-11-26  Per Bothner  <per@bothner.com>
+
+	* XQParser.java: Update, since Symbol constructor is now protected.
+
 2010-05-24  Per Bothner  <per@bothner.com>
 
 	* XQParser.java (getDelimited): Use new Lexer.getDelimited.

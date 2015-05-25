@@ -641,18 +641,33 @@ public class CodeAttr extends Attribute implements AttrContainer
     return scope;
   }
 
+    /** Create a Scope that is automatically popped.
+     * I.e. the next popScope will keep popping autoPop scopes until
+     * it gets to a non-autoPop scope.  An autoPop Scope is useful for
+     * variables that are assigned and set in the middle of a managed Scope.
+     */
+    public Scope pushAutoPoppableScope() {
+        Scope scope = pushScope();
+        scope.autoPop = true;
+        return scope;
+    }
+
   public Scope getCurrentScope()
   {
     return locals.current_scope;
   }
 
-  public Scope popScope () {
-    Scope scope = locals.current_scope;
-    locals.current_scope = scope.parent;
-    scope.freeLocals(this);
-    scope.end = getLabel();
-    return scope;
-  }
+    public Scope popScope () {
+        Label end = getLabel();
+        for (;;) {
+            Scope scope = locals.current_scope;
+            locals.current_scope = scope.parent;
+            scope.freeLocals(this);
+            scope.end = end;
+            if (! scope.autoPop)
+                return scope;
+        }
+    }
 
   /** Get the index'th parameter. */
   public Variable getArg (int index)
@@ -945,6 +960,14 @@ public class CodeAttr extends Attribute implements AttrContainer
     pushType(Type.javalangClassType);
   }
 
+    /** Push a MethodHandle, using an appropriate constant pool entry.
+     * This is only supported by JDK 1.6 and later.
+     */
+    public final void emitPushMethodHandle(Method method) {
+        emitPushConstant(getConstants().addMethodHandle(method));
+        pushType(Type.javalanginvokeMethodHandleType);
+    }
+
   public void emitPushNull ()
   {
     reserve(1);
@@ -1183,6 +1206,7 @@ public class CodeAttr extends Attribute implements AttrContainer
   /** Compile code to allocate a new array.
    * The size should have been already pushed on the stack.
    * @param element_type type of the array elements
+   * @param dims number of dimensions - more than 1 is untested
    */
   public void emitNewArray (Type element_type, int dims)
   {
@@ -1206,13 +1230,7 @@ public class CodeAttr extends Attribute implements AttrContainer
 	  }
 	emitNewArray(code);
       }
-    else if (element_type instanceof ObjectType)
-      {
-	reserve(3);
-	put1(189); // anewarray
-	putIndex2(getConstants().addClass((ObjectType) element_type));
-      }
-    else if (element_type instanceof ArrayType)
+    else if (element_type instanceof ArrayType && dims > 1) // untested
     {
       reserve(4);
       put1(197); // multianewarray
@@ -1224,6 +1242,12 @@ public class CodeAttr extends Attribute implements AttrContainer
 	if (popType ().promote () != Type.intType)
 	  throw new Error ("non-int dim. spec. in emitNewArray");
     }
+    else if (element_type instanceof ObjectType)
+      {
+	reserve(3);
+	put1(189); // anewarray
+	putIndex2(getConstants().addClass((ObjectType) element_type));
+      }
     else
       throw new Error ("unimplemented type in emitNewArray");
 
@@ -1362,6 +1386,8 @@ public class CodeAttr extends Attribute implements AttrContainer
 
   public void emitStore (Variable var)
   {
+    if (! reachableHere())
+      return;
     int offset = var.offset;
     if (offset < 0 || !var.isSimple ())
       throw new Error ("attempting to store in unassigned "+var
@@ -1378,6 +1404,10 @@ public class CodeAttr extends Attribute implements AttrContainer
   }
 
 
+  /** Emit an instruction to increment a variable by some amount.
+   * If the increment is zero, do nothing.
+   * The variable must contain an integral value - except if increment is zero.
+   */
   public void emitInc (Variable var, short inc)
   {
     if (var.dead ())
@@ -1386,12 +1416,15 @@ public class CodeAttr extends Attribute implements AttrContainer
     if (offset < 0 || !var.isSimple ())
       throw new Error ("attempting to increment unassigned variable"+var.getName()
 		       +" simple:"+var.isSimple()+", offset: "+offset);
+
+    if (inc == 0)
+      return;
+
     reserve(6);
     if (var.getType().getImplementationType().promote() != Type.intType)
       throw new Error("attempting to increment non-int variable");
 
     boolean wide = offset > 255 || inc > 255 || inc < -256;
-
     if (wide)
     {
       put1(196); // wide
@@ -1420,7 +1453,7 @@ public class CodeAttr extends Attribute implements AttrContainer
 
   public final void emitGetStatic(Field field)
   {
-    pushType(field.type);
+    pushType(field.getType());
     emitFieldop (field, 178);  // getstatic
   }
 
@@ -1430,7 +1463,7 @@ public class CodeAttr extends Attribute implements AttrContainer
   public final void emitGetField(Field field)
   {
     popType();
-    pushType(field.type);
+    pushType(field.getType());
     emitFieldop(field, 180);  // getfield
   }
 
@@ -1467,6 +1500,8 @@ public class CodeAttr extends Attribute implements AttrContainer
 
   public void emitInvokeMethod (Method method, int opcode)
   {
+    if (! reachableHere())
+      return;
     reserve(opcode == 185 ? 5 : 3);
     int arg_count = method.arg_types.length;
     boolean is_invokestatic = opcode == 184;
@@ -1504,8 +1539,8 @@ public class CodeAttr extends Attribute implements AttrContainer
         for (int i = used == null ? 0 : used.length;  --i >= 0; )
           {
             Variable var = used[i];
-            if (var != null && var.type == t)
-              var.type = ctype;
+            if (var != null && var.getType() == t)
+                var.setType(ctype);
           }
         for (int i = local_types == null ? 0 : local_types.length;  --i >= 0; )
           if (local_types[i] == t)
@@ -1522,7 +1557,8 @@ public class CodeAttr extends Attribute implements AttrContainer
       opcode = 184;   // invokestatic
     else if (method.classfile.isInterface())
       opcode = 185;   // invokeinterface
-    else if ("<init>".equals(method.getName()))
+    else if ("<init>".equals(method.getName())
+             || (method.access_flags & Access.PRIVATE) != 0)
       opcode = 183;   // invokespecial
     else
       opcode = 182;   // invokevirtual
@@ -1629,6 +1665,10 @@ public class CodeAttr extends Attribute implements AttrContainer
   { emitGotoIfCompare1(label, 157); }
   public final void emitGotoIfIntLeZero(Label label)
   { emitGotoIfCompare1(label, 158); }
+  public final void emitGotoIfNull(Label label)
+  { emitGotoIfCompare1(label, 198); }
+  public final void emitGotoIfNonNull(Label label)
+  { emitGotoIfCompare1(label, 199); }
 
   public final void emitGotoIfCompare2 (Label label, int logop)
   { 
@@ -1695,7 +1735,7 @@ public class CodeAttr extends Attribute implements AttrContainer
    * The value of <var>x</var> must already have been pushed. */
   public final void emitIfCompare1 (int opcode)
   {
-    IfState new_if = new IfState(this);
+    IfState new_if = pushIfState();
     if (popType().promote() != Type.intType)
       throw new Error ("non-int type to emitIfCompare1");
     reserve(3);
@@ -1728,7 +1768,7 @@ public class CodeAttr extends Attribute implements AttrContainer
    * reference type. */
   public final void emitIfRefCompare1 (int opcode)
   {
-    IfState new_if = new IfState(this);
+    IfState new_if = pushIfState();
     if (! (popType() instanceof ObjectType))
       throw new Error ("non-ref type to emitIfRefCompare1");
     reserve(3);
@@ -1752,7 +1792,7 @@ public class CodeAttr extends Attribute implements AttrContainer
    * The value of x and y must already have been pushed. */
   public final void emitIfIntCompare(int opcode)
   {
-    IfState new_if = new IfState(this);
+    IfState new_if = pushIfState();
     popType();
     popType();
     reserve(3);
@@ -1770,7 +1810,7 @@ public class CodeAttr extends Attribute implements AttrContainer
    * The values of x and y must already have been pushed. */
   public final void emitIfNEq ()
   {
-    IfState new_if = new IfState (this);
+    IfState new_if = pushIfState();
     emitGotoIfEq(new_if.end_label);
     new_if.start_stack_size = SP;
   }
@@ -1779,7 +1819,7 @@ public class CodeAttr extends Attribute implements AttrContainer
    * The values of x and y must already have been pushed. */
   public final void emitIfEq ()
   {
-    IfState new_if = new IfState (this);
+    IfState new_if = pushIfState();
     emitGotoIfNE(new_if.end_label);
     new_if.start_stack_size = SP;
   }
@@ -1788,7 +1828,7 @@ public class CodeAttr extends Attribute implements AttrContainer
    * The values of x and y must already have been pushed. */
   public final void emitIfLt ()
   {
-    IfState new_if = new IfState (this);
+    IfState new_if = pushIfState();
     emitGotoIfGe(new_if.end_label);
     new_if.start_stack_size = SP;
   }
@@ -1797,7 +1837,7 @@ public class CodeAttr extends Attribute implements AttrContainer
    * The values of x and y must already have been pushed. */
   public final void emitIfGe ()
   {
-    IfState new_if = new IfState (this);
+    IfState new_if = pushIfState();
     emitGotoIfLt(new_if.end_label);
     new_if.start_stack_size = SP;
   }
@@ -1806,7 +1846,7 @@ public class CodeAttr extends Attribute implements AttrContainer
    * The values of x and y must already have been pushed. */
   public final void emitIfGt ()
   {
-    IfState new_if = new IfState (this);
+    IfState new_if = pushIfState();
     emitGotoIfLe(new_if.end_label);
     new_if.start_stack_size = SP;
   }
@@ -1815,7 +1855,7 @@ public class CodeAttr extends Attribute implements AttrContainer
    * The values of x and y must already have been pushed. */
   public final void emitIfLe ()
   {
-    IfState new_if = new IfState (this);
+    IfState new_if = pushIfState();
     emitGotoIfGt(new_if.end_label);
     new_if.start_stack_size = SP;
   }
@@ -1883,7 +1923,6 @@ public class CodeAttr extends Attribute implements AttrContainer
   /** Compile end of conditional. */
   public final void emitFi ()
   {
-    boolean make_unreachable = false;
     if (! if_stack.doing_else)
       { // There was no 'else' clause.
 	if (reachableHere ()
@@ -1906,17 +1945,39 @@ public class CodeAttr extends Attribute implements AttrContainer
 	  throw new Error("at PC "+PC+": SP at end of 'then' was " +
 			  then_clause_stack_size
 			  + " while SP at end of 'else' was " + SP);
+        setReachable(true);
       }
-    else if (unreachable_here)
-      make_unreachable = true;
 
     if (if_stack.end_label != null)
       if_stack.end_label.define (this);
-    if (make_unreachable)
-      setUnreachable();
     // Pop the if_stack.
     if_stack = if_stack.previous;
   }
+
+    /** Convenience for compiling {@code if P1 && P2 then S1 else S2}.
+     * Compile that as:
+     * <pre>
+     * compile P1, including an appropriate emitIfXxx
+     * emitAndThen()
+     * compile P2, including an appropriate emitIfXxx
+     * compile S1
+     * emitElse
+     * compile S2
+     * emitFi
+     * </pre>
+     */
+    public void emitAndThen() {
+        if (if_stack==null||if_stack.andThenSet) throw new InternalError();
+        if_stack.andThenSet = true;
+    }
+
+    private IfState pushIfState() {
+        if (if_stack!=null && if_stack.andThenSet) {
+            if_stack.andThenSet = false;
+            return if_stack;
+        }
+        return new IfState(this);
+    }
 
   public final void emitConvert (Type from, Type to)
   {
@@ -2001,8 +2062,7 @@ public class CodeAttr extends Attribute implements AttrContainer
 
   public static boolean castNeeded (Type top, Type required)
   {
-    if (top instanceof UninitializedType)
-      top = ((UninitializedType) top).getImplementationType();
+    top = top.getRawType();
     for (;;)
       {
         if (top == required)
@@ -2074,6 +2134,8 @@ public class CodeAttr extends Attribute implements AttrContainer
 
   final void emitRawReturn ()
   {
+    if (! reachableHere())
+      return;
     if (getMethod().getReturnType().size == 0)
       {
 	reserve(1);
@@ -2261,6 +2323,7 @@ public class CodeAttr extends Attribute implements AttrContainer
     ClassType type = var == null ? null : (ClassType) var.getType();
     try_stack.try_type = type;
     addHandler(try_stack.start_try, try_stack.end_try, type);
+    setReachable(true);
     if (var != null)
       emitStore(var);
   }
@@ -2453,8 +2516,8 @@ public class CodeAttr extends Attribute implements AttrContainer
 
   /** Compile a tail-call to position 0 of the current procedure.
    * @param pop_args if true, copy argument registers (except this) from stack.
-   * @param scope Scope whose start we jump back to. */
-  public void emitTailCall (boolean pop_args, Scope scope)
+   * @param start the Label to jump back to. */
+  public void emitTailCall (boolean pop_args, Label start)
   {
     if (pop_args)
       {
@@ -2468,22 +2531,38 @@ public class CodeAttr extends Attribute implements AttrContainer
 	    emitStore(locals.used [arg_slots]);
 	  }
       }
-    emitGoto(scope.start);
+    emitGoto(start);
   }
 
-  public void processFixups ()
+  /** Compile a tail-call to position 0 of the current procedure.
+   * @param pop_args if true, copy argument registers (except this) from stack.
+   * @param scope Scope whose start we jump back to. */
+  public void emitTailCall (boolean pop_args, Scope scope)
   {
-    if (fixup_count <= 0)
-      return;
+    emitTailCall(pop_args, scope.start);
+  }
 
-    // For each label, set it to its maximum limit, assuming all
-    // fixups causes the code the be expanded.  We need a prepass
-    // for this, since FIXUP_MOVEs can cause code to be reordered.
-    // Also, convert each FIXUP_MOVE_TO_END to FIXUP_MOVE.
+    public void processFixups() {
+        if (fixup_count <= 0)
+            return;
 
-    int delta = 0;
-    int instruction_tail = fixup_count;
-    fixupAdd(CodeAttr.FIXUP_MOVE, 0, null);
+        // For each label, set it to its maximum limit, assuming all
+        // fixups causes the code the be expanded.  We need a prepass
+        // for this, since FIXUP_MOVEs can cause code to be reordered.
+        // Also, convert each FIXUP_MOVE_TO_END to FIXUP_MOVE.
+
+        int delta = 0;
+        int instruction_tail = fixup_count;
+        fixupAdd(CodeAttr.FIXUP_MOVE, 0, null);
+
+        /* DEBUGGING:
+        System.err.println("processFixups for "+getMethod());
+        ClassTypeWriter writer =
+            new ClassTypeWriter(getMethod().getDeclaringClass(), System.err, 0);
+        writer.println("processFixups for "+getMethod());
+        disAssembleWithFixups(writer);
+        writer.flush();
+        */
 
   loop1:
    for (int i = 0;  ;  )
@@ -2556,7 +2635,7 @@ public class CodeAttr extends Attribute implements AttrContainer
 
     // Number of bytes to be inserted or (if negative) removed, so far.
     int new_size = PC;
-    // Current delta between final PC and offset in generate code array.
+    // Current delta between final PC and offset in generated code array.
     delta = 0;
   loop2:
     for (int i = 0;  i < fixup_count;  )
@@ -2873,88 +2952,90 @@ public class CodeAttr extends Attribute implements AttrContainer
     dst.printAttributes(this);
   }
 
-  /* DEBUGGING:
-  public void disAssembleWithFixups (ClassTypeWriter dst)
-  {
-    if (fixup_count <= 0)
-      {
-	disAssemble(dst, 0, PC);
-	return;
-      }
-    int prev_pc = 0;
-    for (int i = 0;  i < fixup_count; )
-      {
-	int offset = fixup_offsets[i];
-	int kind = offset & 15;
-	Label label = fixup_labels[i];
-	offset = offset >> 4;
-	int pc = offset;
-	if (kind == FIXUP_MOVE || kind == FIXUP_MOVE_TO_END)
-	  pc = (i+1 >= fixup_count) ? PC : fixup_offsets[i+1] >> 4;
-	disAssemble(dst, prev_pc, offset);
-	prev_pc = pc;
-	dst.print("fixup#");  dst.print(i);
-	dst.print(" @");  dst.print(offset);
-	switch (kind)
-	  {
-	  case FIXUP_NONE:
-	    dst.println(" NONE");
-	    break;
-	  case FIXUP_DEFINE:
-	    dst.print(" DEFINE ");
-	    dst.println(label);
-	    break;
-	  case FIXUP_SWITCH:
-	    dst.println(" SWITCH");
-	    break;
-	  case FIXUP_CASE:
-	    dst.println(" CASE");
-	    break;
-	  case FIXUP_GOTO:
-	    dst.print(" GOTO ");
-	    dst.println(label);
-	    break;
-	  case FIXUP_TRANSFER:
-	    dst.print(" TRANSFER ");
-	    dst.println(label);
-	    break;
-	  case FIXUP_TRANSFER2:
-	    dst.print(" TRANSFER2 ");
-	    dst.println(label);
-	    break;
-	  case FIXUP_DELETE3:
-	    dst.println(" DELETE3");
-	    break;
-	  case FIXUP_MOVE:
-	    dst.print(" MOVE ");
-	    dst.println(label);
-	    break;
-	  case FIXUP_MOVE_TO_END:
-	    dst.print(" MOVE_TO_END ");
-	    dst.println(label);
-	    break;
-	  case FIXUP_TRY:
-	    dst.print(" TRY start: ");
-	    dst.println(label);
-	    i++;
-	    dst.print(" - end: ");
-	    dst.print(fixup_labels[i]);
-	    dst.print(" type: ");
-	    dst.println(fixup_offsets[i] >> 4);
+    /* DEBUGGING:
+    public void disAssembleWithFixups(ClassTypeWriter dst) {
+        if (fixup_count <= 0) {
+            disAssemble(dst, 0, PC);
+            return;
+        }
+        int prev_pc = 0;
+        for (int i = 0;  i < fixup_count; ) {
+            int offset = fixup_offsets[i];
+            int kind = offset & 15;
+            Label label = fixup_labels[i];
+            offset = offset >> 4;
+            int pc = offset;
+            if (kind == FIXUP_MOVE || kind == FIXUP_MOVE_TO_END)
+                pc = (i+1 >= fixup_count) ? PC : fixup_offsets[i+1] >> 4;
+            else if (kind == FIXUP_CASE)
+                pc = prev_pc;
+            disAssemble(dst, prev_pc, pc);
+
+            dst.print("fixup#");  dst.print(i);
+            dst.print(" @");  dst.print(offset);
+            prev_pc = pc;
+            switch (kind) {
+            case FIXUP_NONE:
+                dst.println(" NONE");
+                break;
+            case FIXUP_DEFINE:
+                dst.print(" DEFINE ");
+                dst.println(label);
+                break;
+            case FIXUP_SWITCH:
+                dst.println(" SWITCH");
+                break;
+            case FIXUP_CASE:
+                dst.print(" CASE ");
+                dst.println(label);
+                break;
+            case FIXUP_GOTO:
+                dst.print(" GOTO ");
+                dst.println(label);
+                break;
+            case FIXUP_TRANSFER:
+                dst.print(" TRANSFER ");
+                dst.println(label);
+                break;
+            case FIXUP_TRANSFER2:
+                dst.print(" TRANSFER2 ");
+                dst.println(label);
+                break;
+            case FIXUP_DELETE3:
+                dst.println(" DELETE3");
+                break;
+            case FIXUP_MOVE:
+                dst.print(" MOVE ");
+                dst.println(label);
+                break;
+            case FIXUP_MOVE_TO_END:
+                dst.print(" MOVE_TO_END ");
+                dst.println(label);
+                break;
+            case FIXUP_TRY:
+                dst.print(" TRY start: ");
+                dst.println(label);
+                i++;
+                dst.print(" - end: ");
+                dst.print(fixup_labels[i]);
+                dst.print(" type: ");
+                dst.println(fixup_offsets[i] >> 4);
+                i++;
+                break;
+            case FIXUP_LINE_PC:
+                dst.print(" LINE ");
+                i++;
+                dst.println(fixup_offsets[i] >> 4);
+                break;
+            default:
+                dst.println(" kind:"+fixupKind(i)+" offset:"+fixupOffset(i)
+                            +" "+fixup_labels[i]);
+            }
             i++;
-	    break;
-	  case FIXUP_LINE_PC:
-	    dst.print(" LINE ");
-	    i++;
-	    dst.println(fixup_offsets[i] >> 4);
-	    break;
-	  default:
-	    dst.println(" kind:"+fixupKind(i)+" offset:"+fixupOffset(i)+" "+fixup_labels[i]);
-	  }
-	i++;
-      }
-  }
-  */
+        }
+        disAssemble(dst, prev_pc, PC);
+    }
+    */
 
   public void disAssemble (ClassTypeWriter dst, int start, int limit)
   {
@@ -3165,6 +3246,13 @@ public class CodeAttr extends Attribute implements AttrContainer
 		    int args = 0xff & code[i];
 		    i += 2;
 		    dst.print(args + " args)");
+		    dst.printConstantOperand(index);
+		  }
+		else if (op == 186) // invokedynamic
+		  {
+		    dst.print("invokedynamic");
+		    int index = readUnsignedShort(i);
+		    i += 4;
 		    dst.printConstantOperand(index);
 		  }
 		else if (op < 196)

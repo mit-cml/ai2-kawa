@@ -7,7 +7,7 @@ import java.io.*;
 import java.net.*;
 import java.util.*;
 import gnu.lists.*;
-import gnu.mapping.InPort;
+import gnu.kawa.io.InPort;
 
 /** A representation of an http request as it is being handled.
  * It abstracts over different http server's API - specially, there are are
@@ -124,7 +124,8 @@ public abstract class HttpRequestContext
    * This is an initial substring of the {@link #getRequestPath}.
    * Like {@code ServletContext#getContextPath}, but ends with a {@code '/'}.
    * The string {@code getRequestURI()} is the same as the concatenation of
-   * {@code getContextPath()}, {@code getScriptPath()}, and {code getLocationPath()}.
+   * {@code getContextPath()}, {@code getScriptPath()},
+   * and {@code getLocalPath()}.
    */
   public abstract String getContextPath ();
 
@@ -173,7 +174,7 @@ public abstract class HttpRequestContext
       {
         return InetAddress.getLocalHost();
       }
-    catch (Throwable ex)
+    catch (Exception ex)
       {
         throw new RuntimeException(ex);
       }

@@ -4,10 +4,6 @@
 (module-static #t)
 (module-export define-enum)
 
-(define (symbol-append . syms)
-  ;; "Concatentates the given symbols SYMS together."
-  (string->symbol (apply string-append (map symbol->string syms))))
-
 (define (make-field-desc (t-name :: symbol)
                          (e-name :: symbol)
                          (e-val :: int))
@@ -39,8 +35,8 @@
      #`(define-enum "findkeywords" tname (keyword value k ...) e ...))
     ((_ "findkeywords" tname (k ...) e ...)
      #`(%define-enum tname (k ...) e ...))
-    ((_) (syntax-error form "no enum type name given"))
-    ((_ tname) (syntax-error form "no enum constants given"))
+    ((_) (report-syntax-error form "no enum type name given"))
+    ((_ tname) (report-syntax-error form "no enum constants given"))
     ((_ tname e ...)
      #`(define-enum "findkeywords" tname () e ...))))
 
@@ -53,7 +49,8 @@
   (syntax-case form ()
     ((_ typename option-pairs (e ...) other-def ...)
      (let* ((t-name :: symbol (syntax typename))
-            (t-arr :: symbol (symbol-append t-name '[]))
+            (t-arr :: symbol (string->symbol (string-append
+                                              (symbol->string t-name) "[]")))
             (e-names :: list (syntax (e ...)))
             (n :: int (length e-names))
             (field-descs :: list (map-names t-name e-names 0))
@@ -61,13 +58,13 @@
             (values-method :: list (make-values t-arr e-names))
             (opts :: list (syntax option-pairs))
             (other-defs :: list (syntax (other-def ...))))
-       #`(define-simple-class ,(datum->syntax-object form t-name)
+       #`(define-simple-class #,(datum->syntax-object form t-name)
            (java.lang.Enum) access: '(enum final)
-           ,@(datum->syntax-object form opts)
-           ,(datum->syntax-object form init)
-           ,(datum->syntax-object form values-method)
-	   ((valueOf s::String)::,(datum->syntax-object form t-name)
+           #,@(datum->syntax-object form opts)
+           #,(datum->syntax-object form init)
+           #,(datum->syntax-object form values-method)
+	   ((valueOf s::String)::#,(datum->syntax-object form t-name)
 	    allocation: 'static
-	    (java.lang.Enum:valueOf ,(datum->syntax-object form t-name) s))
-           ,@(datum->syntax-object form field-descs)
-           ,@(datum->syntax-object form other-defs))))))
+	    (java.lang.Enum:valueOf #,(datum->syntax-object form t-name) s))
+           #,@(datum->syntax-object form field-descs)
+           #,@(datum->syntax-object form other-defs))))))

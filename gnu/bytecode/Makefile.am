@@ -2,6 +2,7 @@
 
 java_sources = \
 Access.java \
+AnnotationDefaultAttr.java \
 AnnotationEntry.java \
 Attribute.java \
 AttrContainer.java \
@@ -10,9 +11,12 @@ ClassType.java \
 ConstantPool.java \
 CpoolClass.java \
 CpoolEntry.java \
+CpoolInvokeDynamic.java \
 CpoolValue1.java \
 CpoolValue2.java \
 CpoolNameAndType.java \
+CpoolMethodHandle.java \
+CpoolMethodType.java \
 CpoolRef.java \
 CpoolString.java \
 CpoolUtf8.java \
@@ -26,17 +30,20 @@ Method.java \
 CodeAttr.java ConstantValueAttr.java \
 LineNumbersAttr.java LocalVarsAttr.java InnerClassesAttr.java \
 MiscAttr.java \
+ParameterizedType.java \
 PrimType.java \
 RuntimeAnnotationsAttr.java \
 Scope.java \
 SignatureAttr.java \
 SourceDebugExtAttr.java \
 SourceFileAttr.java \
+SpecialObjectType.java \
 StackMapTableAttr.java \
 Type.java \
 UninitializedType.java \
 Variable.java \
 VarEnumerator.java \
+TypeVariable.java \
 ZipArchive.java \
 ZipLoader.java \
 ArrayClassLoader.java \

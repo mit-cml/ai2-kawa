@@ -17,9 +17,12 @@ public class lambda extends Lambda
   public void rewriteBody(LambdaExp lexp, Object body, Translator tr)
   {
     tr.push(lexp);
-    if (lexp.defaultArgs != null)
-      for (int i = 0, n = lexp.defaultArgs.length;  i < n;  i++)
-	lexp.defaultArgs[i] = tr.rewrite(lexp.defaultArgs[i]);
+    for (Declaration p = lexp.firstDecl();  p != null;  p = p.nextDecl())
+      {
+        Expression defaultArg = p.getInitValue();
+        if (defaultArg != null)
+          p.setInitValue(tr.rewrite(defaultArg));
+      }
 
     Pair pair;
     int i = 0;
@@ -62,16 +65,15 @@ public class lambda extends Lambda
       lexp.setFile(((PairWithPosition) body).getFileName());
     FluidLetExp let = null;
 
-    int decl_count = lexp.min_args;
-    if (lexp.defaultArgs != null)
-      decl_count += lexp.defaultArgs.length;
+    int decl_count = lexp.min_args + lexp.opt_args;
+    if (lexp.keywords != null)
+      decl_count += lexp.keywords.length;
     if (lexp.max_args < 0)
       decl_count++;
 
     if (fluidBindings && decl_count > 0)
       {
-	Expression[] inits = new Expression[decl_count];
-	let = new FluidLetExp (inits);
+	let = new FluidLetExp();
 	i = 0;
 	for (Declaration arg = lexp.firstDecl();  arg != null;
 	     arg = arg.nextDecl(), i++)
@@ -79,12 +81,14 @@ public class lambda extends Lambda
 	    Declaration decl = let.addDeclaration(arg.getSymbol());
             decl.setCanWrite(true);
 	    decl.setFluid(true);
+            decl.setFlag(Declaration.IS_DYNAMIC); // Turn off warning.
 	    decl.setIndirectBinding(true);
-	    inits[i] = new ReferenceExp(arg);
-	    decl.noteValue(inits[i]);
+	    Expression init = new ReferenceExp(arg);
+            decl.setInitValue(init);
+	    decl.noteValue(init);
 	  }
 	tr.push(let);
-	let.body = tr.rewrite_body (body);
+	let.setBody(tr.rewrite_body(body));
 	tr.pop(let);
 	lexp.body = let;
       }
@@ -112,6 +116,7 @@ public class lambda extends Lambda
                 LambdaExp ilexp = new LambdaExp();
                 rewrite(ilexp, LList.Empty, interactive, tr, null);
                 ilexp.setCanRead(true);
+                ilexp.setFlag(LambdaExp.NO_FIELD);
                 interactive = ilexp;
               }
           }

@@ -6,16 +6,16 @@ import gnu.mapping.*;
 import gnu.lists.*;
 import gnu.expr.*;
 import gnu.text.Char;
-import kawa.standard.Scheme;
 import gnu.bytecode.*;
-import gnu.kawa.lispexpr.LangPrimType;
-import gnu.xquery.util.*;
 import gnu.xml.*;
 import gnu.text.Lexer;
 import gnu.text.SourceMessages;
 import java.io.Reader;
 import java.util.Vector;
 import gnu.kawa.functions.ConstantFunction0;
+import gnu.kawa.io.CharArrayInPort;
+import gnu.kawa.io.InPort;
+import gnu.kawa.io.OutPort;
 import gnu.kawa.reflect.ClassMethods;
 import gnu.math.IntNum;
 import gnu.kawa.xml.*;
@@ -121,7 +121,7 @@ public class XQuery extends Language
 	LambdaExp lexp = new LambdaExp(3);
 	Declaration dotDecl = lexp.addDeclaration(XQParser.DOT_VARNAME);
 	dotDecl.setFlag(Declaration.IS_SINGLE_VALUE);
-	dotDecl.noteValue (null);  // Does not have a known value.
+	dotDecl.noteValueUnknown();
 	lexp.addDeclaration(XQParser.POSITION_VARNAME, Type.intType);
 	lexp.addDeclaration(XQParser.LAST_VARNAME, Type.intType);
 	tr.push(lexp);
@@ -570,11 +570,11 @@ public class XQuery extends Language
 
     defProcStFld("unescaped-data", "gnu.kawa.xml.MakeUnescapedData", "unescapedData");
     defProcStFld("item-at", "gnu.xquery.util.ItemAt", "itemAt");
-    defProcStFld("count", "gnu.kawa.functions.CountValues", "countValues");
+    defProcStFld("count", "gnu.xquery.util.Xutils", "count$Mnvalues");
     define_method("sum", "gnu.xquery.util.Reduce", "sum"); // Overloaded
     defProcStFld("avg", "gnu.xquery.util.Average", "avg");
-    defProcStFld("sublist", "gnu.xquery.util.SubList", "subList"); // deprecated
-    defProcStFld("subsequence", "gnu.xquery.util.SubList", "subList");
+    defProcStFld("sublist", "gnu.xquery.util.Xutils", "sublist"); // deprecated
+    defProcStFld("subsequence", "gnu.xquery.util.Xutils", "sublist");
     define_method("empty", "gnu.xquery.util.SequenceUtils",
 		  "isEmptySequence");
     define_method("exists", "gnu.xquery.util.SequenceUtils",
@@ -826,7 +826,7 @@ public class XQuery extends Language
       "anyType", Type.objectType
     };
 
-  public static Type getStandardType (String name)
+  public Type getStandardType (String name)
   {
     for (int i = typeMap.length;  (i -= 2) >= 0; )
       {
@@ -834,7 +834,7 @@ public class XQuery extends Language
 	  {
 	    Object t = typeMap[i+1];
 	    if (t instanceof String)
-	      return Scheme.string2Type((String) t);
+	      return super.getTypeFor((String) t);
 	    else
 	      return (Type) t;
 	  }
@@ -842,15 +842,17 @@ public class XQuery extends Language
     return null;
   }
 
+  @Override
   public Type getTypeFor(String name)
   {
     String core = name.startsWith("xs:") ? name.substring(3)
       : name.startsWith("xdt:") ? name.substring(4)
       : name;
     Type t = getStandardType(core);
-    return t != null ? t : Scheme.string2Type(name);
+    return t != null ? t : super.getTypeFor(name);
   }
 
+  @Override
   public String formatType (Type type)
   {
     String tname = type.getName();
@@ -862,6 +864,7 @@ public class XQuery extends Language
     return type.toString();
   }
 
+  @Override
   public Type getTypeFor (Class clas)
   {
     if (clas.isPrimitive())
@@ -869,7 +872,7 @@ public class XQuery extends Language
 	String name = clas.getName();
 	if (name.equals("boolean"))
           return XDataType.booleanType;
-	return Scheme.getNamedType(name);
+	return super.getTypeFor(name);
       }
     else if (! clas.isArray())
       {
@@ -888,12 +891,13 @@ public class XQuery extends Language
           return XDataType.decimalType;
         if (name.equals("gnu.math.Duration"))
           return XDataType.durationType;
-        if (name.equals("gnu.text.Path"))
+        if (name.equals("gnu.kawa.io.Path"))
           return  XDataType.anyURIType;
       }
     return Type.make(clas);
   }
 
+  @Override
   public Procedure getPrompter()
   {
     return new Prompter();

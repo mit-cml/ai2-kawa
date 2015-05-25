@@ -15,16 +15,13 @@ public class Map extends gnu.mapping.ProcedureN
   boolean collect;
 
   final ApplyToArgs applyToArgs;
-  final Declaration applyFieldDecl;
   final IsEq isEq;
 
-  public Map (boolean collect,
-              ApplyToArgs applyToArgs, Declaration applyFieldDecl, IsEq isEq)
+  public Map (boolean collect, ApplyToArgs applyToArgs, IsEq isEq)
   {
     super (collect ? "map" : "for-each");
     this.collect = collect;
     this.applyToArgs = applyToArgs;
-    this.applyFieldDecl = applyFieldDecl;
     this.isEq = isEq;
     setProperty(Procedure.validateApplyKey,
                 "gnu.kawa.functions.CompileMisc:validateApplyMap");
@@ -132,4 +129,5 @@ public class Map extends gnu.mapping.ProcedureN
       }
   }
 
+  public int numArgs() { return (-1 << 12) | 2; }
 }

@@ -9,7 +9,7 @@ public class BindingInitializer extends Initializer
   Expression value;
 
   /** Create a BindingInitializer and link it into the correct
-   * intializer chain. */
+   * initializer chain. */
   public static void create (Declaration decl, Expression value,
                              Compilation comp)
   {
@@ -21,8 +21,9 @@ public class BindingInitializer extends Initializer
       }
     else
       {
-        init.next = comp.mainLambda.initChain; // FIXME why mainLambda?
-        comp.mainLambda.initChain = init;
+        ModuleExp mod = comp.getModule();
+        init.next = mod.initChain; // FIXME why mainLambda?
+        mod.initChain = init;
       }
   }
 
@@ -79,7 +80,7 @@ public class BindingInitializer extends Initializer
               code.emitPushNull();
             else
               comp.compileConstant(property, Target.pushObject);
-            code.emitInvokeStatic(typeThreadLocation.getDeclaredMethod("getInstance", 2));
+            code.emitInvokeStatic(typeDynamicLocation.getDeclaredMethod("getInstance", 2));
           }
 	else if (decl.isFluid())
           {
@@ -96,8 +97,10 @@ public class BindingInitializer extends Initializer
           }
         else
           {
+            if (name instanceof String)
+              name = Namespace.EmptyNamespace.getSymbol(((String)name).intern());
             comp.compileConstant(name, Target.pushObject);
-            code.emitInvokeStatic(makeLocationMethod(name));
+            code.emitInvokeStatic(Compilation.typeLocation.getDeclaredMethod("define", 1));
           }
       }
     else
@@ -111,7 +114,7 @@ public class BindingInitializer extends Initializer
       {
 	Variable var = decl.getVariable();
 	if (var == null)
-	  var = decl.allocateVariable(code);
+            var = decl.allocateVariable(code, true);
 	code.emitStore(var);
       }
     else if (field.getStaticFlag())
@@ -121,8 +124,10 @@ public class BindingInitializer extends Initializer
     messages.swapSourceLocator(saveLoc);
   }
 
-  static final ClassType typeThreadLocation =
-    ClassType.make("gnu.mapping.ThreadLocation");
+    static final ClassType typeThreadLocation =
+      ClassType.make("gnu.mapping.ThreadLocation");
+    static final ClassType typeDynamicLocation =
+      ClassType.make("gnu.mapping.DynamicLocation");
 
   public static Method makeLocationMethod (Object name)
   {

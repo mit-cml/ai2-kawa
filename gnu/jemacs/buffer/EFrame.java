@@ -1,3 +1,4 @@
+/* -*- mode: java; c-basic-offset: 2; indent-tabs-mode: nil -*- */
 // Copyright (c) 2002  Per M.A. Bothner.
 // This is free software;  for terms and warranty disclaimer see ./COPYING.
 
@@ -80,6 +81,15 @@ public abstract class EFrame
   public abstract void setMenuBar (LList menu); 
   
   public abstract String ask(String prompt);
+
+  public String aboutMessage ()
+  {
+    return "JEmacs is written by Per Bothner <per@bothner.com>.";
+  }
+
+  public abstract void showAboutMessage ();
+
+  public abstract void showInfoMessage (String msg);
 
   public String toString()
   {

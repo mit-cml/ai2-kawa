@@ -1,3 +1,67 @@
+2014-08-06  Per Bothner  <per@bothner.com>
+
+	* Buffer.java (setCharacterAt): New method.
+
+2014-02-16  Per Bothner  <per@bothner.com>
+
+	* EWindow.java: Make sure Error is uncaught or re-thrown.
+	* Marker.java: Likewise.
+
+2014-01-06  Per Bothner  <per@bothner.com>
+
+	* BufferReader.java (reset): Update for new LineBufferedReader API.
+
+2013-09-15  Per Bothner  <per@bothner.com>
+
+	* EWindow.java (handleCommand): Handle 'emacs-interactive' property
+	that is a Procedure, not just a string.
+
+2012-06-26  Per Bothner  <per@bothner.com>
+
+	* BufferLocal.java: Update for Location being made generic.
+
+2011-10-21  Shad Gregory <captshadg@gmail.com>
+	    Per Bothner  <per@bothner.com>
+
+	* emacs.scm (load-init-file): New function.
+	(emacs): Call load-init-file.
+
+2011-05-02  Shad Gregory <captshadg@gmail.com>
+
+	* EFrame.java (showInfoMessage): New method.
+	* Marker.java (evalLastSexp): New method.
+	* emacs.scm (message, eval-last-sexp): New methods.
+	(global-map): Map "\C-x\C-e" to eval-last-sexp.
+
+2011-05-01  Shad Gregory <captshadg@gmail.com>
+	    Per Bothner  <per@bothner.com>
+
+	* Marker.java (repeatChar): New static method.
+	(insertChar): Make use of repeatChar.
+
+2011-04-15  Per Bothner  <per@bothner.com>
+	    Shad Gregory <captshadg@gmail.com>
+
+	* EWindow.java (linkSibling): Fix thinko.
+	(deleteOtherWindows): Fix logic error.
+	This fixes Savannah bug#33019 (C-x1 produces a nullpointer exception).
+
+2011-04-10  Shad Gregory <captshadg@gmail.com>
+	    Per Bothner  <per@bothner.com>
+
+	* emacs.scm (about-jemacs): New function.
+	* EFrame.java (aboutMessage): New method.
+	(showAboutMessage): New abstract method.
+	This fixes Savannah bug#16307 (Failure on "Help").
+
+2011-04-10  Per Bothner  <per@bothner.com>
+
+	* emacs.scm (read-dialog): Simplify.
+
+	* emacs.scm (erase-buffer): Add missing parentheses.
+
+	* emacs.scm (process?): Fix thinko.
+
 2010-08-19  Per Bothner  <per@bothner.com>
 
 	* ReplMode.java: Use new Future.make factory method.

@@ -5,7 +5,7 @@ package gnu.mapping;
 
 /* A Location whose current value is given by a Procedure call. */
 
-public class ProcLocation extends Location
+public class ProcLocation extends Location<Object>
 {
   Procedure proc;
   Object[] args;
@@ -18,21 +18,17 @@ public class ProcLocation extends Location
 
   public Object get (Object defaultValue)
   {
+      return get();
+  }
+  public Object get ()
+  {
     try
       {
 	return proc.applyN(args);
       }
-    catch (RuntimeException ex)
-      {
-	throw ex;
-      }
-    catch (Error ex)
-      {
-	throw ex;
-      }
     catch (Throwable ex)
       {
-	throw new WrappedException(ex);
+	throw WrappedException.rethrow(ex);
       }
   }
 
@@ -46,17 +42,9 @@ public class ProcLocation extends Location
       {
 	proc.setN(xargs);
       }
-    catch (RuntimeException ex)
-      {
-	throw ex;
-      }
-    catch (Error ex)
-      {
-	throw ex;
-      }
     catch (Throwable ex)
       {
-	throw new WrappedException(ex);
+	throw WrappedException.rethrow(ex);
       }
   }
 

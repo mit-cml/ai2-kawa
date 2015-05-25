@@ -1,10 +1,12 @@
 package kawa.lang;
 import gnu.mapping.*;
 import gnu.expr.*;
-import java.io.*;
+import gnu.kawa.io.OutPort;
 import gnu.lists.*;
 import java.util.Vector;
+import gnu.kawa.functions.DisplayFormat;
 import gnu.text.*;
+import java.io.*;
 
 /** This encodes a pattern from a Scheem syntax-case or syntax-rules. */
 
@@ -18,6 +20,11 @@ public class SyntaxPattern extends Pattern implements Externalizable
    * following instruction. */
   String program;
 
+    /** A string (if non-null) of the form FILENAME:LINENUMBER. */
+    String fileLine;
+
+  public static final SimpleSymbol underscoreSymbol = Symbol.valueOf("_");
+
   /** This 3-bit "opcode" is used for shorter operand-less instructions. */
   static final int MATCH_MISC = 0;
 
@@ -25,11 +32,11 @@ public class SyntaxPattern extends Pattern implements Externalizable
   static final int MATCH_NIL = (1<<3)+MATCH_MISC;
 
   /** Matches a vector (FVector).
-   * Matches a vecetor v if the following list pattern (at pc+1)
+   * Matches a vector v if the following list pattern (at pc+1)
    * matches (vector->list v). */
   static final int MATCH_VECTOR = (2<<3)+MATCH_MISC;
 
-  /** Match anything and ignoe it. */
+  /** Match anything and ignore it. */
   static final int MATCH_IGNORE = (3<<3)+MATCH_MISC;
 
   /** The instruction <code>8*i+MATCH_WIDE</code> is a prefix.
@@ -74,58 +81,71 @@ public class SyntaxPattern extends Pattern implements Externalizable
 
   public int varCount() { return varCount; }
 
-  public boolean match (Object obj, Object[] vars, int start_vars)
-  {
-    boolean r = match(obj, vars, start_vars, 0, null);
-    if (false)  // DEBUGGING
-      {
-	OutPort err = OutPort.errDefault();
-	err.print("{match ");
-	kawa.standard.Scheme.writeFormat.writeObject(obj, err);
-	err.print(" in ");
-	err.print(((Translator) Compilation.getCurrent()).getCurrentSyntax());
-	if (r)
-	  {
-	    err.print(" -> vars: ");
-	    for (int i = start_vars;  i < vars.length;  i++)
-	      {
-		err.println();
-		err.print("  " + i +" : ");
-		kawa.standard.Scheme.writeFormat.writeObject(vars[i], err);
-	      }
-	    err.println('}');
-	  }
-	else
-	  err.println(" -> failed}");
-      }
-    return r;
+    /** Control logging to standard error on successful pattern match. */
+    public static boolean printSyntaxPatternMatch;
+
+    public boolean match(Object obj, Object[] vars, int start_vars) {
+        boolean r = match(obj, vars, start_vars, 0, null);
+        if (printSyntaxPatternMatch && r) {
+            OutPort log = OutPort.errDefault();
+            log.startLogicalBlock("{syntax-pattern ", false, "}");
+            log.setIndentation(-14, false);
+            if (fileLine != null) {
+                log.print(fileLine);
+            }
+            log.writeSpaceLinear();
+            log.print("match ");
+            DisplayFormat.schemeWriteFormat.writeObject(obj, log);
+            if (r) {
+                log.print(" -> vars: ");
+                for (int i = start_vars;  i < vars.length;  i++) {
+                    log.writeSpaceLinear();
+                    log.print(i);
+                    log.print(": ");
+                    DisplayFormat.schemeWriteFormat.writeObject(vars[i], log);
+                }
+            }
+            else
+                log.println(" -> failed");
+            log.endLogicalBlock("}");
+            log.println();
+        }
+        return r;
   }
 
-  public SyntaxPattern (String program, Object[] literals, int varCount)
+  public SyntaxPattern (String program, Object[] literals,
+                        int varCount, String fileLine)
   {
     this.program = program;
     this.literals = literals;
     this.varCount = varCount;
+    this.fileLine = fileLine;
   }
 
   public SyntaxPattern (Object pattern,
 			Object[] literal_identifiers, Translator tr)
   {
-    this(new StringBuffer(), pattern,
-	 null, literal_identifiers, tr);
+    this(new StringBuilder(), pattern,
+	 null, SyntaxRule.dots3Symbol, literal_identifiers, tr);
   }
 
-  SyntaxPattern (StringBuffer programbuf, Object pattern,
-		 SyntaxForm syntax, Object[] literal_identifiers,
-		 Translator tr)
+  SyntaxPattern(StringBuilder programbuf, Object pattern, SyntaxForm syntax,
+                Object ellipsis, Object[] literal_identifiers,
+		Translator tr)
   {
     Vector literalsbuf = new Vector();
-    translate(pattern, programbuf,
+    translate(pattern, programbuf, ellipsis,
 	      literal_identifiers, 0, literalsbuf, null, '\0', tr);
     program = programbuf.toString();
     literals = new Object[literalsbuf.size()];
     literalsbuf.copyInto(literals);
     varCount = tr.patternScope.pattern_names.size();
+    String filename = tr.getFileName();
+    int fileslash = filename.replace(File.separatorChar, '/').lastIndexOf('/');
+    fileLine = fileslash >= 0 ? filename.substring(fileslash+1) : filename;
+    int line = tr.getLineNumber();
+    if (line > 0)
+        fileLine = fileLine + ':' + line;
     /* DEBUGGING:
     System.err.print("{translated pattern");
     Macro macro = tr.currentMacroDefinition;
@@ -134,13 +154,12 @@ public class SyntaxPattern extends Pattern implements Externalizable
 	System.err.print(" for ");
 	System.err.print(macro);
       }
-    String file = tr.getFileName();
+    String file = filename;
     if (file != null)
       {
 	System.err.print(" file=");
 	System.err.print(file);
       }
-    int line = tr.getLineNumber();
     if (line > 0)
       {
 	System.err.print(" line=");
@@ -241,8 +260,8 @@ public class SyntaxPattern extends Pattern implements Externalizable
   /**
    * @param context 'V' : vector elements; 'P' : car of Pair; '\0' : other.
    */
-  void translate (Object pattern, StringBuffer program,
-		  Object[] literal_identifiers, int nesting,
+  void translate (Object pattern, StringBuilder program,
+		  Object ellipsis, Object[] literal_identifiers, int nesting,
 		  Vector literals, SyntaxForm syntax,
 		  char context,
 		  Translator tr)
@@ -272,22 +291,25 @@ public class SyntaxPattern extends Pattern implements Externalizable
 		    next = syntax.getDatum();
 		  }
 		boolean repeat = false;
-		if (next instanceof Pair
-		    && tr.matches(((Pair) next).getCar(), SyntaxRule.dots3))
-		  {
+                if (next instanceof Pair) {
+                    Pair nextPair = (Pair) next;
+                    Object nextCar = nextPair.getCar();
+                    if (literalIdentifierEq(nextCar, syntax == null ? null : syntax.getScope(), ellipsis, null)) {
 		    repeat = true;
-		    next = ((Pair) next).getCdr();
+		    next = nextPair.getCdr();
 		    while (next instanceof SyntaxForm)
 		      {
 			syntax = (SyntaxForm) next;
 			next = syntax.getDatum();
 		      }
 		  }
+                }
 
 		int subvar0 = patternNames.size();
 		if (context == 'P')
 		  context = '\0';
-		translate(pair.getCar(), program, literal_identifiers,
+		translate(pair.getCar(), program,
+                          ellipsis, literal_identifiers,
 			  repeat ? nesting + 1 : nesting,
 			  literals, car_syntax,
 			  context == 'V' ? '\0' : 'P', tr);
@@ -334,10 +356,10 @@ public class SyntaxPattern extends Pattern implements Externalizable
 	  }
 	else if (pattern instanceof Symbol)
 	  {
+            ScopeExp current = tr.currentScope();
+            ScopeExp scope1 = syntax == null ? current : syntax.getScope();
 	    for (int j = literal_identifiers.length;  --j >= 0; )
 	      {
-                ScopeExp current = tr.currentScope();
-                ScopeExp scope1 = syntax == null ? current : syntax.getScope();
                 ScopeExp scope2;
                 Object literal = literal_identifiers[j];
                 if (literal instanceof SyntaxForm)
@@ -364,6 +386,10 @@ public class SyntaxPattern extends Pattern implements Externalizable
 		    return;
 		  }
 	      }
+            if (literalIdentifierEq(pattern, scope1, underscoreSymbol, null)) {
+                program.append((char) MATCH_IGNORE);
+                return;
+            }
 	    if (patternNames.contains(pattern))
 	      tr.syntaxError("duplicated pattern variable " + pattern);
 	    int i = patternNames.size();
@@ -372,6 +398,7 @@ public class SyntaxPattern extends Pattern implements Externalizable
 	    int n = (nesting << 1) + (matchCar ? 1 : 0);
 	    patternScope.patternNesting.append((char) n);
             Declaration decl = patternScope.addDeclaration(pattern);
+            decl.setInitValue(QuoteExp.undefined_exp);
             decl.setLocation(tr);
 	    tr.push(decl);
 	    addInt(program, (i << 3) | (matchCar ? MATCH_ANY_CAR : MATCH_ANY));
@@ -403,14 +430,14 @@ public class SyntaxPattern extends Pattern implements Externalizable
       }
   }
 
-  private static void addInt (StringBuffer sbuf, int val)
+  private static void addInt (StringBuilder sbuf, int val)
   {
     if (val > 0xFFFF)
       addInt(sbuf, (val << 13) + MATCH_WIDE);
     sbuf.append((char) (val));
   }
 
-  private static int insertInt (int offset, StringBuffer sbuf, int val)
+  private static int insertInt (int offset, StringBuilder sbuf, int val)
   {
     if (val > 0xFFFF)
       offset += insertInt(offset, sbuf, (val << 13) + MATCH_WIDE);
@@ -472,7 +499,7 @@ public class SyntaxPattern extends Pattern implements Externalizable
 	    else if (ch == MATCH_IGNORE)
 	      return true;
 	    else
-	      throw new Error("unknwon pattern opcode");
+	      throw new Error("unknown pattern opcode");
 	  case MATCH_NIL:
 	    return obj == LList.Empty;
 	  case MATCH_LENGTH:
@@ -571,33 +598,14 @@ public class SyntaxPattern extends Pattern implements Externalizable
 	    continue;
 	  case MATCH_EQUALS:
 	    Object lit = literals[value];
-            Object id1, id2;
-            ScopeExp sc1, sc2;
             Translator tr = (Translator) Compilation.getCurrent();
-            if (lit instanceof SyntaxForm)
-              {
-                SyntaxForm sf = (SyntaxForm) lit;
-                id1 = sf.getDatum();
-                sc1 = sf.getScope();
-              }
-            else
-              {
-                id1 = lit;
-                Syntax curSyntax = tr.getCurrentSyntax();
-                sc1 = curSyntax instanceof Macro ? ((Macro) curSyntax).getCapturedScope() : null;
-              }
-            if (obj instanceof SyntaxForm)
-              {
-                SyntaxForm sf = (SyntaxForm) obj;
-                id2 = sf.getDatum();
-                sc2 = sf.getScope();
-              }
-            else
-              {
-                id2 = obj;
-                sc2 = syntax == null ? tr.currentScope() : syntax.getScope();
-              }
-            return literalIdentifierEq(id1, sc1, id2, sc2);
+            Syntax curSyntax = tr.getCurrentSyntax();
+            ScopeExp sc1 = curSyntax instanceof Macro
+                ? ((Macro) curSyntax).getCapturedScope()
+                : null;
+            ScopeExp sc2 = syntax == null ? tr.currentScope()
+                : syntax.getScope();
+            return literalIdentifierEq(lit, sc1, obj, sc2);
 	  case MATCH_ANY:
 	    if (syntax != null)
 	      obj = SyntaxForms.fromDatum(obj, syntax);
@@ -616,6 +624,7 @@ public class SyntaxPattern extends Pattern implements Externalizable
     out.writeObject(program);
     out.writeObject(literals);
     out.writeInt(varCount);
+    out.writeUTF(fileLine == null ? "" : fileLine);
   }
 
   public void readExternal(ObjectInput in)
@@ -624,20 +633,35 @@ public class SyntaxPattern extends Pattern implements Externalizable
     literals = (Object[]) in.readObject();
     program = (String)  in.readObject();
     varCount = in.readInt();
+    String fline = in.readUTF();
+    if (fline != null)
+        fileLine = fline;
   }
 
-  /** The compiler calls this method to implement syntax-case. */
-  public static Object[] allocVars (int varCount, Object[] outer)
-  {
-    Object[] vars = new Object[varCount];
-    if (outer != null)
-      System.arraycopy(outer, 0, vars, 0, outer.length);
-    return vars;
-  }
+    /** The compiler calls this method to implement syntax-case. */
+    public static Object[] allocVars (int varCount, Object[] outer) {
+        Object[] vars = new Object[varCount];
+        if (outer != null) {
+            int toCopy = outer.length;
+            if (toCopy > varCount)
+                toCopy = varCount;
+            System.arraycopy(outer, 0, vars, 0, toCopy);
+        }
+        return vars;
+    }
 
-  public static boolean literalIdentifierEq (Object id1, ScopeExp sc1,
-					     Object id2, ScopeExp sc2)
-  {
+    public static boolean literalIdentifierEq(Object id1, ScopeExp sc1,
+                                              Object id2, ScopeExp sc2) {
+        if (id1 instanceof SyntaxForm) {
+            SyntaxForm form1 = (SyntaxForm) id1;
+            id1 = form1.getDatum();
+            sc1 = form1.getScope();
+        }
+        if (id2 instanceof SyntaxForm) {
+            SyntaxForm form2 = (SyntaxForm) id2;
+            id2 = form2.getDatum();
+            sc2 = form2.getScope();
+        }
     if (id1 != id2 && (id1 == null || id2 == null || ! id1.equals(id2)))
       return false;
     if (sc1 == sc2)
@@ -645,20 +669,20 @@ public class SyntaxPattern extends Pattern implements Externalizable
     Declaration d1 = null, d2 = null;
     // Ending the look before we get to ModuleExp isn't really right,
     // but it's a hassle dealing the global Environment.
-    // FIXME when we re-do the library/globals imlementation.
+    // FIXME when we re-do the library/globals implementation.
     while (sc1 != null && ! (sc1 instanceof ModuleExp))
       {
 	d1 = sc1.lookup(id1);
 	if (d1 != null)
 	  break;
-	sc1 = sc1.outer;
+	sc1 = sc1.getOuter();
       }
     while (sc2 != null && ! (sc2 instanceof ModuleExp))
       {
 	d2 = sc2.lookup(id2);
 	if (d2 != null)
 	  break;
-	sc2 = sc2.outer;
+	sc2 = sc2.getOuter();
       }
     return d1 == d2;
   }
@@ -674,8 +698,8 @@ public class SyntaxPattern extends Pattern implements Externalizable
 	tr.error('e', "missing or malformed literals list");
 	count = 0;
       }
-    Object[] literals = new Object[count + 1];
-    for (int i = 1;  i <= count;  i++)
+    Object[] literals = new Object[count];
+    for (int i = 0;  i < count;  i++)
       {
 	while (list instanceof SyntaxForm)
 	  {
@@ -685,14 +709,8 @@ public class SyntaxPattern extends Pattern implements Externalizable
 	Pair pair = (Pair) list;
 	tr.pushPositionOf(pair);
 	Object literal = pair.getCar();
-	Object wrapped;
-	if (literal instanceof SyntaxForm)
-	  {
-	    wrapped = literal;
-	    literal = ((SyntaxForm) literal).getDatum();
-	  }
-	else
-	  wrapped = literal; // FIXME
+	Object wrapped = SyntaxForms.fromDatumIfNeeded(literal, syntax);
+        literal = Translator.stripSyntax(literal);
 	if (! (literal instanceof Symbol))
           tr.error('e', "non-symbol '"+literal+"' in literals list");
 	literals[i] = wrapped;
@@ -702,8 +720,13 @@ public class SyntaxPattern extends Pattern implements Externalizable
     return literals;
   }
 
-  public void print (Consumer out)
-  {
-    out.write("#<syntax-pattern>");
-  }
+    public String toString() {
+        StringBuilder sbuf = new StringBuilder("#<syntax-pattern");
+        if (fileLine != null) {
+            sbuf.append(' ');
+            sbuf.append(fileLine);
+        }
+        sbuf.append('>');
+        return sbuf.toString();
+    }
 }

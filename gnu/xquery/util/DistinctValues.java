@@ -116,7 +116,7 @@ class DistinctValuesConsumer extends FilterConsumer implements PositionConsumer
     table = new DistinctValuesHashTable(collator);
   }
 
-  public void consume(SeqPosition position)
+  public void writePosition(SeqPosition position)
   {
     writeObject(position);
   }

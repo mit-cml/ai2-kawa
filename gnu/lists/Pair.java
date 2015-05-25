@@ -35,6 +35,7 @@ public class Pair extends LList implements Externalizable
   public void setCdr(Object cdr) { this.cdr = cdr; }
 
   /** May go away soon. */
+  public void setCarBackdoor (Object car) { this.car = car; }
   public void setCdrBackdoor (Object cdr) { this.cdr = cdr; }
 
   public int size()
@@ -75,20 +76,21 @@ public class Pair extends LList implements Externalizable
 	    return -2;
 	  }
 	Pair fast_pair = (Pair) fast;
-	if (fast_pair.cdr == Empty)
+        Object fast_pair_cdr = fast_pair.getCdr();
+	if (fast_pair_cdr == Empty)
 	  return n+1;
 	if (fast == slow && n > 0)
 	  return -1;
-	if (! (fast_pair.cdr instanceof Pair))
+	if (! (fast_pair_cdr instanceof Pair))
 	  {
 	    n++;
-	    fast = fast_pair.cdr;
+	    fast = fast_pair_cdr;
 	    continue;
 	  }
 	if (!(slow instanceof Pair))
 	  return -2;
-	slow = ((Pair)slow).cdr;
-	fast = ((Pair)fast_pair.cdr).cdr;
+	slow = ((Pair)slow).getCdr();
+	fast = ((Pair)fast_pair_cdr).getCdr();
 	n += 2;
       }
   }
@@ -116,23 +118,23 @@ public class Pair extends LList implements Externalizable
   public Object getPosNext (int ipos)
   {
     if (ipos <= 0)
-      return ipos == 0 ? car : eofValue;
+        return ipos == 0 ? getCar() : eofValue;
     return PositionManager.getPositionObject(ipos).getNext();
   }
 
   public Object getPosPrevious (int ipos)
   {
     if (ipos <= 0)
-      return ipos == 0 ? eofValue : lastPair().car;
+      return ipos == 0 ? eofValue : lastPair().getCar();
     return PositionManager.getPositionObject(ipos).getPrevious();
   }
 
-  public final Pair lastPair()
+  public Pair lastPair()
   {
     Pair pair = this;
     for (;;)
       {
-	Object next = pair.cdr;
+        Object next = pair.getCdr();
 	if (next instanceof Pair)
 	  pair = (Pair) next;
 	else
@@ -157,9 +159,9 @@ public class Pair extends LList implements Externalizable
     while (list instanceof Pair)
       {
 	Pair pair = (Pair) list;
-	Object obj = pair.car;
+	Object obj = pair.getCar();
 	hash = 31*hash + (obj==null ? 0 : obj.hashCode());
-	list = pair.cdr;
+	list = pair.getCdr();
       }
     if (list != LList.Empty && list != null)
       hash = hash ^ list.hashCode();
@@ -174,12 +176,12 @@ public class Pair extends LList implements Externalizable
       return false;
     for (;;)
       {
-	Object x1 = pair1.car;
-	Object x2 = pair2.car;
+        Object x1 = pair1.getCar();
+	Object x2 = pair2.getCar();
 	if (x1 != x2 && (x1 == null || ! x1.equals(x2)))
 	  return false;
-	x1 = pair1.cdr;
-	x2 = pair2.cdr;
+	x1 = pair1.getCdr();
+	x2 = pair2.getCdr();
 	if (x1 == x2)
 	  return true;
 	if (x1 == null || x2 == null)
@@ -203,8 +205,8 @@ public class Pair extends LList implements Externalizable
       return 1;
     for (;;)
       {
-        Object x1 = pair1.car;
-        Object x2 = pair2.car;
+        Object x1 = pair1.getCar();
+        Object x2 = pair2.getCar();
         int d = ((Comparable) x1).compareTo((Comparable) x2);
         if (d != 0)
           return d;
@@ -239,15 +241,16 @@ public class Pair extends LList implements Externalizable
     while (i > 0)
       {
 	i--;
-	if (pair.cdr instanceof Pair)
-	  pair = (Pair)pair.cdr;
-	else if (pair.cdr instanceof Sequence)
-	  return ((Sequence)pair.cdr).get(i);
+        Object pair_cdr = pair.getCdr();
+	if (pair_cdr instanceof Pair)
+	  pair = (Pair)pair_cdr;
+	else if (pair_cdr instanceof Sequence)
+	  return ((Sequence)pair_cdr).get(i);
 	else
 	  break;
       }
     if (i == 0)
-      return pair.car;
+      return pair.getCar();
     else
       throw new IndexOutOfBoundsException ();
   }
@@ -274,8 +277,8 @@ public class Pair extends LList implements Externalizable
     for ( ;  i < len && rest instanceof Pair;  i++)
     {
       Pair pair = (Pair) rest;
-      arr[i] = pair.car;
-      rest = (Sequence) pair.cdr;
+      arr[i] = pair.getCar();
+      rest = (Sequence) pair.getCdr();
     }
     int prefix = i;
     for ( ;  i < len;  i++)
@@ -300,8 +303,8 @@ public class Pair extends LList implements Externalizable
     for ( ;  i < len && rest instanceof Pair;  i++)
     {
       Pair pair = (Pair) rest;
-      arr[i] = pair.car;
-      rest = (Sequence) pair.cdr;
+      arr[i] = pair.getCar();
+      rest = (Sequence) pair.getCdr();
     }
     int prefix = i;
     for ( ;  i < len;  i++)

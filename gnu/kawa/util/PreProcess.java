@@ -17,9 +17,9 @@ public class PreProcess
   int lineno;
 
   static final String JAVA4_FEATURES = "+JAVA2 +use:java.util.IdentityHashMap +use:java.lang.CharSequence +use:java.lang.Throwable.getCause +use:java.net.URI +use:java.util.regex +SAX2 +use:java.nio";
-  static final String NO_JAVA4_FEATURES = "-JAVA5 -use:java.util.IdentityHashMap -use:java.lang.CharSequence -use:java.lang.Throwable.getCause -use:java.net.URI -use:java.util.regex -use:org.w3c.dom.Node -JAXP-1.3 -use:javax.xml.transform -JAVA5 -JAVA6 -JAVA6COMPAT5 -JAXP-QName -use:java.text.Normalizer -SAX2 -use:java.nio -Android";
+  static final String NO_JAVA4_FEATURES = "-JAVA5 -use:java.util.IdentityHashMap -use:java.lang.CharSequence -use:java.lang.Throwable.getCause -use:java.net.URI -use:java.util.regex -use:org.w3c.dom.Node -JAXP-1.3 -use:javax.xml.transform -JAVA5 -JAVA6 -JAVA6COMPAT5 -JAXP-QName -use:java.text.Normalizer -use:javax.lang.model -SAX2 -use:java.nio -Android";
   static final String JAVA5_FEATURES = "+JAVA5 "+JAVA4_FEATURES+" +use:org.w3c.dom.Node +use:javax.xml.transform +JAXP-1.3 -JAXP-QName";
-  static final String NO_JAVA6_FEATURES = "-JAVA6 -JAVA7 -use:java.dyn -use:java.text.Normalizer";
+  static final String NO_JAVA6_FEATURES = "-JAVA6 -JAVA7 -JAVA8 -use:java.lang.invoke -use:java.text.Normalizer -use:javax.lang.model";
 
   static String[] version_features = {
     "java1", "-JAVA2 "+NO_JAVA4_FEATURES+" "+NO_JAVA6_FEATURES,
@@ -29,9 +29,10 @@ public class PreProcess
     "java4", "-JAVA5 "+JAVA4_FEATURES+" -use:org.w3c.dom.Node -JAXP-1.3 -use:javax.xml.transform -JAXP-QName -JAVA6COMPAT5 -Android "+NO_JAVA6_FEATURES,
     "java4x", "-JAVA5 "+JAVA4_FEATURES+" +use:org.w3c.dom.Node +JAXP-1.3 +use:javax.xml.transform -JAXP-QName -JAVA6COMPAT5 -Android "+NO_JAVA6_FEATURES,
     "java5", JAVA5_FEATURES+" -JAVA6COMPAT5 -Android "+NO_JAVA6_FEATURES,
-    "java6compat5", JAVA5_FEATURES+" -JAVA6 -JAVA7 +JAVA6COMPAT5 +use:java.text.Normalizer -use:java.dyn -Android",
-    "java6", JAVA5_FEATURES+" +JAVA6 -JAVA7 -JAVA6COMPAT5 +use:java.text.Normalizer -use:java.dyn -Android",
-    "java7", JAVA5_FEATURES+" +JAVA6 +JAVA7 -JAVA6COMPAT5 +use:java.text.Normalizer +use:java.dyn -Android",
+    "java6compat5", JAVA5_FEATURES+" -JAVA6 -JAVA7 -JAVA8 +JAVA6COMPAT5 +use:java.text.Normalizer -use:javax.lang.model -use:java.lang.invoke -Android",
+    "java6", JAVA5_FEATURES+" +JAVA6 -JAVA7 -JAVA8 -JAVA6COMPAT5 +use:java.text.Normalizer +use:javax.lang.model -use:java.lang.invoke -Android",
+    "java7", JAVA5_FEATURES+" +JAVA6 +JAVA7 -JAVA8 -JAVA6COMPAT5 +use:java.text.Normalizer +use:javax.lang.model +use:java.lang.invoke -Android",
+    "java8", JAVA5_FEATURES+" +JAVA6 +JAVA7 +JAVA8 -JAVA6COMPAT5 +use:java.text.Normalizer +use:javax.lang.model +use:java.lang.invoke -Android",
     "android", "+JAVA5 "+JAVA4_FEATURES+" +use:org.w3c.dom.Node +JAXP-1.3 -JAXP-QName -use:javax.xml.transform -JAVA6 -JAVA6COMPAT5 +Android "+NO_JAVA6_FEATURES,
   };
 
@@ -85,11 +86,6 @@ public class PreProcess
 	    byte[] nbuf = new byte[2 * len];
 	    System.arraycopy(buf, 0, nbuf, 0, len);
 	    buf = nbuf;
-	  }
-	if (c == '\n' && len > 0 && buf[len-1] == '\r')
-	  {
-	    buf[len++] = (byte) c;
-	    continue;
 	  }
 	if (commentAt >= 0 && dataStart < 0 && changedLine <= 0
 	    && c != '\r' && c != '\n'
@@ -157,13 +153,13 @@ public class PreProcess
 	  }
 	buf[len] = (byte) c;
 	len++;
-	if (c == '\r' || c == '\n')
+	if (c == '\n')
 	  {
 	    int firstNonSpace = -1;
 	    int lastNonSpace = 0;
 	    for (int i = lineStart; i < len-1; i++)
 	      {
-		if (buf[i] != ' ' && buf[i] != '\t')
+		if (buf[i] != ' ' && buf[i] != '\t' && buf[i] != '\r')
 		  {
 		    lastNonSpace = i;
 		    if (firstNonSpace < 0)

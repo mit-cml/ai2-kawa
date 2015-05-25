@@ -3,6 +3,7 @@ import kawa.lang.*;
 import gnu.mapping.*;
 import gnu.expr.*;
 import gnu.lists.*;
+import gnu.kawa.reflect.StaticFieldLocation;
 
 /**
  * The Syntax transformer that re-writes the Scheme "fluid-let" primitive.
@@ -21,10 +22,13 @@ public class fluid_let extends Syntax
    * Null means use the existing binding. */
   Expression defaultInit;
 
-  public fluid_let(boolean star, Expression defaultInit)
+  boolean warnIfUndefined;
+
+  public fluid_let(boolean star, boolean warnIfUndefined, Expression defaultInit)
   {
     this.star = star;
     this.defaultInit = defaultInit;
+    this.warnIfUndefined = warnIfUndefined;
   }
 
   public fluid_let()
@@ -43,8 +47,7 @@ public class fluid_let extends Syntax
   public Expression rewrite (Object bindings, Object body, Translator tr)
   {
     int decl_count = star ? 1 : LList.length (bindings);
-    Expression[] inits = new Expression[decl_count];
-    FluidLetExp let = new FluidLetExp (inits);
+    FluidLetExp let = new FluidLetExp();
     for (int i = 0; i < decl_count; i++)
       {
 	Pair bind_pair = (Pair) bindings;
@@ -79,7 +82,16 @@ public class fluid_let extends Syntax
             else
               return tr.syntaxError("invalid " + getName() + " syntax");
             Declaration decl = let.addDeclaration(name);
-            Declaration found = tr.lexical.lookup(name, false);
+            Declaration found = tr.lookup(name, -1);
+            if (found == null && name instanceof Symbol)
+              {
+                Location loc = tr.getLanguage().getLangEnvironment()
+                  .lookup((Symbol) name, null);
+                if (loc != null)
+                  loc = loc.getBase();
+                if (loc instanceof StaticFieldLocation)
+                  found = ((StaticFieldLocation) loc).getDeclaration();
+              }
             if (found != null)
               {
                 found.maybeIndirectBinding(tr);
@@ -87,13 +99,15 @@ public class fluid_let extends Syntax
                 found.setFluid(true);
                 found.setCanWrite(true);
               }
+            else if (! warnIfUndefined)
+              decl.setFlag(Declaration.IS_DYNAMIC);
             decl.setCanWrite(true);
             decl.setFluid(true);
             decl.setIndirectBinding(true);
             if (value == null)
               value = new ReferenceExp(name);
-            inits[i] = value;
-            decl.noteValue(null);
+            decl.setInitValue(value);
+            decl.noteValueUnknown();
             bindings = bind_pair.getCdr();
           }
         finally
@@ -102,10 +116,8 @@ public class fluid_let extends Syntax
           }
       }
     tr.push(let);
-    if (star && bindings != LList.Empty)
-      let.body = rewrite (bindings, body, tr);
-    else
-      let.body = tr.rewrite_body(body);
+    let.setBody(star && bindings != LList.Empty ? rewrite (bindings, body, tr)
+                : tr.rewrite_body(body));
     tr.pop(let);
     return let;
   }

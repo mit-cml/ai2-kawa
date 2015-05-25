@@ -19,6 +19,13 @@ public class FindCapturedVars extends ExpExpVisitor<Void>
 
   int backJumpPossible = 0;
 
+  protected final void visitDeclarationType (Declaration decl)
+  {
+    // If decl.typeExp references a ClassExp then we might get a
+    // needless capture of the ClassExp's declarations.
+    // For now ignore the issue ... FIXME
+  }
+
   protected Expression visitApplyExp (ApplyExp exp, Void ignored)
   {
     int oldBackJumpPossible = backJumpPossible;
@@ -33,8 +40,9 @@ public class FindCapturedVars extends ExpExpVisitor<Void>
     // possible that we later find out that func needs a static link,
     // in which case the current function does as well;  this is taken
     // care of by calling setCallersNeedStaticLink in LambdaExp.)
+    // (This code may be less useful now that --module-static is the default.)
     if (exp.func instanceof ReferenceExp
-	&& Compilation.defaultCallConvention <= Compilation.CALL_WITH_RETURN)
+	&& getCompilation().currentCallConvention() <= Compilation.CALL_WITH_RETURN)
       {
 	Declaration decl
 	  = Declaration.followAliases(((ReferenceExp) exp.func).binding);
@@ -57,12 +65,13 @@ public class FindCapturedVars extends ExpExpVisitor<Void>
       {
         Object val = ((QuoteExp) exp.func).getValue();
         Expression arg0 = exp.getArg(0);
-        if (val instanceof PrimProcedure && arg0 instanceof ReferenceExp)
+        if (val instanceof PrimProcedure
+            && ((PrimProcedure) val).isConstructor()
+            && arg0 instanceof ReferenceExp)
           {
-            PrimProcedure pproc = (PrimProcedure) val;
             Declaration decl
               = Declaration.followAliases(((ReferenceExp) arg0).binding);
-            if (decl != null && decl.context instanceof ModuleExp
+            if (decl != null && decl.context == comp.getModule()
                 && ! decl.getFlag(Declaration.NONSTATIC_SPECIFIED))
               {
                 Expression value = decl.getValue();
@@ -72,8 +81,7 @@ public class FindCapturedVars extends ExpExpVisitor<Void>
                     LambdaExp lexp = (LambdaExp) value;
                     if (! lexp.getNeedsClosureEnv())
                       {
-                        exp.nextCall = decl.firstCall;
-                        decl.firstCall = exp;
+                        decl.addCaller(exp);
                         for (int i = 1;  i < args.length;  i++)
                           args[i].visit(this, ignored);
                         skipFunc = skipArgs = true;
@@ -93,12 +101,9 @@ public class FindCapturedVars extends ExpExpVisitor<Void>
 
   public void visitDefaultArgs (LambdaExp exp, Void ignored)
   {
-    if (exp.defaultArgs == null)
-      return;
-
     super.visitDefaultArgs(exp, ignored);
 
-    // Check if any default expression "captured" a parameters.
+    // Check if any default expression "captured" a parameter.
     // If so, evaluating a default expression cannot be done until the
     // heapFrame is allocated in the main-method.  But in most cases, a
     // default expression will not contain a nested scope, hence no
@@ -153,6 +158,13 @@ public class FindCapturedVars extends ExpExpVisitor<Void>
       }
   }
 
+  void maybeWarnNoDeclarationSeen(Object name, boolean function,
+                                  Compilation comp, SourceLocator location)
+  {
+    if (comp.resolve(name, function) == null)
+      maybeWarnNoDeclarationSeen(name, comp, location);
+  }
+
   void maybeWarnNoDeclarationSeen (Object name, Compilation comp, SourceLocator location)
   {
     if (comp.warnUndefinedVariable())
@@ -167,7 +179,8 @@ public class FindCapturedVars extends ExpExpVisitor<Void>
           {
             Object name = decl.getSymbol();
             Declaration bind = allocUnboundDecl(name, false);
-            maybeWarnNoDeclarationSeen(name, comp, exp);
+            if (! decl.getFlag(Declaration.IS_DYNAMIC))
+              maybeWarnNoDeclarationSeen(name, comp, exp);
             capture(bind);
             decl.base = bind;
           }
@@ -187,13 +200,11 @@ public class FindCapturedVars extends ExpExpVisitor<Void>
 	// a field with the declaration (see LambdaExp.allocFieldField),
 	// since assigning the nullExp can clobber the field after it has
 	// been initialized with a ModuleMethod.
-	Expression[] inits = exp.inits;
-	int len = inits.length;
 	Expression[] exps = ((BeginExp) exp.body).exps;
 	int init_index = 0;
 	Declaration decl = exp.firstDecl();
 	for (int begin_index = 0;
-	     begin_index < exps.length && init_index < len;
+	     begin_index < exps.length && decl != null;
 	     begin_index++)
 	  {
 	    Expression st = exps[begin_index];
@@ -201,7 +212,7 @@ public class FindCapturedVars extends ExpExpVisitor<Void>
 	      {
 		SetExp set = (SetExp) st;
 		if (set.binding == decl
-		    && inits[init_index] == QuoteExp.nullExp
+		    && decl.getInitValue() == QuoteExp.nullExp
 		    && set.isDefining())
 		  {
 		    Expression new_value = set.new_value;
@@ -209,7 +220,7 @@ public class FindCapturedVars extends ExpExpVisitor<Void>
 			 || new_value instanceof LambdaExp)
 			&& decl.getValue() == new_value)
 		      {
-			inits[init_index] = new_value;
+			decl.setInitValue(new_value);
 			exps[begin_index] = QuoteExp.voidExp;
 		      }
 		    init_index++;
@@ -230,6 +241,7 @@ public class FindCapturedVars extends ExpExpVisitor<Void>
       return current.returnContinuation;
     if (current.getCanRead()
         || current.isClassMethod()
+        || Compilation.avoidInline(current)
         || current.min_args != current.max_args)
       {
         current.returnContinuation = LambdaExp.unknownContinuation;
@@ -277,17 +289,28 @@ public class FindCapturedVars extends ExpExpVisitor<Void>
     java.util.Set<LambdaExp> seen = new java.util.LinkedHashSet<LambdaExp>();
     // Finish the job that was started in FindTailCalls.
     Expression caller = checkInlineable(exp, seen);
-    if (caller != LambdaExp.unknownContinuation
-        // Usually best to not inline a module-level function, since that
-        // makes stack traces less helpful, and increases the risk of
-        // methods getting too big.
-        && (! (exp.outer instanceof ModuleExp) || exp.nameDecl == null))
+    if (caller != LambdaExp.unknownContinuation)
       {
         exp.setInlineOnly(true);
         backJumpPossible++;
       }
     return super.visitLambdaExp(exp, ignored);
   }
+
+    protected Expression visitCaseExp(CaseExp exp, Void ignored) {
+
+        exp.key = visit(exp.key, ignored);
+        for (int i = 0; i < exp.clauses.length; i++) {
+            Expression e = exp.clauses[i].exp;
+            e = visit(e, ignored);
+        }
+
+        CaseExp.CaseClause ecl = exp.elseClause;
+        if (ecl != null)
+            ecl.exp = visit(ecl.exp, ignored);
+
+        return exp;
+    }
 
   public void capture(Declaration decl)
   {
@@ -302,7 +325,6 @@ public class FindCapturedVars extends ExpExpVisitor<Void>
 
     LambdaExp curLambda = getCurrentLambda ();
     ScopeExp sc = decl.getContext();
-    if (sc==null) throw new Error("null context for "+decl+" curL:"+curLambda);
     LambdaExp declLambda = sc.currentLambda ();
 
     // If curLambda is inlined, the function that actually needs a closure
@@ -333,7 +355,6 @@ public class FindCapturedVars extends ExpExpVisitor<Void>
         if (chain == null || curLambda.inlineHome == null)
           {
             // Infinite loop of functions that are inlined in each other.
-            curLambda.setCanCall(false);
             return;
           }
         curLambda = curLambda.getCaller();
@@ -413,12 +434,6 @@ public class FindCapturedVars extends ExpExpVisitor<Void>
 		outer = heapLambda.outerLambda();
 	      }
 	  }
-        if (declLambda==null) {
-          System.err.println("null declLambda for "+decl+" curL:"+curLambda);
-          ScopeExp c = decl.context;
-          for (; c!=null; c = c.outer)
-            System.err.println("- context:"+c);
-        }
         declLambda.capture(decl);
       }
   }
@@ -455,6 +470,7 @@ public class FindCapturedVars extends ExpExpVisitor<Void>
 	  decl.setFlag(Declaration.STATIC_SPECIFIED);
 	decl.setCanRead(true);
 	decl.setCanWrite(true);
+        decl.noteValueUnknown();
         // Setting IS_SINGLE_VALUE unconditionally is a kludge.
         // It is OK for Scheme/Lisp, since a variable can't be
         // bound to multiple value.  It is OK for XQuery, since we
@@ -475,11 +491,9 @@ public class FindCapturedVars extends ExpExpVisitor<Void>
 				exp.isProcedureName());
 	exp.setBinding(decl);
       }
-    if (decl.getFlag(Declaration.IS_UNKNOWN)
-        && comp.resolve(exp.getSymbol(), exp.isProcedureName()) == null)
-      {
-        maybeWarnNoDeclarationSeen(exp.getSymbol(), comp, exp);
-      }
+    if (decl.getFlag(Declaration.IS_UNKNOWN))
+      maybeWarnNoDeclarationSeen(exp.getSymbol(), exp.isProcedureName(),
+                                 comp, exp);
 
     capture(exp.contextDecl(), decl);
     return exp;
@@ -487,9 +501,10 @@ public class FindCapturedVars extends ExpExpVisitor<Void>
 
   void capture (Declaration containing, Declaration decl)
   {
-    if (decl.isAlias() && decl.value instanceof ReferenceExp)
+    Expression dvalue;
+    if (decl.isAlias() && (dvalue = decl.getValue()) instanceof ReferenceExp)
       {
-	ReferenceExp rexp = (ReferenceExp) decl.value;
+	ReferenceExp rexp = (ReferenceExp) dvalue;
 	Declaration orig = rexp.binding;
 	if (orig != null
 	    && (containing == null || ! orig.needsContext()))
@@ -529,6 +544,8 @@ public class FindCapturedVars extends ExpExpVisitor<Void>
 	decl = allocUnboundDecl(exp.getSymbol(), exp.isFuncDef());
 	exp.binding = decl;
       }
+    if (decl.getFlag(Declaration.IS_UNKNOWN))
+      maybeWarnNoDeclarationSeen(exp.getSymbol(), false, comp, exp);
     if (! decl.ignorable())
       {
 	if (! exp.isDefining())

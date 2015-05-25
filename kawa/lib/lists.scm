@@ -1,24 +1,24 @@
-(module-static #t)
 (module-export pair? cons null? set-car! set-cdr! car cdr
 	       caar cadr cdar cddr
 	       caaar caadr cadar caddr cdaar cdadr cddar cdddr
 	       caaaar caaadr caadar caaddr cadaar cadadr caddar cadddr
 	       cdaaar cdaadr cdadar cdaddr cddaar cddadr cdddar cddddr
-	       length reverse list-tail list-ref list? reverse!
-	       memq memv member assq assv assoc)
+	       length reverse list-tail list-ref list-set!
+               list? make-list reverse!
+	       memq memv member assq assv assoc list-copy)
 
 (require <kawa.lib.prim_syntax>)
 (require <kawa.lib.std_syntax>)
 (require <kawa.lib.reflection>)
 
 (define (pair? x) :: <boolean>
-  (<pair>:instance? x))
+  (<pair>:instance? (gnu.mapping.Promise:force x)))
 
 (define (cons car cdr) :: <pair>
   (<pair>:new car cdr))
 
 (define (null? x) :: <boolean>
-  (eq? x '()))
+  (eq? (gnu.mapping.Promise:force x) '()))
 
 (define (set-car! (p <pair>) x)
   (set! p:car x))
@@ -42,25 +42,26 @@
        ((_ fname slots)
        #`(define-procedure fname
 	   setter: (lambda (arg value)
-		     ,(syntax-case #'slots ()
+		     #,(syntax-case #'slots ()
 			((first1 . rest1)
 			 #`(set!
-			    (field 
-			     ,(let loop ((f #'rest1))
-				(syntax-case f ()
-				  (() #'arg)
-				  ((first . rest)
-				   #`(field (as <pair> ,(loop #'rest))
-					    ',(syntax-object->datum #'first)))))
-			     'first1)
+			    (field
+                             (as <pair>
+                                 #,(let loop ((f #'rest1))
+                                     (syntax-case f ()
+                                       (() #'arg)
+                                       ((first . rest)
+                                        #`(field (as <pair> #,(loop #'rest))
+                                                 '#,(syntax-object->datum #'first))))))
+                             'first1)
 			    value))))
 	   (lambda (arg) name: 'fname
-		   ,(let loop ((f #'slots))
+		   #,(let loop ((f #'slots))
 		      (syntax-case f ()
 			(() #'arg)
 			((first . rest)
-			 #`(field (as <pair> ,(loop #'rest))
-				  ',(syntax-object->datum #'first)))))))))))
+			 #`(field (as <pair> #,(loop #'rest))
+				  '#,(syntax-object->datum #'first)))))))))))
 
 (define-cxr caar (car car))
 (define-cxr cadr (car cdr))
@@ -101,13 +102,33 @@
 	  (loop (cdr pair) (cons (car pair) result))))))
 
 (define (list-tail list (count :: <int>))
-  (<list>:listTail list count))
+  (let loop ((lst list))
+    (set! count (- count 1))
+    (cond ((< count 0)
+           lst)
+          (else
+           (let ((flst (gnu.mapping.Promise:force lst)))
+             (if (gnu.lists.Pair? flst)
+                 (loop ((as gnu.lists.Pair flst):getCdr))
+                 (primitive-throw (java.lang.IndexOutOfBoundsException "List is too short."))))))))
 
-(define (list-ref list (index :: <int>))
-  (car (list-tail list index)))
+(define (list-set! list index::int obj)::void
+  (set-car! (list-tail list index) obj))
+
+(define-procedure list-ref
+  setter: list-set!
+  (lambda (list index::int) name: 'list-ref
+          (car (list-tail list index))))
 
 (define (list? obj) :: <boolean>
   (>= (invoke-static <list> 'listLength obj #f) 0))
+
+(define (make-list k::int #!optional (fill #!null)) ::list
+  (let loop ((result ::list '())
+	     (i ::int k))
+    (if (> i 0)
+	(loop (cons fill result) (- i 1))
+	result)))
 
 ;; Not in R5RS, but is in Guile (with extra mystery argument).
 (define (reverse! (list :: <list>)) :: <list>
@@ -154,10 +175,27 @@
 	      (lp (cdr list)))))))
 
 ;;;  The optional test argument is an srfi-1 extension.
-(define (assoc x list #!optional (test :: <procedure> equal?))
+(define (assoc key list #!optional (test :: <procedure> equal?))
   (let lp ((list list))
     (if (eq? list '())
 	 #f
 	(let ((pair :: <pair> (car list)))
-	  (if (test pair:car x) pair
+	  (if (test key pair:car) pair
 	      (lp (cdr list)))))))
+
+(define (list-copy obj)
+  (let ((result obj)
+        (prev ::pair #!null))
+    (let recur ((x obj))
+      (if (pair? x)
+	  (let* ((pold ::pair x)
+                 (pnew (cons (pold:getCar) #!null)))
+	    (if (eq? prev #!null)
+		(set! result pnew)
+		(set-cdr! prev pnew))
+	    (set! prev pnew)
+	    (recur (pold:getCdr)))
+           (if (not (eq? prev #!null))
+               (set-cdr! prev x))))
+    result))
+

@@ -4,7 +4,9 @@ import kawa.standard.Scheme;
 import gnu.lists.*;
 import gnu.xml.*;
 import gnu.expr.*;
-import gnu.kawa.lispexpr.ReadTable;
+import gnu.text.*;
+import gnu.kawa.io.InPort;
+import gnu.kawa.lispexpr.*;
 
 /** Support for the experimental Q2 language.
  * See the <a href="http://www.gnu.org/software/kawa/q2/">web site</a>
@@ -18,8 +20,30 @@ public class Q2 extends Scheme
 
   public Q2 ()
   {
-    instance = this;
+    environ = q2Environment;
     ModuleBody.setMainPrintValues(true);
+  }
+
+  protected Q2 (Environment env)
+  {
+    super(env);
+  }
+
+  protected static final SimpleEnvironment q2Environment
+  = Environment.make("q2-environment", Scheme.kawaEnvironment);
+
+  static
+  {
+    instance = new Q2();
+    Environment saveEnv = Environment.setSaveCurrent(q2Environment);
+    try
+      {
+	instance.initQ2();
+      }
+    finally
+      {
+        Environment.restoreCurrent(saveEnv);
+      }
   }
 
   public static Q2 getQ2Instance()
@@ -29,17 +53,41 @@ public class Q2 extends Scheme
     return instance;    
   }
 
-  public gnu.text.Lexer getLexer(InPort inp, gnu.text.SourceMessages messages)
+  public void initQ2 ()
+  {
+    defSntxStFld(";", "gnu.q2.lang.Operator", "SEMI");
+    defSntxStFld("+", "gnu.q2.lang.Operator", "PLUS");
+    defSntxStFld("-", "gnu.q2.lang.Operator", "MINUS");
+    defSntxStFld("*", "gnu.q2.lang.Operator", "STAR");
+    defSntxStFld("/", "gnu.q2.lang.Operator", "SLASH");
+    defSntxStFld("<", "gnu.q2.lang.Operator", "LT");
+    defSntxStFld(">", "gnu.q2.lang.Operator", "GT");
+    defSntxStFld("==", "gnu.q2.lang.Operator", "EQ");
+    defSntxStFld("=<", "gnu.q2.lang.Operator", "LE");
+    defSntxStFld(">=", "gnu.q2.lang.Operator", "GE");
+    defSntxStFld(":=", "gnu.q2.lang.Operator", "ASSIGN");
+  }
+
+  public String getName()
+  {
+    return "Q2";
+  }
+
+  public LispReader getLexer(InPort inp, gnu.text.SourceMessages messages)
   {
     Compilation.defaultCallConvention = Compilation.CALL_WITH_CONSUMER;
     Q2Read lexer = new Q2Read(inp, messages);
     return lexer;
   }
 
+  public String getCompilationClass () { return "gnu.q2.lang.Q2Translator"; }
+
+  /*
   public Consumer getOutputConsumer(java.io.Writer out)
   {
     return new XMLPrinter(out, false);
   }
+  */
 
   /** The compiler insert calls to this method for applications and applets. */
   public static void registerEnvironment()
@@ -47,23 +95,7 @@ public class Q2 extends Scheme
     Language.setDefaults(new Q2());
   }
 
-  public Expression makeBody(Expression[] exps)
-  {
-    return new ApplyExp(gnu.kawa.functions.AppendValues.appendValues, exps);
-  }
-
-  public Expression makeApply (Expression func, Expression[] args)
-  {
-    /*
-    if (func instanceof QuoteExp
-	&& ((QuoteExp) func).getValue() instanceof Procedure)
-      return super.makeApply(func, args);
-    */
-    Expression[] exps = new Expression[args.length+1];
-    exps[0] = func;
-    System.arraycopy(args, 0, exps, 1, args.length);
-    return new ApplyExp(Q2Apply.q2Apply, exps);
-  }
+  public boolean appendBodyValues () { return true; }
 
   public Procedure getPrompter()
   {
@@ -73,7 +105,14 @@ public class Q2 extends Scheme
   public ReadTable createReadTable ()
   {
     ReadTable rt = ReadTable.createInitial();
-    rt.set('(', new Q2ReaderParens());
+    rt.set('(', new Q2Read.ReadTableEntry());
+    rt.set(';', new Q2Read.ReadTableEntry());
+    ReaderDispatch rdispatch = ReaderDispatch.create(rt, false);
+    rt.set('#', rdispatch);
+    rdispatch.set(' ', ReaderIgnoreRestOfLine.getInstance());
+    //For now, allow #t #f #!eof etc.
+    //Also want to allow #!/ at start of file as comment start.
+    //rdispatch.set('!', ReaderIgnoreRestOfLine.getInstance());
     rt.setFinalColonIsKeyword(true);
     return rt;
   }
@@ -110,13 +149,6 @@ class Prompter extends Procedure1
     InPort port = (InPort) arg;
     int line = port.getLineNumber() + 1;
     char state = port.readState;
-    if (state == ']')
-      return "<!--Q2:"+line+"-->";
-    else
-      {
-	if (state == '\n')
-	  state = '-';
-	return "#|--Q2:"+line+"|#"+state;
-      }
+    return "#|Q2"+state+line+"|# ";
   }
 }

@@ -20,9 +20,9 @@ public class ReadTable extends RangeTable
   public static final int NON_TERMINATING_MACRO = 6;
 
   /** Default value to pass to setBracketMode() unless overridden. */
-  public static int defaultBracketMode = -1;
+  public static int defaultBracketMode = -2;
 
-  /** A character such that PreOpWord -> ($lookup$ Pre 'Word), if > 0. */
+  /** A character X such that PreXWord -> ($lookup$ Pre 'Word), if > 0. */
   public char postfixLookupOperator = (char) (-1);
 
   /** True if ":IDENTIFIER" should be treated as a keyword. */
@@ -54,7 +54,7 @@ public class ReadTable extends RangeTable
   {
   }
 
-  public void initialize ()
+  public void initialize(boolean sharpIsTerminating)
   {
     ReadTableEntry entry;
     entry = ReadTableEntry.getWhitespaceInstance();
@@ -73,7 +73,7 @@ public class ReadTable extends RangeTable
     set('!',  entry);
     set('$',  entry);
     set('%',  entry);
-    set('&',  entry);
+    set('&',  ReadTableEntry.ampersand);
     set('*',  entry);
     set('+',  entry);
     set('-',  entry);
@@ -91,41 +91,46 @@ public class ReadTable extends RangeTable
     set('\b', entry);
     set(':',  new ReaderColon());
     set('\"', new ReaderString());
-    set('#',  ReaderDispatch.create(this));
+    set('#',  ReaderDispatch.create(this, ! sharpIsTerminating));
     set(';',  ReaderIgnoreRestOfLine.getInstance());
     set('(',  ReaderParens.getInstance('(', ')'));
 
-    set('\'', new ReaderQuote(makeSymbol(LispLanguage.quote_sym)));
-    set('`',  new ReaderQuote(makeSymbol(LispLanguage.quasiquote_sym)));
-    set(',',  new ReaderQuote(makeSymbol(LispLanguage.unquote_sym),
-                              '@', makeSymbol(LispLanguage.unquotesplicing_sym)));
+    set('\'', new ReaderQuote(makeSymbol(LispLanguage.quote_str)));
+    set('`',  new ReaderQuote(makeSymbol(LispLanguage.quasiquote_str)));
+    ReaderQuote unquoteEntry =
+        new ReaderQuote(makeSymbol(LispLanguage.unquote_str),
+                        '@', makeSymbol(LispLanguage.unquotesplicing_str));
+    set(',',  unquoteEntry);
 
-    if (false) // FUTURE
-      set('[',  ReaderParens.getInstance('[', ']', ReadTable.TERMINATING_MACRO,
-                                         LispLanguage.bracket_list_sym));
-    else
-      setBracketMode();  // Sets the entries for '[', ']', and '<'.
-
+    setBracketMode();  // Sets the entries for '[', ']', and '<'.
   }
 
-  /** Create a new ReadTable and initialize it appropriately for Common Lisp. */
-  public static ReadTable createInitial ()
-  {
-    ReadTable tab = new ReadTable();
-    tab.initialize();
-    return tab;
-  }
+    /** Create a new ReadTable and initialize it appropriately for Common Lisp. */
+    public static ReadTable createInitial ()
+    {
+        ReadTable tab = new ReadTable();
+        tab.initialize(true);
+        return tab;
+    }
 
-  /** Specify how '[' and ']' (and '<') are handled.
-   * The value -1 means that '[' and ']' are plain token constituents.
-   * The value 0 means that '[' and ']' are equivalent to '(' and ')'.
-   * The value 1 means that '[' and ']' are equivalent to '(' and ')', except
+    /** Specify how '[' and ']' (and '<') are handled.
+     * The value -2 means {@code [a b c]} is {@code ($bracket-list$ a b c)}
+     * and {@code f[a b]} is {@code ($bracket-apply$ f a b)}.
+     * The value -1 means that '[' and ']' are plain token constituents.
+     * The value 0 means that '[' and ']' are equivalent to '(' and ')'.
+     * The value 1 means that '[' and ']' are equivalent to '(' and ')', except
    * within a token starting with '<', in which case they are constituents.
    * This is so '[' is non-terminating when reading say '<char[]>'
    */
   public void setBracketMode(int mode)
   {
-    if (mode <= 0)
+    if (mode == -2)
+      {
+        set('[',  ReaderParens.getInstance('[', ']', ReadTable.TERMINATING_MACRO,
+                                           LispLanguage.bracket_list_sym));
+        set('<', new ReaderTypespec());
+      }
+    else if (mode <= 0)
       {
 	ReadTableEntry token = ReadTableEntry.getConstituentInstance();
 	set('<', token);
@@ -145,7 +150,7 @@ public class ReadTable extends RangeTable
   }
 
   /** Specify how '[' and ']' are handled.
-   * Overless overridden, uses defaultBracketMode. */
+   * Unless overridden, uses defaultBracketMode. */
   public void setBracketMode()
   {
     setBracketMode(defaultBracketMode);
@@ -197,7 +202,18 @@ public class ReadTable extends RangeTable
       {
 	Language language = Language.getDefaultLanguage();
 	if (language instanceof LispLanguage)
-	  table = ((LispLanguage) language).defaultReadTable;
+          {
+            LispLanguage llanguage = (LispLanguage) language;
+            synchronized (llanguage)
+              {
+                table = llanguage.defaultReadTable;
+                if (table == null)
+                  {
+                    table = llanguage.createReadTable();
+                    llanguage.defaultReadTable = table;
+                  }
+              }
+          }
 	else
 	  table = ReadTable.createInitial();
 	current.set(table);
@@ -234,6 +250,6 @@ public class ReadTable extends RangeTable
 
   protected Object makeSymbol (String name)
   {
-    return Namespace.EmptyNamespace.getSymbol(name.intern());
+    return Symbol.valueOf(name);
   }
 }

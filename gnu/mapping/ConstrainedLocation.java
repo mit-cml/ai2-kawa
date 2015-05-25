@@ -3,16 +3,16 @@
 
 package gnu.mapping;
 
-public class ConstrainedLocation extends Location
+public class ConstrainedLocation<T> extends Location<T>
 {
-  protected Location base;
+  protected Location<T> base;
 
   protected Procedure converter;
 
-  public static ConstrainedLocation make (Location base,
+  public static <T> ConstrainedLocation<T> make (Location<T> base,
 					  Procedure converter)
   {
-    ConstrainedLocation cloc = new ConstrainedLocation();
+    ConstrainedLocation<T> cloc = new ConstrainedLocation<T>();
     cloc.base = base;
     cloc.converter = converter;
     return cloc;
@@ -33,7 +33,12 @@ public class ConstrainedLocation extends Location
     return base.isConstant();
   }
 
-  public final Object get (Object defaultValue)
+  public final T get ()
+  {
+    return base.get();
+  }
+  
+  public final T get (T defaultValue)
   {
     return base.get(defaultValue);
   }
@@ -43,24 +48,29 @@ public class ConstrainedLocation extends Location
     return base.isBound();
   }
 
-  protected Object coerce (Object newValue)
+  protected T coerce (T newValue)
   {
     try
       {
-	return converter.apply1(newValue);
+          return (T) converter.apply1(newValue);
       }
     catch (Throwable ex)
       {
-	throw WrappedException.wrapIfNeeded(ex);
+	throw WrappedException.rethrow(ex);
       }
   }
 
-  public final void set (Object newValue)
+  public final void set (T newValue)
   {
     base.set(coerce(newValue));
   }
 
-  public Object setWithSave (Object newValue)
+  public void undefine ()
+  {
+    base.undefine();
+  }
+
+  public Object setWithSave (T newValue)
   {
     return base.setWithSave(coerce(newValue));
   }

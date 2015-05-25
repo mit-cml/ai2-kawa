@@ -53,6 +53,10 @@ public class SlotGet extends Procedure2
         fname = ((gnu.bytecode.Field) arg2).getName();
         name = Compilation.demangleName(fname, true);
       }
+    else if (arg2 instanceof gnu.bytecode.ClassType)
+      {
+        return arg2;
+      }
     else if (arg2 instanceof gnu.bytecode.Method)
       {
         String mname = ((gnu.bytecode.Method) arg2).getName();
@@ -86,9 +90,10 @@ public class SlotGet extends Procedure2
   }
 
   /** The actual gets of finding the field value.
-   * The compiler emits calls to this method if the field name is literals
+   * The compiler emits calls to this method if the field name is literal
    * but the actual field is not known at compile time.
    * This speeds lookup a bit.
+   * If fname equals "length" or "class", it is assumed to be interned.
    */
   public static Object
   getSlotValue (boolean isStatic, Object obj, String name, String fname,
@@ -116,6 +121,14 @@ public class SlotGet extends Procedure2
           }
         catch (Exception ex)
           {
+            // Check for a member class.
+            Class[] memberClasses = clas.getClasses();
+            for (int i = memberClasses.length;  --i >= 0; )
+              {
+                Class memberClass = memberClasses[i];
+                if (memberClass.getSimpleName().equals(fname))
+                  return memberClass;
+              }
             field = null;
           }
         if (field != null)
@@ -165,7 +178,7 @@ public class SlotGet extends Procedure2
       }
     catch (java.lang.reflect.InvocationTargetException ex)
       {
-        throw WrappedException.wrapIfNeeded(ex.getTargetException());
+        WrappedException.rethrow(ex.getTargetException());
       }
     catch (IllegalAccessException ex)
       {
@@ -203,28 +216,33 @@ public class SlotGet extends Procedure2
     SlotSet.apply(isStatic, obj, (String) name, value);
   }
 
-  /** Get a named property - field or 'get' accessor method.
+  /** Get a named property - field or member class or 'get' accessor method.
    * @param clas the class type declaring the property.
    * @param name the source (unmangled) name of the property.
    */
   public static Member
   lookupMember (ObjectType clas, String name, ClassType caller)
   {
-    gnu.bytecode.Field field
-      = clas.getField(Compilation.mangleNameIfNeeded(name), -1);
-    if (field != null)
+    String mname = Compilation.mangleNameIfNeeded(name);
+    Member member = clas.getField(mname, -1);
+    if (member == null && clas instanceof ClassType)
+      member = ((ClassType) clas).getDeclaredClass(mname);
+    if (member != null)
       {
         if (caller == null)
           caller = Type.pointer_type;
-        if (caller.isAccessible(field, clas))
-          return field;
+        if (caller.isAccessible(member, clas))
+          return member;
       }
 
     // Try looking for a method "getFname" instead:
     String getname = ClassExp.slotToMethodName("get", name);
     gnu.bytecode.Method method = clas.getMethod(getname, Type.typeArray0);
     if (method == null)
-      return field;
+      method = clas.getMethod(ClassExp.slotToMethodName("is", name),
+                              Type.typeArray0);
+    if (method == null)
+      return member;
     else
       return method;
   }
@@ -255,6 +273,8 @@ public class SlotGet extends Procedure2
               {
                 boolean inlined = false;
                 /*
+                FIXME This should be done at inline-time, not compile-time.
+                See CompileReflect#validateApplySlotGet.
                 FIXME This isn't quite safe.  We should only "inline"
                 the value if the field whose initializer is a constant
                 expression (JLS 2nd ed 15.28).  We cannot determine this
@@ -317,28 +337,6 @@ public class SlotGet extends Procedure2
 	return;
       }
     ApplyExp.compile(exp, comp, target);
-  }
-
-  public Type getReturnType (Expression[] args)
-  {
-    int nargs = args.length;
-    if (nargs == 2)
-      {
-        Expression arg0 = args[0];
-        Expression arg1 = args[1];
-        if (arg1 instanceof QuoteExp)
-          {
-            Object part = ((QuoteExp) arg1).getValue();
-            if (part instanceof gnu.bytecode.Field)
-              return ((gnu.bytecode.Field) part).getType();
-            if (part instanceof gnu.bytecode.Method)
-              return ((gnu.bytecode.Method) part).getReturnType();
-            if (! isStatic && arg0.getType() instanceof ArrayType
-                && "length".equals(ClassMethods.checkName(arg1, true)))
-              return gnu.kawa.lispexpr.LangPrimType.intType;  // FIXME
-          }
-      }
-    return Type.pointer_type;
   }
 
   public Procedure getSetter()

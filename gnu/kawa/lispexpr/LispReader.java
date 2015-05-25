@@ -4,140 +4,201 @@ import gnu.mapping.*;
 import gnu.lists.*;
 import gnu.math.*;
 import gnu.expr.*;
+import gnu.kawa.io.BinaryInPort;
+import gnu.kawa.io.InPort;
 import gnu.kawa.util.GeneralHashTable;
+import java.util.regex.*;
 
 /** A Lexer for reading S-expressions in generic Lisp-like syntax.
  * This class may have outlived its usefulness: It's mostly just a
- * wrapper around a LineBufferedReader plus a helper token-buffer.
+ * wrapper around an InPort plus a helper token-buffer.
  * The functionality should be moved to ReadTable, though it is
  * unclear what to do about the tokenBuffer.
  */
 
 public class LispReader extends Lexer
 {
-  public LispReader(LineBufferedReader port)
+  public LispReader(InPort port)
   {
     super(port);
   }
 
-  public LispReader(LineBufferedReader port, SourceMessages messages)
+  public LispReader(InPort port, SourceMessages messages)
   {
     super(port, messages);
   }
 
+    boolean returnMutablePairs;
+    /** Set whether returned pairs are mutable or not (the default). */
+    public void setReturnMutablePairs(boolean v) { returnMutablePairs = v; }
+
   GeneralHashTable<Integer,Object> sharedStructureTable;
 
-  /** Read a #|...|#-style comment (which may contain other nested comments).
-    * Assumes the initial "#|" has already been read.
-    */
-  final public void readNestedComment (char c1, char c2)
-       throws java.io.IOException, SyntaxException
-  {
-    int commentNesting = 1;
-    int startLine = port.getLineNumber();
-    int startColumn = port.getColumnNumber();
-    do
-      {
-	int c = read ();
-	if (c == '|')
-	  {
-	    c = read();
-	    if (c == c1)
-	      commentNesting--;
-	  }
-	else if (c == c1)
-	  {
-	    c = read();
-	    if (c == c2)
-	      commentNesting++;
-	  }
-	if (c < 0)
-	  {
-            eofError("unexpected end-of-file in " + c1 + c2
-                     + " comment starting here",
-                     startLine + 1, startColumn - 1);
-	    return;
-	  }
-      } while (commentNesting > 0);
-  }
+    /** Bind value to index in sharingStructuretable.
+     * @param value The object being defined.
+     * @param sharingIndex Back-reference index.
+     *   I.e. the value N in a @code{#N=} form.  If negative, do nothing.
+     * @return The value unchanged.
+     */
+    public Object bindSharedObject(int sharingIndex, Object value) {
+	if (sharingIndex >= 0) {
+	    GeneralHashTable<Integer,Object> map = sharedStructureTable;
+	    if (map == null) {
+		map = new GeneralHashTable<Integer,Object>();
+		sharedStructureTable = map;
+	    }
+	    Integer key = Integer.valueOf(sharingIndex);
+	    if (map.get(key, this) != this)
+              error('w', "a duplicate #n= definition was read");
+	    map.put(key, value);
+	}
+	return value;
+    }
+
+    /** Read a #|...|#-style comment (which may contain other nested comments).
+     * Assumes the initial "#|" has already been read.
+     */
+    final public void readNestedComment (char c1, char c2)
+        throws java.io.IOException, SyntaxException {
+        int commentNesting = 1;
+        int startLine = port.getLineNumber();
+        int startColumn = port.getColumnNumber();
+        StringBuilder buf = null;
+        if (port instanceof BinaryInPort && (startLine == 0 || startLine == 1))
+            buf = new StringBuilder();
+        do {
+            int c = read ();
+            if (buf != null)
+                buf.append((char) c);
+            if (c == '|') {
+                c = read();
+                if (buf != null)
+                    buf.append((char) c);
+                if (c == c1)
+                    commentNesting--;
+            } else if (c == c1) {
+                c = read();
+                if (c == c2)
+                    commentNesting++;
+            }
+            if (c < 0) {
+                eofError("unexpected end-of-file in " + c1 + c2
+                         + " comment starting here",
+                         startLine + 1, startColumn - 1);
+                return;
+            }
+        } while (commentNesting > 0);
+        if (buf != null)
+            checkEncodingSpec(buf.toString());
+    }
+
+    public void checkEncodingSpec(String line) {
+        Matcher m = Pattern.compile("coding[:=]\\s*([-a-zA-Z0-9]+)")
+            .matcher(line);
+        if (m.find()) {
+            String enc = m.group(1);
+            try {
+                ((BinaryInPort) getPort()).setCharset(enc);
+            } catch (java.nio.charset.UnsupportedCharsetException ex) {
+                error('e', "unrecognized encoding name "+enc);
+            } catch (Exception ex) {
+                error('e', "cannot set encoding name here");
+            }
+        }
+    }
+
+    boolean inQuasiSyntax;
+
+  char readCase = lookupReadCase();
 
   /** Get specification of how symbols should be case-folded.
-    * @return Either 'P' (means preserve case), 'U' (upcase),
+    * @return Either '\0' (unspecified - defaults to preserve case),
+    * 'P' (means preserve case), 'U' (upcase),
     * 'D' (downcase), or 'I' (invert case).
     */
-  static char getReadCase()
+  public char getReadCase () { return readCase; }
+  public void setReadCase(char readCase) { this.readCase = readCase; }
+
+  static char lookupReadCase()
   {
-    char read_case;
     try
       {
 	String read_case_string
 	  = Environment.getCurrent().get("symbol-read-case", "P").toString();
-	read_case = read_case_string.charAt(0);
-	if (read_case == 'P') ;
-	else if (read_case == 'u')
-	  read_case = 'U';
-	else if (read_case == 'd' || read_case == 'l' || read_case == 'L')
-	  read_case = 'D';
-	else if (read_case == 'i')
-	  read_case = 'I';
+        if (read_case_string.length() > 0)
+          {
+            char read_case = read_case_string.charAt(0);
+            if (read_case == 'P') ;
+            else if (read_case == 'u')
+              read_case = 'U';
+            else if (read_case == 'd' || read_case == 'l' || read_case == 'L')
+              read_case = 'D';
+            else if (read_case == 'i')
+              read_case = 'I';
+            return read_case;
+          }
       }
     catch (Exception ex)
       {
-	read_case = 'P';
       }
-    return read_case;
+    return '\0';
   }
 
-  public Object readValues (int ch,  ReadTable rtable)
-      throws java.io.IOException, SyntaxException
-  {
-    return readValues(ch, rtable.lookup(ch), rtable);
-  }
+    public Object readValues (int ch,  ReadTable rtable, int sharingIndex)
+            throws java.io.IOException, SyntaxException {
+        return readValues(ch, rtable.lookup(ch), rtable, sharingIndex);
+    }
 
-  /** May return zero or multiple values. */
-  public Object readValues (int ch, ReadTableEntry entry, ReadTable rtable)
-      throws java.io.IOException, SyntaxException
-  {
-    // Step numbers refer to steps in section 2.2 of the HyperSpec.
-    // Step 1:
-    int startPos = tokenBufferLength;
+    /** May return zero or multiple values.
+     * Returns no values if looking at whitespace or a comment. */
+    public Object readValues (int ch, ReadTableEntry entry, ReadTable rtable,
+                              int sharingIndex)
+        throws java.io.IOException, SyntaxException {
+        seenEscapes = false;
+        return entry.read(this, ch, -1, sharingIndex);
+    }
 
-    seenEscapes = false;
-    int kind = entry.getKind();
-    switch (kind)
-      {
-      case ReadTable.ILLEGAL:
-	// Step 2:
-	String err = ("invalid character #\\"+((char) ch));  // FIXME
-	if (interactive) fatal(err);
-	else error(err);
-	return Values.empty;
-      case ReadTable.WHITESPACE:
-	// Step 3:
-	return Values.empty;
-      case ReadTable.TERMINATING_MACRO:
-      case ReadTable.NON_TERMINATING_MACRO:
-	return entry.read(this, ch, -1);
-      case ReadTable.CONSTITUENT:
-      case ReadTable.SINGLE_ESCAPE: // Step 5:
-      case ReadTable.MULTIPLE_ESCAPE: // Step 6:
-      default:  // 
-	break;
-      }
-    return readAndHandleToken(ch, startPos, rtable);
-  }
+    public Pair readValuesAndAppend(int ch, ReadTable rtable, Pair last)
+            throws java.io.IOException, SyntaxException {
+        int line = port.getLineNumber();
+        int column = port.getColumnNumber();
+        Object values = readValues(ch, rtable, -1);
+        int index = 0;
+        int next = Values.nextIndex(values, index);
+        if (next >= 0) {
+            for (;;) {
+                Object value = Values.nextValue(values, index);
+                index = next;
+                if (value == gnu.expr.QuoteExp.voidExp)
+                    value = Values.empty;
+                next = Values.nextIndex(values, index);
+                if (next < 0)
+                    value = handlePostfix(value, rtable, line, column);
+                Pair pair = makePair(value, line, column);
+                setCdr(last, pair);
+                last = pair;
+                if (next < 0)
+                    break;
+            }
+        }
+        return last;
+    }
 
   protected Object readAndHandleToken(int ch, int startPos, ReadTable rtable)
     throws java.io.IOException, SyntaxException
   {
-    readToken(ch, getReadCase(), rtable);
+    char readCase = getReadCase();
+    readToken(ch, rtable);
     int endPos = tokenBufferLength;
     if (! seenEscapes)
       {
         Object value = parseNumber(tokenBuffer, startPos, endPos - startPos,
                                    '\0', 0, SCM_NUMBERS);
         if (value != null && ! (value instanceof String))
-          return value;
+          {
+            tokenBufferLength = startPos;
+            return value;
+          }
         /* Common Lisp only?  FIXME
         if (isPotentialNumber(tokenBuffer, startPos, endPos))
           {
@@ -148,7 +209,6 @@ public class LispReader extends Lexer
         */
       }
 
-    char readCase = getReadCase();
     if (readCase == 'I')
       {
 	int upperCount = 0;
@@ -227,6 +287,7 @@ public class LispReader extends Lexer
 
     int len = endPos - startPos;
 
+    Object result;
     if (lbrace >= 0 && rbrace > lbrace)
       {
         String prefix = lbrace > 0 ? new String(tokenBuffer, startPos, lbrace-startPos) : null;
@@ -234,26 +295,31 @@ public class LispReader extends Lexer
         String uri = new String(tokenBuffer, lbrace, rbrace-lbrace);
         ch = read(); // skip ':' - previously peeked.
         ch = read();
-        Object rightOperand = readValues(ch, rtable.lookup(ch), rtable);
+        Object rightOperand = readValues(ch, rtable.lookup(ch), rtable, -1);
         if (! (rightOperand instanceof SimpleSymbol))
           error("expected identifier in symbol after '{URI}:'");
         // FIXME should allow "compound keyword" - for attribute names
-        return Symbol.valueOf(rightOperand.toString(), uri, prefix);
+        result = Symbol.valueOf(rightOperand.toString(), uri, prefix);
       }
-
-    if (rtable.initialColonIsKeyword && packageMarker == startPos && len > 1)
+    else if (rtable.initialColonIsKeyword && packageMarker == startPos && len > 1)
       {
 	startPos++;
 	String str = new String(tokenBuffer, startPos, endPos-startPos);
-	return Keyword.make(str.intern());
+	result = Keyword.make(str.intern());
     }
-    if (rtable.finalColonIsKeyword && packageMarker == endPos - 1
+    else if (rtable.finalColonIsKeyword && packageMarker != -1 && packageMarker == endPos - 1
         && (len > 1 || seenEscapes))
       {
 	String str = new String(tokenBuffer, startPos, len - 1);
-	return Keyword.make(str.intern());
+	result = Keyword.make(str.intern());
       }
-    return rtable.makeSymbol(new String(tokenBuffer, startPos, len));
+    else {
+      if (len == 1 && tokenBuffer[startPos] == '.' && !seenEscapes)
+          error("invalid use of '.' token");
+      result = rtable.makeSymbol(new String(tokenBuffer, startPos, len));
+    }
+    tokenBufferLength = startPos;
+    return result;
   }
 
   public static final char TOKEN_ESCAPE_CHAR = '\uffff';
@@ -263,7 +329,10 @@ public class LispReader extends Lexer
    */
   protected boolean seenEscapes;
 
-  void readToken(int ch, char readCase, ReadTable rtable)
+    /** Read token, leaving characters in tokenBuffer.
+     * Sets seenEscapes if escape characters are seen.
+     */
+  void readToken(int ch, ReadTable rtable)
       throws java.io.IOException, SyntaxException
   {
     boolean inEscapes = false;
@@ -313,10 +382,15 @@ public class LispReader extends Lexer
 	    if (ch < 0)
 	      eofError("unexpected EOF after single escape");
             if (rtable.hexEscapeAfterBackslash
-                && (ch == 'x' || ch == 'X'))
-              ch = readHexEscape();
-	    tokenBufferAppend(TOKEN_ESCAPE_CHAR);
-	    tokenBufferAppend(ch);
+                // We've allowed hex escapes for a while.
+                // Allow R7RS general escapes - but only inside |bars|.
+                && (inEscapes || ch == 'x' || ch == 'X'))
+                ch = readEscape(ch);
+            if (ch >= 0)
+              {
+                tokenBufferAppend(TOKEN_ESCAPE_CHAR);
+                tokenBufferAppend(ch);
+              }
 	    seenEscapes = true;
 	    continue;
 	  }
@@ -340,7 +414,7 @@ public class LispReader extends Lexer
 	      case ReadTable.CONSTITUENT:
                 if (ch == '{' && entry == ReadTableEntry.brace)
                   braceNesting++;
-                /* ... fall thotugh ... */
+                /* ... fall through ... */
 	      case ReadTable.NON_TERMINATING_MACRO:
 		tokenBufferAppend(ch);
 		continue;
@@ -360,9 +434,25 @@ public class LispReader extends Lexer
       }
   }
 
-  public Object readObject ()
-      throws java.io.IOException, SyntaxException
-  {
+    public String readTokenString(int ch, ReadTable rtable)
+            throws java.io.IOException, SyntaxException {
+        int startPos = tokenBufferLength;
+        if (ch >= 0)
+            tokenBufferAppend(ch);
+        readToken(read(), rtable);
+        int length = tokenBufferLength - startPos;
+        String str = new String(tokenBuffer, startPos, length);
+        tokenBufferLength = startPos;
+        return str;
+    }
+
+    public Object readObject() throws java.io.IOException, SyntaxException {
+	return readObject(-1, false);
+    }
+
+    public Object readObject(int sharingIndex, boolean topLevel)
+	throws java.io.IOException, SyntaxException
+    {
     char saveReadState = ((InPort) port).readState;
     int startPos = tokenBufferLength;
     ((InPort) port).readState = ' ';
@@ -376,10 +466,17 @@ public class LispReader extends Lexer
 	    int ch = port.read();
 	    if (ch < 0)
 	      return Sequence.eofValue; // FIXME
-            Object value = readValues(ch, rtable);
+            Object value = readValues(ch, rtable, sharingIndex);
 	    if (value == Values.empty)
 	      continue;
-	    return handlePostfix(value, rtable, line, column);
+	    value = handlePostfix(value, rtable, line, column);
+            if (topLevel && ! (value instanceof Pair))
+              {
+                // Wrap in begin form so top-level forms have position info.
+                value = makePair(kawa.standard.begin.begin,
+                                 makePair(value, line, column), line, column);
+              }
+	    return value;
 	  }
       }
     finally
@@ -389,47 +486,63 @@ public class LispReader extends Lexer
       }
   }
 
-  protected boolean validPostfixLookupStart (int ch, ReadTable rtable)
-      throws java.io.IOException
-  {
-    if (ch < 0 || ch == ':' || ch == rtable.postfixLookupOperator)
-      return false;
-    if (ch == ',')
-      return true;
-    int kind = rtable.lookup(ch).getKind();
-    return kind == ReadTable.CONSTITUENT
-      || kind == ReadTable.NON_TERMINATING_MACRO
-      || kind == ReadTable.MULTIPLE_ESCAPE
-      || kind == ReadTable.SINGLE_ESCAPE;
-  }
+    protected boolean validPostfixLookupStart (int ch, ReadTable rtable)
+            throws java.io.IOException {
+        if (ch < 0 || ch == rtable.postfixLookupOperator)
+            return false;
+        if (ch == ',')
+            return true;
+        if (ch == '@')
+            return true; // To support deprecated (TYPE:@ EXP)
+        int kind = rtable.lookup(ch).getKind();
+        return kind == ReadTable.CONSTITUENT
+            || kind == ReadTable.NON_TERMINATING_MACRO
+            || kind == ReadTable.MULTIPLE_ESCAPE
+            || kind == ReadTable.SINGLE_ESCAPE;
+    }
 
-  Object handlePostfix (Object value, ReadTable rtable, int line, int column)
-      throws java.io.IOException, SyntaxException
-  {
-    if (value == QuoteExp.voidExp)
-      value = Values.empty;
-    for (;;)
-      {
-        int ch = port.peek();
-        if (ch < 0 || ch != rtable.postfixLookupOperator)
-          break;
-        // A kludge to map PreOpWord to ($lookup$ Pre 'Word).
-        port.read();
-        int ch2 = port.peek();
-        if (! validPostfixLookupStart(ch2, rtable))
-          {
-            unread();
-            break;
-          }
-        ch = port.read();
-        Object rightOperand = readValues(ch, rtable.lookup(ch), rtable);
-        value = LList.list2(value,
-                            LList.list2(rtable.makeSymbol(LispLanguage.quasiquote_sym), rightOperand));
-        value = PairWithPosition.make(LispLanguage.lookup_sym, value,
-                                      port.getName(), line+1, column+1);
-      }
-    return value;
-  }
+    /** After reading a value check for following {@code '['} or {@code ':'}.
+     */
+    Object handlePostfix (Object value, ReadTable rtable, int line, int column)
+        throws java.io.IOException, SyntaxException {
+        if (value == QuoteExp.voidExp)
+            value = Values.empty;
+        for (;;) {
+            int ch = port.peek();
+            String str; int slen;
+            if (ch == '[' && rtable.defaultBracketMode == -2) {
+                port.read();
+                Object lst = ReaderParens.readList(this, null, ch, 1, ']', -1);
+                value = makePair(value, lst, line, column);
+                value = makePair(LispLanguage.bracket_apply_sym, value,
+                                              line, column);
+            } else if (ch == rtable.postfixLookupOperator) {
+                // A kludge to map PreOpWord to ($lookup$ Pre 'Word).
+                port.read();
+                int ch2 = port.peek();
+                Object rightOperand;
+                if (ch2 == '@') {
+                    error('w',
+                          "deprecated cast syntax TYPE:@ (use ->TYPE instead)");
+                    rightOperand = readAndHandleToken('\\', 0, rtable);
+                } else {
+                    if (! validPostfixLookupStart(ch2, rtable)) {
+                        unread();
+                        break;
+                    }
+                    ch = port.read();
+                    rightOperand = readValues(ch, rtable.lookup(ch), rtable, -1);
+                }
+                value = LList.list2(value,
+                                    LList.list2(LispLanguage.quasiquote_sym, rightOperand));
+                value = makePair(LispLanguage.lookup_sym, value,
+                                 line, column);
+            }
+            else
+                break;
+        }
+        return value;
+    }
 
   private boolean isPotentialNumber (char[] buffer, int start, int end)
   {
@@ -463,6 +576,8 @@ public class LispReader extends Lexer
 
   static final int SCM_COMPLEX = 1;
   public static final int SCM_NUMBERS = SCM_COMPLEX;
+  public static final int SCM_ANGLE = SCM_NUMBERS << 1;
+  public static final int SCM_COLATITUDE = SCM_ANGLE << 1;
 
   public static Object parseNumber
   /* #ifdef use:java.lang.CharSequence */
@@ -489,6 +604,7 @@ public class LispReader extends Lexer
    *   '\0' yields an inact or inexact depending on the form of the literal,
    *   while ' ' is like '\0' but does not allow more exactness specifiers.
    * @param radix the number base to use or 0 if unspecified
+   *   A negative radix is an overideable default.
    * @return the number if a valid number; null or a String-valued error
    *   message if if there was some error parsing the number.
    */
@@ -508,22 +624,22 @@ public class LispReader extends Lexer
 	switch (ch)
 	  {
 	  case 'b':  case 'B':
-	    if (radix != 0)
+	    if (radix > 0)
 	      return "duplicate radix specifier";
 	    radix = 2;
 	    break;
 	  case 'o':  case 'O':
-	    if (radix != 0)
+	    if (radix > 0)
 	      return "duplicate radix specifier";
 	    radix = 8;
 	    break;
 	  case 'd':  case 'D':
-	    if (radix != 0)
+	    if (radix > 0)
 	      return "duplicate radix specifier";
 	    radix = 10;
 	    break;
 	  case 'x':  case 'X':
-	    if (radix != 0)
+	    if (radix > 0)
 	      return "duplicate radix specifier";
 	    radix = 16;
 	    break;
@@ -552,7 +668,7 @@ public class LispReader extends Lexer
 	      }
 	    if (ch == 'R' || ch == 'r')
 	      {
-		if (radix != 0)
+		if (radix > 0)
 		  return "duplicate radix specifier";
 		if (value < 2 || value > 35)
 		  return "invalid radix specifier";
@@ -567,8 +683,12 @@ public class LispReader extends Lexer
       }
     if (exactness == '\0')
       exactness = ' ';
-    if (radix == 0)
+    if (radix < 0)
+        radix = -radix;
+    else if (radix == 0)
       {
+        radix = 10;
+        /*
 	for (int i = count;  ; )
 	  {
 	    if (--i < 0)
@@ -584,6 +704,7 @@ public class LispReader extends Lexer
 		break;
 	      }
 	  }
+        */
       }
 
     boolean negative = ch == '-';
@@ -597,16 +718,77 @@ public class LispReader extends Lexer
       }
 
     // Special case for '+i' and '-i'.
-    if ((ch == 'i' || ch == 'I') && pos == end && start == pos - 2
-	&& (flags & SCM_COMPLEX) != 0)
-      {
-	char sign = buffer[start];
-	if (sign != '+' && sign != '-')
-	  return "no digits";
-	if (exactness == 'i' || exactness == 'I')
-	  return new DComplex(0, negative ? -1 : 1);
-	return negative ? Complex.imMinusOne() : Complex.imOne();
-      }
+    if ((ch == 'i' || ch == 'I') &&
+        (pos == end || buffer[pos] == '+' || buffer[pos] == '-') &&
+        start == pos - 2 && (flags & SCM_COMPLEX) != 0) {
+        char sign = buffer[start];
+        if (sign != '+' && sign != '-')
+            return "no digits";
+        if (pos < end) {
+            Object jmag = parseNumber(buffer, pos, end-pos, exactness,
+                                      10, flags);
+            if (jmag instanceof String)
+                return jmag;
+            if (! (jmag instanceof Quaternion))
+                return "invalid numeric constant ("+jmag+")";
+            Quaternion qjmag = (Quaternion) jmag;
+            RealNum re = qjmag.re();
+            RealNum im = qjmag.im();
+            if (!(re.isZero() && im.isZero()))
+                return "invalid numeric constant";
+            if (exactness == 'i' || exactness == 'I')
+                return Quaternion.make(0, negative ? -1 : 1,
+                                       qjmag.doubleJmagValue(),
+                                       qjmag.doubleKmagValue());
+            return Quaternion.make(IntNum.zero(), negative ?
+                                   IntNum.minusOne() : IntNum.one(),
+                                   qjmag.jm(), qjmag.km());
+        }
+        if (exactness == 'i' || exactness == 'I')
+            return new DComplex(0, negative ? -1 : 1);
+        return negative ? Complex.imMinusOne() : Complex.imOne();
+    }
+    // Special case for '+j' and '-j'.
+    if ((ch == 'j' || ch == 'J') &&
+        (pos == end || buffer[pos] == '+' || buffer[pos] == '-') &&
+        start == pos - 2 && (flags & SCM_COMPLEX) != 0) {
+        char sign = buffer[start];
+        if (sign != '+' && sign != '-')
+            return "no digits";
+        if (pos < end) {
+            Object kmag = parseNumber(buffer, pos, end-pos, exactness,
+                                      10, flags);
+            if (kmag instanceof String)
+                return kmag;
+            if (! (kmag instanceof Quaternion))
+                return "invalid numeric constant ("+kmag+")";
+            Quaternion qkmag = (Quaternion) kmag;
+            RealNum re = qkmag.re();
+            RealNum im = qkmag.im();
+            RealNum jm = qkmag.jm();
+            if (!(re.isZero() && im.isZero() && jm.isZero()))
+                return "invalid numeric constant";
+            if (exactness == 'i' || exactness == 'I')
+                return Quaternion.make(0, 0, negative ? -1 : 1,
+                                       qkmag.doubleKmagValue());
+            return Quaternion.make(IntNum.zero(), IntNum.zero(),
+                                   negative ? IntNum.minusOne() : IntNum.one(),
+                                   qkmag.km());
+        }
+        if (exactness == 'i' || exactness == 'I')
+            return new DQuaternion(0, 0, 0, negative ? -1 : 1);
+        return negative ? Quaternion.jmMinusOne() : Quaternion.jmOne();
+    }
+    // Special case for '+k' and '-k'.
+    if ((ch == 'k' || ch == 'K') && pos == end && start == pos - 2
+	&& (flags & SCM_COMPLEX) != 0) {
+        char sign = buffer[start];
+        if (sign != '+' && sign != '-')
+            return "no digits";
+        if (exactness == 'i' || exactness == 'I')
+            return new DQuaternion(0, 0, 0, negative ? -1 : 1);
+        return negative ? Quaternion.kmMinusOne() : Quaternion.kmOne();
+    }
 
     int realStart = pos - 1;
     boolean hash_seen = false;
@@ -719,15 +901,17 @@ public class LispReader extends Lexer
         if (sign_seen
             && pos + 4 < end && buffer[pos+3] == '.' && buffer[pos+4] == '0')
           {
-            if (buffer[pos] == 'i'
-                && buffer[pos+1] == 'n'
-                && buffer[pos+2] == 'f')
+            char b0 = buffer[pos];
+            char b1, b2;
+            if ((b0 == 'i' || b0 == 'I')
+                && ((b1 = buffer[pos+1]) == 'n' || b1 == 'N')
+                && ((b2 = buffer[pos+2]) == 'f' || b2 == 'F'))
               {
                 infnan = 'i';
               }
-            else if (buffer[pos] == 'n'
-                && buffer[pos+1] == 'a'
-                && buffer[pos+2] == 'n')
+            else if ((b0 == 'n' || b0 == 'N')
+                     && ((b1 = buffer[pos+1]) == 'a' || b1 == 'A')
+                     && ((b2 = buffer[pos+2]) == 'n' || b2 == 'N'))
               {
                 infnan = 'n';
               }
@@ -814,11 +998,20 @@ public class LispReader extends Lexer
 	if (ch == '@')
 	  { /* polar notation */
 	    Object angle = parseNumber(buffer, pos, end - pos,
-				       exactness, 10, flags);
+				       exactness, 10, flags|SCM_ANGLE);
 	    if (angle instanceof String)
 	      return angle;
-	    if (! (angle instanceof RealNum))
+	    if (! (angle instanceof RealNum) && ! (angle instanceof RealNum[]))
 	      return "invalid complex polar constant";
+            if (angle instanceof RealNum[]) {
+                RealNum[] polars = (RealNum[]) angle;
+                if (number.isZero() &&
+                    (!polars[0].isExact() || !polars[1].isExact() ||
+                     !polars[2].isExact()))
+                    return new DFloNum(0.0);
+                return Quaternion.polar(number, polars[0], polars[1],
+                                        polars[2]);
+            }
 	    RealNum rangle = (RealNum) angle;
 	    /* r4rs requires 0@1.0 to be inexact zero, even if (make-polar
 	     * 0 1.0) is exact zero, so check for this case.  */
@@ -827,6 +1020,67 @@ public class LispReader extends Lexer
 
 	    return Complex.polar (number, rangle);
 	  }
+        if (ch == '%') {
+            /* extended polar notation */
+            Object colatitude = parseNumber(buffer, pos, end - pos,
+                                            exactness, 10,
+                                            flags|SCM_COLATITUDE);
+            if (colatitude instanceof String)
+                return colatitude;
+            if (!(colatitude instanceof RealNum) &&
+                !(colatitude instanceof RealNum[]))
+                return "invalid quaternion polar constant";
+            if ((flags & SCM_ANGLE) == 0) {
+                // number%colatitude or number%colatitude&longitude
+                RealNum rangle = IntNum.zero();
+                RealNum rcolatitude, rlongitude;
+                if (colatitude instanceof RealNum) {
+                    rcolatitude = (RealNum) colatitude;
+                    rlongitude = IntNum.zero();
+                } else {
+                    RealNum[] polars = (RealNum[]) colatitude;
+                    rcolatitude = polars[1];
+                    rlongitude = polars[2];
+                }
+                /* r4rs requires 0@1.0 to be inexact zero, even if
+                   (make-polar 0 1.0) is exact zero, so check for this
+                   case.  */
+                if (number.isZero() &&
+                    (!rcolatitude.isExact() || !rlongitude.isExact()))
+                    return new DFloNum(0.0);
+                return Quaternion.polar(number, rangle, rcolatitude,
+                                        rlongitude);
+            }
+            if (colatitude instanceof RealNum[]) {
+                RealNum[] polars = (RealNum[]) colatitude;
+                polars[0] = number;
+                return polars;
+            }
+            return new RealNum[] { number, (RealNum)colatitude, IntNum.zero() };
+        }
+        if (ch == '&') {
+            /* extended polar notation */
+            Object longitude = parseNumber(buffer, pos, end - pos,
+                                           exactness, 10, flags);
+            if (longitude instanceof String)
+                return longitude;
+            if (! (longitude instanceof RealNum))
+                return "invalid quaternion polar constant";
+            RealNum rlongitude = (RealNum) longitude;
+            if ((flags & (SCM_ANGLE|SCM_COLATITUDE)) == 0) {
+                // number&longitude
+                /* r4rs requires 0@1.0 to be inexact zero, even if
+                   (make-polar 0 1.0) is exact zero, so check for this
+                   case.  */
+                if (number.isZero() && !rlongitude.isExact())
+                    return new DFloNum(0.0);
+                return Quaternion.polar(number, IntNum.zero(),
+                                        IntNum.zero(), rlongitude);
+            }
+            if ((flags & SCM_COLATITUDE) != 0)
+                return new RealNum[] { IntNum.zero(), number, rlongitude };
+            return new RealNum[] { number, IntNum.zero(), rlongitude };
+        }
 
 	if (ch == '-' || ch == '+')
 	  {
@@ -835,13 +1089,13 @@ public class LispReader extends Lexer
 				      exactness, 10, flags);
 	    if (imag instanceof String)
 	      return imag;
-	    if (! (imag instanceof Complex))
+	    if (! (imag instanceof Quaternion))
 	      return "invalid numeric constant ("+imag+")";
-	    Complex cimag = (Complex) imag;
+	    Quaternion cimag = (Quaternion) imag;
 	    RealNum re = cimag.re();
 	    if (! re.isZero())
 	      return "invalid numeric constant";
-	    return Complex.make(number, cimag.im());
+	    return Quaternion.make(number, cimag.im(), cimag.jm(), cimag.km());
 	  }
 
 	int lcount = 0;
@@ -858,18 +1112,54 @@ public class LispReader extends Lexer
 	    ch = buffer[pos++];
 	  }
 
-	if (lcount == 1)
-	  {
-	    char prev = buffer[pos-1];
-	    if (prev == 'i' || prev == 'I')
-	      {
-		if (pos < end)
-		  return "junk after imaginary suffix 'i'";
-		return Complex.make(IntNum.zero (), number);
-	      }
-	  }
+	if (lcount == 1) {
+            char prev = buffer[pos-1];
+            if (prev == 'i' || prev == 'I') {
+                if (pos < end) {
+                    Object jmag = parseNumber(buffer, pos, end-pos,
+                                              exactness, 10, flags);
+                    if (jmag instanceof String)
+                        return jmag;
+                    if (! (jmag instanceof Quaternion))
+                        return "invalid numeric constant ("+jmag+")";
+                    Quaternion qjmag = (Quaternion) jmag;
+                    RealNum re = qjmag.re();
+                    RealNum im = qjmag.im();
+                    if (!(re.isZero() && im.isZero()))
+                        return "invalid numeric constant";
+                    return Quaternion.make(IntNum.zero(), number,
+                                           qjmag.jm(), qjmag.km());
+                }
+                return Complex.make(IntNum.zero(), number);
+            }
+            if (prev == 'j' || prev == 'J') {
+                if (pos < end) {
+                    Object kmag = parseNumber(buffer, pos, end-pos,
+                                              exactness, 10, flags);
+                    if (kmag instanceof String)
+                        return kmag;
+                    if (! (kmag instanceof Quaternion))
+                        return "invalid numeric constant ("+kmag+")";
+                    Quaternion qkmag = (Quaternion) kmag;
+                    RealNum re = qkmag.re();
+                    RealNum im = qkmag.im();
+                    RealNum jm = qkmag.jm();
+                    if (!(re.isZero() && im.isZero() && jm.isZero()))
+                        return "invalid numeric constant";
+                    return Quaternion.make(IntNum.zero(), IntNum.zero(),
+                                           number, qkmag.km());
+                }
+                return Quaternion.make(IntNum.zero(), IntNum.zero(),
+                                       number, IntNum.zero());
+            }
+            if (prev == 'k' || prev == 'K') {
+                if (pos < end)
+                    return "junk after imaginary suffix 'k'";
+                return Quaternion.make(IntNum.zero (), IntNum.zero(),
+                                       IntNum.zero(), number);
+            }
+        }
         return "excess junk after number";
-	
       }
     else if (number instanceof DFloNum && exp_char > 0 && exp_char != 'e')
       {
@@ -931,6 +1221,7 @@ public class LispReader extends Lexer
       case 'r':  c = 13;  break;  // carriage return
       case 'e':  c = 27;  break;  // escape
       case '\"': c = 34;  break;  // quote
+      case '|':  c = '|';  break;  // vertical bar
       case '\\': c = 92;  break;  // backslash
       case ' ':  // Skip to end of line, inclusive.
       case '\n': // Skip initial whitespace on following line.
@@ -1080,11 +1371,11 @@ public class LispReader extends Lexer
   }
 
   /** Read a "command" - a top-level expression or declaration.
-   * Return Sequence.eofValue of end of file. */
+   * Return Sequence.eofValue at end of file. */
   public Object readCommand ()
       throws java.io.IOException, SyntaxException
   {
-    return readObject();
+    return readObject(-1, true);
   }
 
   protected Object makeNil ()
@@ -1100,11 +1391,21 @@ public class LispReader extends Lexer
   protected Pair makePair (Object car, Object cdr, int line, int column)
   {
     String pname = port.getName();
-    if (pname != null && line >= 0)
+    if (! returnMutablePairs && pname != null && line >= 0)
       return PairWithPosition.make(car, cdr,
                                    pname, line + 1, column + 1);
     else
       return Pair.make(car, cdr);
+  }
+
+    protected Pair makePair2 (Object car, Object cadr, Object cddr,
+                              int line, int column) {
+        return makePair(car, makePair(cadr, cddr, line, column), line, column);
+    }
+
+  protected void setCar (Object pair, Object car)
+  {
+    ((Pair) pair).setCarBackdoor(car);
   }
 
   protected void setCdr (Object pair, Object cdr)
@@ -1121,7 +1422,16 @@ public class LispReader extends Lexer
     throws java.io.IOException, SyntaxException
   {
     int startPos = reader.tokenBufferLength - previous;
-    reader.readToken(reader.read(), 'P', ReadTable.getCurrent());
+    ReadTable rtable = ReadTable.getCurrent();
+    for (;;) {
+        reader.readToken(reader.read(), rtable);
+        // '#' is a terminating-macro character so we have to add it "manually"
+        int ch = reader.peek();
+        if (ch != '#')
+            break;
+        reader.tokenBufferAppend(ch);
+        reader.skip();
+    }
     int endPos = reader.tokenBufferLength;
     if (startPos == endPos)
       {
@@ -1152,11 +1462,15 @@ public class LispReader extends Lexer
       reader.eofError("unexpected EOF in character literal");
     int startPos = reader.tokenBufferLength;
     reader.tokenBufferAppend(ch);
-    reader.readToken(reader.read(), 'D', ReadTable.getCurrent());
+    reader.readToken(reader.read(), ReadTable.getCurrent());
     char[] tokenBuffer = reader.tokenBuffer;
     int length = reader.tokenBufferLength - startPos;
-    if (length == 1)
-      return Char.make(tokenBuffer[startPos]);
+    if (length == 1 || length == 2) {
+        ch = Character.codePointAt(tokenBuffer, startPos,
+                                   reader.tokenBufferLength);
+        if (ch > 0xFFFF || length == 1)
+            return Char.make(ch);
+    }
     String name = new String(tokenBuffer, startPos, length);
     ch = Char.nameToChar(name);
     if (ch >= 0)
@@ -1173,10 +1487,13 @@ public class LispReader extends Lexer
              if (v < 0)
                break;
              value = 16 * value + v;
-             if (value > 0x10FFFF)
-               break;
+             if (value > 0x10FFFF) {
+                 reader.error("character scalar value greater than #x10FFFF");
+                 return Char.make('?');
+             }
           }
       }
+    // FIXME remove - only used for BRL Perhaps a deprecation warning?
     ch = Character.digit(ch, 8);
     if (ch >= 0)
       {
@@ -1203,19 +1520,38 @@ public class LispReader extends Lexer
       reader.eofError("unexpected EOF in #! special form");
 
     /* Handle Unix #!PROGRAM line at start of file. */
-    if (ch == '/'
+    if ((ch == '/' || ch == ' ')
 	&& reader.getLineNumber() == 0
 	&& reader.getColumnNumber() == 3)
       {
-	ReaderIgnoreRestOfLine.getInstance().read(reader, '#', 1);
-	return Values.empty;
+        String filename = reader.getName();
+        if (filename != null
+            && ApplicationMainSupport.commandName.get(null) == null)
+          {
+            ApplicationMainSupport.commandName.set(filename);
+          }
+
+        boolean sawBackslash = false;
+        for (;;)
+          {
+            ch = reader.read();
+            if (ch < 0)
+              break;
+            if (ch == '\\')
+              sawBackslash = true;
+            else if (ch == '\n' || ch == '\r')
+              {
+                if (! sawBackslash)
+                  break;
+                sawBackslash = false;
+              }
+            else if (sawBackslash && ch != ' ' && ch != '\t')
+              sawBackslash = false;
+          }
+        return Values.empty;
       }
 
-    int startPos = reader.tokenBufferLength;
-    reader.tokenBufferAppend(ch);
-    reader.readToken(reader.read(), 'D', ReadTable.getCurrent());
-    int length = reader.tokenBufferLength - startPos;
-    String name = new String(reader.tokenBuffer, startPos, length);
+    String name = reader.readTokenString(ch, ReadTable.getCurrent());
     if (name.equals("optional"))
       return Special.optional;
     if (name.equals("rest"))
@@ -1233,8 +1569,20 @@ public class LispReader extends Lexer
       return Special.undefined;
     if (name.equals("abstract"))
       return Special.abstractSpecial;
+    if (name.equals("native"))
+      return Special.nativeSpecial;
     if (name.equals("null"))
       return null;
+    if (name.equals("fold-case"))
+      {
+        reader.readCase = 'D';
+        return Values.empty;
+      }
+    if (name.equals("no-fold-case"))
+      {
+        reader.readCase = 'P';
+        return Values.empty;
+      }
     reader.error("unknown named constant #!"+name);
     return null;
   }
@@ -1255,6 +1603,13 @@ public class LispReader extends Lexer
 	  break;
 	size = size * 10 + digit;
       }
+    return readSimpleVector(reader, kind, ch, size);
+  }
+
+  public static SimpleVector
+      readSimpleVector(LispReader reader, char kind, int ch, int size)
+    throws java.io.IOException, SyntaxException
+  {
     if (! (size == 8 || size == 16 || size == 32 || size == 64)
         || (kind == 'F' && size < 32)
         || ch != '(')
@@ -1262,7 +1617,7 @@ public class LispReader extends Lexer
         reader.error("invalid uniform vector syntax");
         return null;
       }
-    Object list = ReaderParens.readList(reader, '(', -1, ')');
+    Object list = ReaderParens.readList(reader, null, '(', -1, ')', -1);
     int len = LList.listLength(list, false);
     if (len < 0)
       {
@@ -1297,4 +1652,6 @@ public class LispReader extends Lexer
       }
     return null;
   }
+
+    boolean deprecatedXmlEnlosedReported;
 }

@@ -6,7 +6,7 @@ import gnu.jemacs.buffer.Buffer;
 import gnu.jemacs.buffer.Marker;
 import gnu.lists.CharSeq;
 import gnu.lists.FString;
-import gnu.mapping.InPort;
+import gnu.kawa.io.InPort;
 
 import java.io.Reader;
 import java.io.Writer;
@@ -91,9 +91,6 @@ public class SwtBuffer extends Buffer
 
   // ---------------------- Insertion --------------------------
   
-  /**
-   * @see gnu.jemacs.buffer.Buffer#insertChar(java.lang.String, java.lang.Object, int)
-   */
   public void insert(String string, Object style, int ipos)
   {
     // TODO Auto-generated method stub
@@ -105,14 +102,8 @@ public class SwtBuffer extends Buffer
   public void insertChar(int ch, int count, Object style)
   {
     // TODO: Handle styles !
-    char[] charr = new char[count];
-    
-    for (int i = 0; i < charr.length; i++)
-    {
-      charr[i] = ch;
-    }
-    
-    bufferContent.replaceTextRange(getDot(), 0, new String(charr));
+    String str = Marker.repeatChar(ch, count);
+    bufferContent.replaceTextRange(getDot(), 0, str);
     setDot(getDot() + 1);
   }
 

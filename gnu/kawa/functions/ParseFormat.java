@@ -1,9 +1,13 @@
 package gnu.kawa.functions;
-import gnu.text.*;
 import java.text.ParseException;
 import java.text.Format;
+import java.util.ArrayList;
+import gnu.kawa.io.CharArrayInPort;
+import gnu.kawa.io.InPort;
 import gnu.mapping.*;
+import gnu.math.FixedRealFormat;
 import gnu.lists.*;
+import gnu.text.*;
 
 public class ParseFormat extends Procedure1
 {
@@ -24,18 +28,18 @@ public class ParseFormat extends Procedure1
   public static final int SEEN_ZERO  = 8;
   public static final int SEEN_HASH = 16;
 
-  public ReportFormat parseFormat(LineBufferedReader fmt)
+  public ReportFormat parseFormat(InPort fmt)
     throws java.text.ParseException, java.io.IOException
   {
     return parseFormat(fmt, emacsStyle ? '?' : '~');
   }
 
-  public static ReportFormat parseFormat(LineBufferedReader fmt, char magic)
+  public static ReportFormat parseFormat(InPort fmt, char magic)
     throws java.text.ParseException, java.io.IOException
   {
     StringBuffer fbuf = new StringBuffer(100);
     int position = 0;
-    java.util.Vector formats = new java.util.Vector();
+    ArrayList<Format> formats = new ArrayList<Format>();
     Format format;
     for (;;)
       {
@@ -56,13 +60,22 @@ public class ParseFormat extends Procedure1
 	      }
 	  }
 	int len = fbuf.length();
-	if (len > 0)
-	  {
-	    char[] text = new char[len];
-	    fbuf.getChars(0, len, text, 0);
-	    fbuf.setLength(0);
-	    formats.addElement(new LiteralFormat(text));
-	  }
+
+        // Note we create a LiteralFormat even when fbuf is empty.
+        // This is to make sure there are string-valued separators between
+        // specifiers (as well as before and after).  Otherwise
+        // ($sprintf$ "%s%s" 3 4) would return "3 4" rather than "34".
+        if (len == 0)
+            format = LiteralFormat.separator;
+        else
+          {
+            char[] text = new char[len];
+            fbuf.getChars(0, len, text, 0);
+            fbuf.setLength(0);
+            format = new LiteralFormat(text);
+          }
+        formats.add(format);
+
 	if (ch < 0)
 	  break;
 	int digit;
@@ -98,9 +111,13 @@ public class ParseFormat extends Procedure1
 	    break;
 	  }
 
-	int width = PARAM_UNSPECIFIED;
-	digit = Character.digit((char) ch, 10);
-	if (digit >= 0)
+	int width;
+        if (ch == '*')
+          {
+            width = PARAM_FROM_LIST;
+            ch = fmt.read();
+          }
+	else if ((digit = Character.digit((char) ch, 10)) >= 0)
 	  {
 	    width = digit;
 	    for (;;)
@@ -112,28 +129,34 @@ public class ParseFormat extends Procedure1
 		width = 10 * width + digit;
 	      }
 	  }
-        else if (ch == '*')
-          width = PARAM_FROM_LIST;
+        else
+          width = PARAM_UNSPECIFIED;
 
 	int precision = PARAM_UNSPECIFIED;
 	if (ch == '.')
 	  {
+            ch = fmt.read();
 	    if (ch == '*')
-	      precision = PARAM_FROM_LIST;
-	    else
+              {
+                precision = PARAM_FROM_LIST;
+                ch = fmt.read();
+              }
+	    else if ((digit = Character.digit((char) ch, 10)) >= 0)
 	      {
-		precision = 0;
-		for (;;)
-		  {
-		    ch = fmt.read();
-		    digit = Character.digit((char) ch, 10);
-		    if (digit < 0)
-		      break;
-		    precision = 10 * precision + digit;
-		  }
-	      }
-	  }
+                precision = digit;
+                for (;;)
+                  {
+                    ch = fmt.read();
+                    digit = Character.digit((char) ch, 10);
+                    if (digit < 0)
+                        break;
+                    precision = 10 * precision + digit;
+                  }
+              }
+          }
 
+        char padChar
+            = (flags & (SEEN_ZERO+SEEN_MINUS)) == SEEN_ZERO ? '0' : ' ';
 	switch (ch)
 	  {
 	  case 's':
@@ -159,8 +182,6 @@ public class ParseFormat extends Procedure1
               }
             boolean seenColon = false;
             boolean seenAt = false;
-            char padChar
-              = (flags & (SEEN_ZERO+SEEN_MINUS)) == SEEN_ZERO ? '0' : ' ';
             if ((flags & SEEN_HASH) != 0)
               fflags |= IntegerFormat.SHOW_BASE;
             if ((flags & SEEN_PLUS) != 0)
@@ -182,17 +203,40 @@ public class ParseFormat extends Procedure1
 						 padChar, PARAM_UNSPECIFIED,
 						 PARAM_UNSPECIFIED, fflags);
             break;
-	  case 'e':
 	  case 'f':
+	  case 'e':
+	  case 'E':
 	  case 'g':
-	    format = new ObjectFormat(false);  // FIXME
+	  case 'G':
+              LispRealFormat dfmt = new LispRealFormat();
+              dfmt.op = (char) ch;
+              dfmt.style = 'P';
+              dfmt.arg1 = width;
+              if (precision == PARAM_UNSPECIFIED)
+                  precision = 6;
+              dfmt.arg2 = precision;
+              dfmt.showPlus = (flags & SEEN_PLUS) != 0;
+              if (ch == 'e' || ch == 'E' || ch == 'g' || ch == 'G') {
+                  dfmt.arg3 = 2;
+                  dfmt.arg4 = 1; // intDigits
+                  dfmt.arg5 = '\0'; // overflowChar
+                  dfmt.arg6  = padChar;
+                  // set exponentChar
+                  dfmt.arg7 = ch == 'E' || ch == 'G' ? 'E' : 'e';
+              }
+              else {
+                  dfmt.arg3 = '\0'; // overflowChar
+                  dfmt.arg5 = padChar;
+              }
+              dfmt.internalPad = true;
+              format = dfmt.resolve(null, 0);
 	    break;
 	  default:
 	    throw new ParseException ("unknown format character '"+ch+"'", -1);
 	  }
 	if (width > 0)
 	  {
-	    char padChar = (flags & SEEN_ZERO) != 0 ? '0' : ' ';
+	    padChar = (flags & SEEN_ZERO) != 0 ? '0' : ' ';
 	    int where;
 	    if ((flags & SEEN_MINUS) != 0)
 	      where = 100;
@@ -206,20 +250,17 @@ public class ParseFormat extends Procedure1
 	//fbuf.append('{');
         // fbuf.append(position);
 	//fbuf.append('}');
-	formats.addElement(format);
+	formats.add(format);
 	position++;
       }
-    // System.err.println("format: "+fbuf.toString());
     int fcount = formats.size();
     if (fcount == 1)
       {
-	Object f = formats.elementAt(0);
+	Object f = formats.get(0);
 	if (f instanceof ReportFormat)
 	  return (ReportFormat) f;
       }
-    Format[] farray = new Format[fcount];
-    formats.copyInto(farray);
-    return new CompoundFormat(farray);
+    return new CompoundFormat(formats.toArray(new Format[fcount]));
   }
 
   public Object apply1 (Object arg)
@@ -239,10 +280,7 @@ public class ParseFormat extends Procedure1
 	  {
 	    InPort iport;
 	    if (arg instanceof FString)
-	      {
-		FString str = (FString) arg;
-		iport = new CharArrayInPort(str.data, str.size);
-	      }
+	      iport = new CharArrayInPort((FString) arg);
 	    else 
 	      iport = new CharArrayInPort(arg.toString()); 
 	    try

@@ -3,8 +3,15 @@ import gnu.bytecode.*;
 import gnu.mapping.*;
 import gnu.expr.*;
 import gnu.math.*;
-import gnu.text.*;
+import gnu.kawa.io.FilePath;
+import gnu.kawa.io.Path;
+import gnu.kawa.io.URIPath;
 import gnu.kawa.functions.Arithmetic;
+import gnu.kawa.functions.LProcess;
+import gnu.kawa.reflect.Invoke;
+import gnu.kawa.reflect.LazyType;
+import gnu.lists.Blob;
+import gnu.lists.U8Vector;
 import java.util.*;
 
 /** A wrapper around a class type.
@@ -12,7 +19,7 @@ import java.util.*;
  * but may have a custom (language-specific) coercion method,
  * constructor, and name. */
 
-public class LangObjType extends ObjectType implements TypeValue
+public class LangObjType extends SpecialObjectType implements TypeValue
 {
   final int typeCode;
   private static final int PATH_TYPE_CODE = 1;
@@ -27,18 +34,31 @@ public class LangObjType extends ObjectType implements TypeValue
   private static final int NUMERIC_TYPE_CODE = 10;
   private static final int LIST_TYPE_CODE = 11;
   private static final int VECTOR_TYPE_CODE = 12;
-  private static final int STRING_TYPE_CODE = 13;
-  private static final int REGEX_TYPE_CODE = 14;
-  private static final int DFLONUM_TYPE_CODE = 15;
+  private static final int CONST_VECTOR_TYPE_CODE = 13;
+  private static final int STRING_TYPE_CODE = 14;
+  private static final int REGEX_TYPE_CODE = 15;
+  private static final int DFLONUM_TYPE_CODE = 16;
+  private static final int S8VECTOR_TYPE_CODE = 17;
+  private static final int U8VECTOR_TYPE_CODE = 18;
+  private static final int S16VECTOR_TYPE_CODE = 19;
+  private static final int U16VECTOR_TYPE_CODE = 20;
+  private static final int S32VECTOR_TYPE_CODE = 21;
+  private static final int U32VECTOR_TYPE_CODE = 22;
+  private static final int S64VECTOR_TYPE_CODE = 23;
+  private static final int U64VECTOR_TYPE_CODE = 24;
+  private static final int F32VECTOR_TYPE_CODE = 25;
+  private static final int F64VECTOR_TYPE_CODE = 26;
+  private static final int PROCEDURE_TYPE_CODE = 27;
+  private static final int PROMISE_TYPE_CODE = 28;
 
   public static final LangObjType pathType =
-    new LangObjType("path", "gnu.text.Path",
+    new LangObjType("path", "gnu.kawa.io.Path",
                     PATH_TYPE_CODE);
   public static final LangObjType filepathType =
-    new LangObjType("filepath", "gnu.text.FilePath",
+    new LangObjType("filepath", "gnu.kawa.io.FilePath",
                     FILEPATH_TYPE_CODE);
   public static final LangObjType URIType =
-    new LangObjType("URI", "gnu.text.URIPath",
+    new LangObjType("URI", "gnu.kawa.io.URIPath",
                     URI_TYPE_CODE);
 
   public static final LangObjType typeClass =
@@ -75,18 +95,56 @@ public class LangObjType extends ObjectType implements TypeValue
     new LangObjType("vector", "gnu.lists.FVector",
                     VECTOR_TYPE_CODE);
 
+  public static final LangObjType constVectorType =
+    new LangObjType("constant-vector", "gnu.lists.ConstVector",
+                    CONST_VECTOR_TYPE_CODE);
+
+  public static final LangObjType s8vectorType =
+    new LangObjType("s8vector", "gnu.lists.S8Vector",
+                    S8VECTOR_TYPE_CODE);
+
+  public static final LangObjType u8vectorType =
+    new LangObjType("u8vector", "gnu.lists.U8Vector",
+                    U8VECTOR_TYPE_CODE);
+
+  public static final LangObjType s16vectorType =
+    new LangObjType("s16vector", "gnu.lists.S16Vector",
+                    S16VECTOR_TYPE_CODE);
+
+  public static final LangObjType u16vectorType =
+    new LangObjType("u16vector", "gnu.lists.U16Vector",
+                    U16VECTOR_TYPE_CODE);
+
+  public static final LangObjType s32vectorType =
+    new LangObjType("s32vector", "gnu.lists.S32Vector",
+                    S32VECTOR_TYPE_CODE);
+
+  public static final LangObjType u32vectorType =
+    new LangObjType("u32vector", "gnu.lists.U32Vector",
+                    U32VECTOR_TYPE_CODE);
+
+  public static final LangObjType s64vectorType =
+    new LangObjType("s64vector", "gnu.lists.S64Vector",
+                    S64VECTOR_TYPE_CODE);
+
+  public static final LangObjType u64vectorType =
+    new LangObjType("u64vector", "gnu.lists.U64Vector",
+                    U64VECTOR_TYPE_CODE);
+
+  public static final LangObjType f32vectorType =
+    new LangObjType("f32vector", "gnu.lists.F32Vector",
+                    F32VECTOR_TYPE_CODE);
+
+  public static final LangObjType f64vectorType =
+    new LangObjType("f64vector", "gnu.lists.F64Vector",
+                    F64VECTOR_TYPE_CODE);
+
   public static final LangObjType regexType =
     new LangObjType("regex", "java.util.regex.Pattern",
                     REGEX_TYPE_CODE);
 
   public static final LangObjType stringType =
-    new LangObjType("string",
-                    /* #ifdef use:java.lang.CharSequence */
-                    "java.lang.CharSequence",
-                    /* #else */
-                    // /* better would be a union of CharSeq and j.l.String. */
-                    // "gnu.lists.CharSeq",
-                    /* #endif */
+    new LangObjType("string", "java.lang.CharSequence",
                     STRING_TYPE_CODE);
 
   public static final LangObjType listType =
@@ -96,18 +154,30 @@ public class LangObjType extends ObjectType implements TypeValue
   static final ClassType typeArithmetic =
     ClassType.make("gnu.kawa.functions.Arithmetic");
 
-  LangObjType(String name, String implClass, int typeCode)
-  {
-    super(name);
-    this.implementationType = ClassType.make(implClass);
-    this.typeCode = typeCode;
-    this.setSignature(this.implementationType.getSignature());
-  }
+  public static final LangObjType procedureType =
+    new LangObjType("procedure", "gnu.mapping.Procedure",
+                    PROCEDURE_TYPE_CODE);
 
-  ClassType implementationType;
+  public static final LangObjType promiseType =
+    new LangObjType("promise", "gnu.mapping.Lazy",
+                    PROMISE_TYPE_CODE);
+
+    LangObjType(String name, String implClass, int typeCode) {
+        super(name, ClassType.make(implClass));
+        this.typeCode = typeCode;
+    }
+
+    @Override
+    public int isCompatibleWithValue(Type valueType) {
+        return getImplementationType().isCompatibleWithValue(valueType);
+    }
 
   public int compare(Type other)
   {
+    if (other instanceof LazyType)
+      other = ((LazyType) other).getValueType();
+    if (other == nullType)
+      return 1;
     switch (typeCode)
       {
       case CLASS_TYPE_CODE:
@@ -124,81 +194,17 @@ public class LangObjType extends ObjectType implements TypeValue
       case CLASSTYPE_TYPE_CODE:
         if (other == typeClass || other == typeClass.implementationType)
           return 1;
-        if (other == typeType || other == typeClass.implementationType)
+        if (other == typeType || other == typeClass.implementationType
+            || other == procedureType)
           return -1;
         break;
-      case INTEGER_TYPE_CODE:
-        if (other instanceof PrimType)
-          {
-            char sig1 = other.getSignature().charAt(0);
-            switch (sig1)
-              {
-              case 'I': case 'J':  case 'S':  case 'B':
-                return 1;
-              }
-          }
-      case DFLONUM_TYPE_CODE:
-      case REAL_TYPE_CODE:
-        if (other instanceof PrimType)
-          {
-            char sig1 = other.getSignature().charAt(0);
-            switch (sig1)
-              {
-              case 'D': case 'F':
-                return 1;
-              }
-          }
+      case PROCEDURE_TYPE_CODE:
+        if (other == typeClassType)
+          return 1;
+        break;
       }
-    return getImplementationType().compare(other.getImplementationType());
+    return getImplementationType().compare(other);
   }
-
-  public Field getField(String name, int mask)
-  {
-    return implementationType.getField(name, mask);
-  }
-
-  public Method getMethod(String name, Type[] arg_types)
-  {
-    return implementationType.getMethod(name, arg_types);
-  }
-
-  public Method getDeclaredMethod(String name, int argCount)
-  {
-    return implementationType.getDeclaredMethod(name, argCount);
-  }
-
-  public int getMethods (Filter filter, int searchSupers,
-                         /* #ifdef JAVA5 */
-                         List<Method>
-                         /* #else */
-                         // Vector
-                         /* #endif */
-                         result)
-  {
-    return implementationType.getMethods(filter, searchSupers, result);
-  }
-
-  public java.lang.Class getReflectClass()
-  {
-    return implementationType.getReflectClass();
-  }
-
-  public Type getRealType()
-  {
-    return implementationType;
-  }
-
-  public Type getImplementationType()
-  {
-    return implementationType;
-  }
-
-  static PrimProcedure makePathProc =
-    new PrimProcedure("gnu.text.Path", "valueOf", 1);
-  static PrimProcedure makeFilepathProc =
-    new PrimProcedure("gnu.text.FilePath", "makeFilePath", 1);
-  static PrimProcedure makeURIProc =
-    new PrimProcedure("gnu.text.URIPath", "makeURI", 1);
 
   public void emitIsInstance(Variable incoming,
 			     Compilation comp, Target target)
@@ -208,6 +214,17 @@ public class LangObjType extends ObjectType implements TypeValue
       case STRING_TYPE_CODE:
       case LIST_TYPE_CODE:
       case VECTOR_TYPE_CODE:
+      case S8VECTOR_TYPE_CODE:
+      case U8VECTOR_TYPE_CODE:
+      case S16VECTOR_TYPE_CODE:
+      case U16VECTOR_TYPE_CODE:
+      case S32VECTOR_TYPE_CODE:
+      case U32VECTOR_TYPE_CODE:
+      case S64VECTOR_TYPE_CODE:
+      case U64VECTOR_TYPE_CODE:
+      case F32VECTOR_TYPE_CODE:
+      case F64VECTOR_TYPE_CODE:
+      case CONST_VECTOR_TYPE_CODE:
       case REGEX_TYPE_CODE:
         implementationType.emitIsInstance(comp.getCode());
         target.compileFromStack(comp,
@@ -220,6 +237,7 @@ public class LangObjType extends ObjectType implements TypeValue
 
   public static Numeric coerceNumeric (Object value)
   {
+    value = Promise.force(value);
     Numeric rval = Numeric.asNumericOrNull(value);
     if (rval == null && value != null)
         throw new WrongType(WrongType.ARG_CAST, value, numericType);
@@ -228,6 +246,7 @@ public class LangObjType extends ObjectType implements TypeValue
 
   public static RealNum coerceRealNum (Object value)
   {
+    value = Promise.force(value);
     RealNum rval = RealNum.asRealNumOrNull(value);
     if (rval == null && value != null)
         throw new WrongType(WrongType.ARG_CAST, value, realType);
@@ -236,6 +255,7 @@ public class LangObjType extends ObjectType implements TypeValue
 
   public static DFloNum coerceDFloNum (Object value)
   {
+    value = Promise.force(value);
     DFloNum rval = DFloNum.asDFloNumOrNull(value);
     if (rval == null && value != null)
         throw new WrongType(WrongType.ARG_CAST, value, dflonumType);
@@ -244,6 +264,7 @@ public class LangObjType extends ObjectType implements TypeValue
 
   public static RatNum coerceRatNum (Object value)
   {
+    value = Promise.force(value);
     RatNum rval = RatNum.asRatNumOrNull(value);
     if (rval == null && value != null)
         throw new WrongType(WrongType.ARG_CAST, value, rationalType);
@@ -252,6 +273,7 @@ public class LangObjType extends ObjectType implements TypeValue
 
   public static IntNum coerceIntNum (Object value)
   {
+    value = Promise.force(value);
     IntNum ival = IntNum.asIntNumOrNull(value);
     if (ival == null && value != null)
         throw new WrongType(WrongType.ARG_CAST, value, integerType);
@@ -260,6 +282,7 @@ public class LangObjType extends ObjectType implements TypeValue
 
   public static Class coerceToClassOrNull (Object type)
   {
+    type = Promise.force(type);
     if (type instanceof Class)
       return (Class) type;
     if (type instanceof Type)
@@ -274,6 +297,7 @@ public class LangObjType extends ObjectType implements TypeValue
 
   public static Class coerceToClass (Object obj)
   {
+    obj = Promise.force(obj);
     Class coerced = coerceToClassOrNull(obj);
     if (coerced == null && obj != null)
       throw new ClassCastException("cannot cast "+obj+" to type");
@@ -296,6 +320,7 @@ public class LangObjType extends ObjectType implements TypeValue
 
   public static ClassType coerceToClassType (Object obj)
   {
+    obj = Promise.force(obj);
     ClassType coerced = coerceToClassTypeOrNull(obj);
     if (coerced == null && obj != null)
       throw new ClassCastException("cannot cast "+obj+" to class-type");
@@ -304,6 +329,7 @@ public class LangObjType extends ObjectType implements TypeValue
 
   public static Type coerceToTypeOrNull (Object type)
   {
+    type = Promise.force(type);
     if (type instanceof Type)
       return (Type) type;
     if (type instanceof Class)
@@ -322,6 +348,47 @@ public class LangObjType extends ObjectType implements TypeValue
     return coerced;
   }
 
+  public static Procedure coerceToProcedureOrNull(Object value)
+  {
+    final Object obj = Promise.force(value);
+    if (obj instanceof Procedure)
+      return (Procedure) obj;
+    if (obj instanceof LangObjType)
+      {
+        Procedure cons = ((LangObjType) obj).getConstructor();
+        if (cons != null)
+          return cons;
+        return new ProcedureN () {
+          public Object applyN (Object[] args) throws Throwable
+          {
+            int nargs = args.length;
+            Object[] xargs = new Object[nargs+1];
+            System.arraycopy(args, 0, xargs, 1, nargs);
+            xargs[0] = obj;
+            return Invoke.make.applyN(xargs);
+          }
+        };
+      }
+    return null;
+  }
+
+  public static Procedure coerceToProcedure (Object obj)
+  {
+    obj = Promise.force(obj);
+    Procedure coerced = coerceToProcedureOrNull(obj);
+    if (coerced == null && obj != null)
+       throw new ClassCastException("cannot cast "+obj+" to procedure");
+    return coerced;  
+  }
+
+    public static U8Vector coerceToU8Vector(Object obj) {
+        if (obj instanceof LProcess)
+            return ((LProcess) obj).getValue().asPlainBytevector();
+        if (obj instanceof Blob)
+            return ((Blob) obj).asPlainBytevector();
+        return (U8Vector) obj;
+    }
+
   Method coercionMethod ()
   {
     switch (typeCode)
@@ -332,6 +399,8 @@ public class LangObjType extends ObjectType implements TypeValue
         return typeLangObjType.getDeclaredMethod("coerceToClassType", 1);
       case TYPE_TYPE_CODE:
         return typeLangObjType.getDeclaredMethod("coerceToType", 1);
+      case PROCEDURE_TYPE_CODE:
+        return typeLangObjType.getDeclaredMethod("coerceToProcedure", 1);
       case NUMERIC_TYPE_CODE:
         return typeLangObjType.getDeclaredMethod("coerceNumeric", 1);
       case REAL_TYPE_CODE:
@@ -342,7 +411,19 @@ public class LangObjType extends ObjectType implements TypeValue
         return typeLangObjType.getDeclaredMethod("coerceIntNum", 1);
       case DFLONUM_TYPE_CODE:
         return typeLangObjType.getDeclaredMethod("coerceDFloNum", 1);
+      case U8VECTOR_TYPE_CODE:
+        return typeLangObjType.getDeclaredMethod("coerceToU8Vector", 1);
       case VECTOR_TYPE_CODE:
+      case CONST_VECTOR_TYPE_CODE:
+      case S8VECTOR_TYPE_CODE:
+      case S16VECTOR_TYPE_CODE:
+      case U16VECTOR_TYPE_CODE:
+      case S32VECTOR_TYPE_CODE:
+      case U32VECTOR_TYPE_CODE:
+      case S64VECTOR_TYPE_CODE:
+      case U64VECTOR_TYPE_CODE:
+      case F32VECTOR_TYPE_CODE:
+      case F64VECTOR_TYPE_CODE:
       case STRING_TYPE_CODE:
       case LIST_TYPE_CODE:
       case REGEX_TYPE_CODE:
@@ -378,6 +459,10 @@ public class LangObjType extends ObjectType implements TypeValue
       case TYPE_TYPE_CODE:
         methodDeclaringClass = typeLangObjType;
         mname = "coerceToTypeOrNull";
+        break;
+      case PROCEDURE_TYPE_CODE:
+        methodDeclaringClass = typeLangObjType;
+        mname = "coerceToProcedureOrNull";
         break;
       case NUMERIC_TYPE_CODE:
         methodDeclaringClass = implementationType;
@@ -443,6 +528,8 @@ public class LangObjType extends ObjectType implements TypeValue
         return coerceToClassType(obj);
       case TYPE_TYPE_CODE:
         return coerceToType(obj);
+      case PROCEDURE_TYPE_CODE:
+        return coerceToProcedure(obj);
       case NUMERIC_TYPE_CODE:
         return coerceNumeric(obj);
       case REAL_TYPE_CODE:
@@ -454,6 +541,17 @@ public class LangObjType extends ObjectType implements TypeValue
       case DFLONUM_TYPE_CODE:
         return coerceDFloNum(obj);
       case VECTOR_TYPE_CODE:
+      case CONST_VECTOR_TYPE_CODE:
+      case S8VECTOR_TYPE_CODE:
+      case U8VECTOR_TYPE_CODE:
+      case S16VECTOR_TYPE_CODE:
+      case U16VECTOR_TYPE_CODE:
+      case S32VECTOR_TYPE_CODE:
+      case U32VECTOR_TYPE_CODE:
+      case S64VECTOR_TYPE_CODE:
+      case U64VECTOR_TYPE_CODE:
+      case F32VECTOR_TYPE_CODE:
+      case F64VECTOR_TYPE_CODE:
       case LIST_TYPE_CODE:
       case REGEX_TYPE_CODE:
         // optimize?
@@ -554,10 +652,21 @@ public class LangObjType extends ObjectType implements TypeValue
   {
     switch (typeCode)
       {
+      case CONST_VECTOR_TYPE_CODE:
       case VECTOR_TYPE_CODE:
+      case S8VECTOR_TYPE_CODE:
+      case S16VECTOR_TYPE_CODE:
+      case U16VECTOR_TYPE_CODE:
+      case S32VECTOR_TYPE_CODE:
+      case U32VECTOR_TYPE_CODE:
+      case S64VECTOR_TYPE_CODE:
+      case U64VECTOR_TYPE_CODE:
+      case F32VECTOR_TYPE_CODE:
+      case F64VECTOR_TYPE_CODE:
       case STRING_TYPE_CODE:
       case LIST_TYPE_CODE:
       case REGEX_TYPE_CODE:
+      case PROMISE_TYPE_CODE:
         code.emitCheckcast(implementationType);
         break;
       default:
@@ -571,18 +680,29 @@ public class LangObjType extends ObjectType implements TypeValue
   // static final String VARARGS_SUFFIX = "$V";
   /* #endif */
 
+    public ObjectType getConstructorType() {
+        switch (typeCode) {
+        case PROMISE_TYPE_CODE:
+            return LazyType.promiseType;
+        default:
+            return this;
+        }
+    }
+
   public Procedure getConstructor ()
   {
     switch (typeCode)
       {
       case PATH_TYPE_CODE:
-        return makePathProc;
+        return new PrimProcedure("gnu.kawa.io.Path", "valueOf", 1);
       case FILEPATH_TYPE_CODE:
-        return makeFilepathProc;
+        return new PrimProcedure("gnu.kawa.io.FilePath", "makeFilePath", 1);
       case URI_TYPE_CODE:
-        return makeURIProc;
+        return new PrimProcedure("gnu.kawa.io.URIPath", "makeURI", 1);
       case VECTOR_TYPE_CODE:
         return new PrimProcedure("gnu.lists.FVector", "make", 1);
+      case U8VECTOR_TYPE_CODE:
+        return new PrimProcedure("kawa.lib.bytevectors", "$make$bytevector$"+VARARGS_SUFFIX, 1);
       case LIST_TYPE_CODE:
         return gnu.kawa.functions.MakeList.list;
       case STRING_TYPE_CODE:
@@ -593,6 +713,10 @@ public class LangObjType extends ObjectType implements TypeValue
         return null;
       }
   }
+
+    /* #ifndef JAVA8 */
+    public String encodeType(Language language) { return null; }
+    /* #endif */
 
   public static final ClassType typeLangObjType =
     ClassType.make("gnu.kawa.lispexpr.LangObjType");

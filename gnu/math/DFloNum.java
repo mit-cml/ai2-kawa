@@ -47,7 +47,7 @@ public class DFloNum extends RealNum implements Externalizable
   {
     if (value instanceof DFloNum)
       return (DFloNum) value;
-    if (value instanceof RealNum || value instanceof Number)
+    if (RealNum.isReal(value))
       return new DFloNum(((Number) value).doubleValue());
     return null;
   }
@@ -194,7 +194,10 @@ public class DFloNum extends RealNum implements Externalizable
 	int i = compare(y_rat.numerator(), y_rat.denominator(), value);
 	return i < -1 ? i : -i;
       }
-    return compare (value, ((RealNum)obj).doubleValue ());
+    if (obj instanceof RealNum)
+      return compare (value, ((RealNum) obj).doubleValue ());
+    else
+      return ((Numeric) obj).compareReversed(this);
   }
 
   public int compareReversed (Numeric x)
@@ -239,13 +242,18 @@ public class DFloNum extends RealNum implements Externalizable
       return RatNum.make (mant, IntNum.shift (IntNum.one(), 1075 - exp));
   }
 
-   public String toString ()
-   {
+  public String toString ()
+  {
+    return toString(value);
+  }
+
+  public static String toString (double value)
+  {
     return (value == 1.0/0.0 ? "+inf.0"
 	    : value == -1.0/0.0 ? "-inf.0"
 	    : Double.isNaN (value) ? "+nan.0"
 	    : Double.toString (value));
-   }
+  }
 
    public String toString (int radix)
    {

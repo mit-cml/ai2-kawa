@@ -2,10 +2,11 @@
 // This is free software;  for terms and warranty disclaimer see ./COPYING.
 
 package gnu.kawa.sax;
-import org.xml.sax.*;
+import gnu.kawa.io.InPort;
 import gnu.xml.*;
-import java.io.*;
 import gnu.text.*;
+import java.io.*;
+import org.xml.sax.*;
 
 /** An implementation of SAX2 XMLReader.
  */
@@ -70,7 +71,7 @@ public class KawaXMLReader extends ContentConsumer
       reader = XMLParser.XMLStreamReader(input.getByteStream());
     SourceMessages messages = new SourceMessages();
     gnu.xml.XMLFilter filter = new gnu.xml.XMLFilter(this);
-    LineBufferedReader lin = new LineBufferedReader(reader);
+    InPort lin = new InPort(reader);
     filter.setSourceLocator(lin);
     getContentHandler().setDocumentLocator(filter);
     XMLParser.parse(lin, messages, filter);

@@ -13,7 +13,7 @@ import gnu.text.Char;
  * It is a reasonable choice for a "DOM" for XML data.
  */
 
-public class TreeList extends AbstractSequence
+public class TreeList extends AbstractSequence<Object>
   implements
   /* #ifdef JAVA5 */
   Appendable,
@@ -130,7 +130,7 @@ public class TreeList extends AbstractSequence
   /** Followed by 2 chars that provide an index into objects. */
   static final char POSITION_REF_FOLLOWS = 0xF10E;
 
-  /** A position triple referenceing some other "nodes".
+  /** A position triple referencing some other "nodes".
    * Followed by index of sequence (2 chars), and ipos (2 chars). */
   protected static final char POSITION_PAIR_FOLLOWS = 0xF10F;
 
@@ -235,8 +235,8 @@ public class TreeList extends AbstractSequence
   /** End of a document. */
   protected static final int END_DOCUMENT = 0xF111;
 
-  /** End of an entity (typically a file, possibly included).
-   * [base_uri], 2 short, given an index of a base-uri object
+  /** Start of an entity (typically a file, possibly included).
+   * [base_uri], 2 shorts, given an index of a base-uri object
    * [parent_offset], in 2 shorts, encoded as for BEGIN_DOCUMENT.
    */
   public static final int BEGIN_ENTITY = 0xF112;
@@ -395,7 +395,7 @@ public class TreeList extends AbstractSequence
     data[index+1] = (char) i;
   }
 
-  public void consume (SeqPosition position)
+  public void writePosition(SeqPosition position)
   {
     ensureSpace(3);
     // FIXME - no need for find to search in this case!
@@ -882,7 +882,7 @@ public class TreeList extends AbstractSequence
     int index = ipos >>> 1;
     if ((ipos & 1) != 0)
       index--;
-    if (index >= gapStart)
+    if (index == gapStart)
       index += gapEnd - gapStart;
     if ((ipos & 1) != 0)
       {
@@ -1230,7 +1230,7 @@ public class TreeList extends AbstractSequence
 	  case POSITION_REF_FOLLOWS:
 	    if (out instanceof PositionConsumer)
 	      {
-		((PositionConsumer) out).consume((SeqPosition) objects[getIntN(pos)]);
+		((PositionConsumer) out).writePosition((SeqPosition) objects[getIntN(pos)]);
 		pos += 2;
 		continue;
 	      }
@@ -1625,12 +1625,6 @@ public class TreeList extends AbstractSequence
     else
       return null;
     return index < 0 ? null : objects[index];
-  }
-
-  public String getNextTypeName(int ipos)
-  {
-    Object type = getNextTypeObject(ipos);
-    return type == null ? null : type.toString();
   }
 
   public Object getPosPrevious(int ipos)
@@ -2292,6 +2286,11 @@ public class TreeList extends AbstractSequence
     return negate ? -i : i;
   }
 
+  public int nextIndex(int ipos)
+  {
+    return getIndexDifference(ipos, startPos());
+  }
+  
   public int hashCode()
   {
     // Calculating a real hashCode is real pain.
@@ -2362,9 +2361,16 @@ public class TreeList extends AbstractSequence
 		  {
 		    ch = ch - OBJECT_REF_SHORT;
 		    Object obj = objects[ch];
-		    out.print("=Object#"+((int)ch)+'='
-			      +obj+':'+obj.getClass().getName()
-			      +'@'+Integer.toHexString(System.identityHashCode(obj)));
+		    out.print("=Object#");
+                    out.print((int)ch);
+                    out.print('=');
+		    out.print(obj);
+                    if (obj != null) {
+                      out.print(':');
+                      out.print(obj.getClass().getName());
+                    }
+                    out.print('@');
+                    out.print(Integer.toHexString(System.identityHashCode(obj)));
 		  }
 		else if (ch >= BEGIN_ELEMENT_SHORT
 			 && ch <= BEGIN_ELEMENT_SHORT+BEGIN_ELEMENT_SHORT_INDEX_MAX)

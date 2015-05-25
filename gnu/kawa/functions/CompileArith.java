@@ -57,20 +57,23 @@ public class CompileArith implements Inlineable
     return false;
   }
 
+  public static Type combineType (Type t1, Type t2)
+  {
+    int kind1 = Arithmetic.classifyType(t1);
+    int kind2 = Arithmetic.classifyType(t2);
+    return Arithmetic.kindType(CompileArith.getReturnKind2(kind1, kind2));
+  }
+
   public static Expression validateApplyArithOp
   (ApplyExp exp, InlineCalls visitor, Type required, Procedure proc)
   {
     ArithOp aproc = (ArithOp) proc;
     int op = aproc.op;
     exp.visitArgs(visitor);
- 
+
     Expression[] args = exp.getArgs();
     if (args.length > 2)
       return pairwise(proc, exp.getFunction(), args, visitor);
-
-    Expression folded = exp.inlineIfConstant(proc, visitor);
-    if (folded != exp)
-      return folded;
 
     int rkind = 0;
     if (args.length == 2 || args.length == 1)
@@ -101,6 +104,10 @@ public class CompileArith implements Inlineable
         rkind = adjustReturnKind(rkind, op);
         exp.setType(Arithmetic.kindType(rkind));
       }
+
+    Expression folded = exp.inlineIfConstant(proc, visitor);
+    if (folded != exp)
+      return folded;
 
     // Inlining may yield PrimProcedure instructions of bytecode instructions
     // which we don't know how to interpret (yet).
@@ -410,7 +417,24 @@ public class CompileArith implements Inlineable
   {
     if (op >= ASHIFT_GENERAL && op <= LSHIFT_RIGHT)
       return kind1;
-    return kind1 <= 0 || (kind1 > kind2 && kind2 > 0) ? kind1 : kind2;
+    return getReturnKind2(kind1, kind2);
+  }
+
+    private static int getReturnKind2 (int kind1, int kind2) {
+        /* FIXME: Possible future optimization.
+           Would need to resolve print-out of Double vs DFloNum.
+        if (kind1 <= 0)
+            return kind1;
+        if (kind2 <= 0)
+            return kind2;
+        if ((kind1 == Arithmetic.FLONUM_CODE
+             && kind2 <= Arithmetic.DOUBLE_CODE) ||
+            (kind2 == Arithmetic.FLONUM_CODE
+             && kind1 <= Arithmetic.DOUBLE_CODE))
+            return Arithmetic.DOUBLE_CODE;
+        return kind1 > kind2 ? kind1 : kind2;
+        */
+        return kind1 <= 0 || (kind1 > kind2 && kind2 > 0) ? kind1 : kind2;
   }
 
   /** This actually returns the "promoted argument type".
@@ -546,16 +570,6 @@ public class CompileArith implements Inlineable
     return exp;
   }
 
-  public static Expression validateApplyNumberCompare
-  (ApplyExp exp, InlineCalls visitor, Type required, Procedure proc)
-  {
-    exp.visitArgs(visitor);
-    Expression folded = exp.inlineIfConstant(proc, visitor);
-    if (folded != exp)
-      return folded;
-    return exp;
-  }
-
   public int primitiveOpcode ()
   {
     switch (op)
@@ -597,16 +611,5 @@ public class CompileArith implements Inlineable
         prev = inlined != null ? inlined : next;
       }
     return prev;
-  }
-
-  public static Expression validateApplyNumberPredicate
-  (ApplyExp exp, InlineCalls visitor, Type required, Procedure proc)
-  {
-    NumberPredicate nproc = (NumberPredicate) proc;
-    int op = nproc.op;
-    Expression[] args = exp.getArgs();
-    args[0] = visitor.visit(args[0], LangObjType.integerType);
-    exp.setType(Type.booleanType);
-    return exp;
   }
 }

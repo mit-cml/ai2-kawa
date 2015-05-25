@@ -1,5 +1,16 @@
 ;; Definitions for some primitives before we define anything else.
 
+(module-export
+ define-syntax define define-private define-constant define-early-constant
+ report-syntax-error syntax->expression syntax-body->expression
+ if try-catch letrec)
+
+(import (rename (only (kawa standard define) defineRaw) (defineRaw %define)))
+(import (rename (only (kawa standard define_syntax) define_syntax)
+                (define_syntax %define-syntax)))
+(import (rename (only (kawa standard let) let) (let %let)))
+(import (rename (only (kawa standard set_b) set) (set set!)))
+
 (%define-syntax define-syntax
   (syntax-rules ($lookup$)
     ((define-syntax (($lookup$ part1 'part2) . pattern) . forms)
@@ -52,7 +63,18 @@
     ((define-constant name value)
      (%define name 8 #!null value))))
 
-(%define syntax-error 2 #!null (id #!rest (msg :: <Object[]>))
+(%define-syntax define-early-constant
+  (syntax-rules (:: $lookup$)
+    ((define-early-constant ($lookup$ part1 'part2) :: type value)
+     (%define ($lookup$ part1 'part2) 25 type value))
+    ((define-early-constant ($lookup$ part1 'part2) value)
+     (%define ($lookup$ part1 'part2) 24 #!null value))
+    ((define-early-constant name :: type value)
+     (%define name 25 type value))
+    ((define-early-constant name value)
+     (%define name 24 #!null value))))
+
+(%define report-syntax-error 2 #!null (id #!rest (msg :: <Object[]>))
   (invoke-static <kawa.standard.syntax_error> 'error id msg))
 
 (%define-syntax syntax->expression
@@ -65,7 +87,7 @@
     ((syntax-body->expression x)
      (kawa.lang.SyntaxForms:rewriteBody x))))
 
-(%define-syntax if
+(define-rewrite-syntax if
   (lambda (x)
     (syntax-case x ()
 		 ((_ test then)
@@ -78,14 +100,14 @@
 		    (syntax->expression (syntax test))
 		    (syntax->expression (syntax then))
 		    (syntax->expression (syntax else))))
-		 ((_ e1 e2 e3 e4 . rest)
-		  (syntax-error (syntax e4)
+		 ((_ e1 e2 e3 . rest)
+		  (report-syntax-error #'rest
 				"too many expressions for 'if'"))
 		 ((_ . rest)
-		  (syntax-error (syntax rest)
+		  (report-syntax-error #'rest
 				"too few expressions for 'if'")))))
 
-(%define-syntax try-catch
+(define-rewrite-syntax try-catch
   (lambda (x)
     (syntax-case x ()
 		 ((_ try-part (var type . catch-body) ...)
@@ -116,10 +138,10 @@
 			    (set! out-inits (make <pair> (syntax (set! name init)) out-inits))
 			    (process-binding (syntax rest))))
 			 (((name) . rest)
-			  (syntax-error b "missing initializion in letrec"))
+			  (report-syntax-error b "missing initializion in letrec"))
 			 (whatever
-			  (syntax-error b "invalid bindings syntax in letrec")))))
+			  (report-syntax-error b "invalid bindings syntax in letrec")))))
 	       (process-binding (syntax bindings))
 	       (set! out-bindings (gnu.lists.LList:reverseInPlace out-bindings))
 	       (set! out-inits (gnu.lists.LList:reverseInPlace out-inits))
-	       #`(%let ,out-bindings ,@out-inits . body)))))))
+	       #`(%let #,out-bindings #,@out-inits . body)))))))

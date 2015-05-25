@@ -1,4 +1,4 @@
-(test-init "macros" 102)
+(test-init "macros" 127)
 
 (test 'ok 'letxx (let ((xx #f)) (cond (#t xx 'ok))))
 
@@ -97,9 +97,9 @@
 	(define-syntax test-ds2 (syntax-rules () ((test-ds2 x) (list 'x))))
 	(test-ds2 (t2))))
 
-(set! x 1)
-(set! y 2)
-(set! z 3)
+(define x 1)
+(define y 2)
+(define z 3)
 (define-syntax test-ds3
   (syntax-rules () ((test-ds3 x y) (let ((y x) (x z) (z y)) (list x y z)))))
 (test '(3 2 3) 'test-ds3 (test-ds3 y z))
@@ -198,6 +198,11 @@
  (else))
 (test 'z third '(x y z))
 
+(test 1 'test-class-exists-1
+      (cond-expand (class-exists:java.lang.StringBuilder 1) (else 0)))
+(test 0 'test-class-exists-2
+      (cond-expand (class-exists:java.lang.StringMunger 1) (else 0)))
+
 (define-syntax or-with-keyword-test
   (syntax-rules (default-value:)
     ((or-with-keyword-test val default-value: default)
@@ -248,10 +253,12 @@
 	  (list (f 1) (g 1)))))
 
 (test '(1 1) 'dybvig-SchemePL3-8Syntax-ex4
-      (let ((f (lambda (x) (+ x 1))))
-	(letrec-syntax ((f (syntax-rules () ((_ x) x)))
-			(g (syntax-rules () ((_ x) (f x)))))
-	  (list (f 1) (g 1)))))
+      (with-compile-options
+       warn-unused: #f
+       (let ((f (lambda (x) (+ x 1))))
+         (letrec-syntax ((f (syntax-rules () ((_ x) x)))
+                         (g (syntax-rules () ((_ x) (f x)))))
+           (list (f 1) (g 1))))))
 
 ;; Savannah bug report #10561 from Chris Dean
 (define-syntax log-mode
@@ -285,7 +292,7 @@
 (test 2 'mzscheme-lang-12.3.5-1 (def-and-use-of-x 2))
 (test 1 'mzscheme-lang-12.3.5-2 x1)
 
-;; From FLT MzScheme Manual section 12.3.5 Macro-Gnerated Top-Level
+;; From FLT MzScheme Manual section 12.3.5 Macro-Generated Top-Level
 (define-syntax def-and-use
   (syntax-rules ()
     ((def-and-use x val)
@@ -294,6 +301,8 @@
 (set! x 2)
 (test 3 'mzscheme-lang-12.3.5-3 (def-and-use x 3))
 (set! fail-expected "mzscheme-lang-12.3.5-4 is 2 but should be 3")
+;; Note this works if def-and-use uses set! instead of define.
+;; Probably chalk this up to Kawa's top-level define being different.
 (test 3 'mzscheme-lang-12.3.5-4 x)
 
 ;; Example from Chez Scheme User's Guide by Kent Dybvig:
@@ -301,10 +310,10 @@
   (lambda (x)
     (syntax-case x ()
       ((k e ...)
-       (with-syntax ((break (datum->syntax-object (syntax k) 'break)))
-          (syntax (call-with-current-continuation
-                    (lambda (break)
-                      (let f () e ... (f))))))))))
+       (with-syntax ((break (datum->syntax #'k 'break)))
+                    #'(call-with-current-continuation
+                       (lambda (break)
+                         (let f () e ... (f)))))))))
 (test '(a a a) 'test-loop-macro
       (let ((n 3) (ls '()))
 	(loop
@@ -399,6 +408,12 @@
 (test '(a "X1" "X2" "Y1" "Y2" b) 'unquote-2
       (quasiquote (a (unquote-splicing  x y) b)))
 
+;; Savannah bug #39501 "invalid use of unquote-splicing"
+(define-macro (a-39501)
+  `(define-macro (b-39501 . x) `(+ 1 ,@x)))
+(a-39501)
+(test 7 'savannah-39501 (b-39501 1 2 3))
+
 (begin ;; Test that we can define and use a syntax-case macro in same module.
   (define-syntax local-defmac-or
     (lambda (x)
@@ -413,40 +428,55 @@
 (test '(2 1) 'srfi-72-example-1
       (let-syntax ((main (lambda (form)
 			   (define (make-swap x y)
-			     (quasisyntax 
-			      (let ((t ,x))
-				(set! ,x ,y)
-				(set! ,y t))))
-			   (quasisyntax
-			    (let ((s 1)
-				  (t 2))
-			      ,(make-swap (syntax s) (syntax t))
-			      (list s t))))))
+			     #`(let ((t #,x))
+                                 (set! #,x #,y)
+                                 (set! #,y t)))
+			   #`(let ((s 1)
+                                   (t 2))
+                               #,(make-swap #'s #'t)
+                               (list s t)))))
 	(main)))
 
 (test '(1 2) 'srfi-72-example-2
       (let ((x 1))
 	(let-syntax ((m (lambda (form)
 			  (let ((x 2))
-			    (quasisyntax (list x ,x))))))
+			    #`(list x #,x)))))
 	  (m))))
 
 (test '(1 3) 'srfi-72-example-3
       (let ((x 1))
 	(let-syntax ((m (lambda (form)
 			  (let ((x (car '(3))))
-			    (quasisyntax (list x ,x))))))
-	  (m))))
+                            #`(list x #,x)))))
+          (m))))
+
+;; From R6RS, except [...] replaced by (...), and
+;; using letrec-syntax instead of nested define-syntax.
+(test '(#t #f)
+      'free-identifier-1
+      (let ((fred 17))
+        (letrec-syntax
+            ((a (lambda (x)
+                  (syntax-case x ()
+                    ((_ id) #'(b id fred)))))
+             (b (lambda (x)
+                  (syntax-case x ()
+                    ((_ id1 id2)
+                     #`(list
+                           #,(free-identifier=? #'id1 #'id2)
+                           #,(bound-identifier=? #'id1 #'id2)))))))
+          (a fred))))
 
 (begin
   ;; Note we need to compile define and define-for-syntax
-  ;; in the same comilation unit for it to make sense.
+  ;; in the same compilation unit for it to make sense.
   (define x-72-x3 1)
   (define-for-syntax x-72-x3 2)
   (test '(1 2) 'srfi-72-example-4
 	(let-syntax ((m (lambda (form)
-			  (quasisyntax (list x-72-x3 ,x-72-x3)))))
-	  (m))))
+			  #`(list x-72-x3 #,x-72-x3))))
+          (m))))
 
 ;; Based on Savannah bug #17984 Chris Wegrzyn <chris.wegrzyn@gmail.com>
 ;; Compile time error in expansion of hygienic macros ending in literals
@@ -468,7 +498,7 @@
        #`(define-simple-class cl ()
            (arg type: argtype))))))
 (aa MyClass myparam <String>)
-(define aa-instance (MyClass myparam: "sarg"))
+(define aa-instance ::MyClass (MyClass myparam: "sarg"))
 (test (as <String> "sarg") 'savannah-bug-18504 aa-instance:myparam)
 
 ;; Savannah bug #18105: Chris Wegrzyn <chris.wegrzyn@gmail.com>
@@ -497,8 +527,7 @@
          (syntax-case stx ()
            ((_ sym . args)
             (let ((new-sym (alter-syntax-datum proc (syntax sym))))
-              ;; must use #, in PLT
-              #`(,new-sym . args)))))))))
+              #`(#,new-sym . args)))))))))
 (define-symbol-altering-macro (call-reversename sym)
   (string->symbol
    (list->string
@@ -596,3 +625,204 @@
 		      x))
 	       (x2 x))
 	  (list x0 x1 x2))))
+
+(test '(2 1) 'r7rs-test1
+      (let ((x 1) (y 2))
+        (define-syntax swap!
+          (syntax-rules ()
+            ((swap! a b)
+             (let ((tmp a))
+               (set! a b)
+               (set! b tmp)))))
+        (swap! x y)
+        (list x y)))
+
+(define-syntax r7rs-rec1
+  (lambda (x)
+    (syntax-case x ()
+      ((_ x e)
+       (identifier? #'x)
+       #'(letrec ((x e)) x))
+      ((_ x e)
+       "not an identifier"))))
+(test '(1 2 6 24 120) 'r7rs-rec1
+      (map (r7rs-rec1 fact
+                      (lambda (n)
+                        (if (= n 0)                 
+                            1
+                            (* n (fact (- n 1))))))
+           '(1 2 3 4 5)))
+(test "not an identifier" 'r7rs-rec2
+      (r7rs-rec1 5 (lambda (x) x))  )
+
+(test '(#t #f) 'free-identifier-1
+      (let ((fred 17))
+        (define-syntax a
+          (lambda (x)
+            (syntax-case x ()
+              ((_ id) #'(b id fred)))))
+        (define-syntax b
+          (lambda (x)
+            (syntax-case x ()
+              ((_ id1 id2)
+               #`(list
+                  #,(free-identifier=? #'id1 #'id2)
+                  #,(bound-identifier=? #'id1 #'id2))))))
+        (a fred)))
+(test '(#t #f) 'free-identifier-2
+      (let ((fred 17))
+        (letrec-syntax
+            ((a
+              (lambda (x)
+                (syntax-case x ()
+                  ((_ id) #'(b id fred)))))
+             (b
+              (lambda (x)
+                (syntax-case x ()
+                  ((_ id1 id2)
+                   #`(list
+                           #,(free-identifier=? #'id1 #'id2)
+                           #,(bound-identifier=? #'id1 #'id2)))))))
+          (a fred))))
+
+(define-syntax my-let
+  (lambda (x)
+    (define unique-ids?
+      (lambda (ls)
+        (or (null? ls)
+            (and (let notmem? ((x (car ls)) (ls (cdr ls)))
+                   (or (null? ls)
+                       (and (not (bound-identifier=? x (car ls)))
+                            (notmem? x (cdr ls)))))
+                 (unique-ids? (cdr ls))))))
+    (syntax-case x ()
+      ((_ ((i v) ...) e1 e2 ...)
+       (unique-ids? #'(i ...))
+       #'((lambda (i ...) e1 e2 ...) v ...))
+      ((_ . rest)
+       "syntax error"))))
+
+(test "syntax error" 'bound-identifier-1
+      (my-let ((a 3) (a 4)) (+ a a)))
+(test 7 'bound-identifier-2
+      (my-let ((a 3) (b 4)) (+ a b)))
+(test 7 'bound-identifier-3
+      (let-syntax
+          ((dolet (lambda (x)
+                    (syntax-case x ()
+                      ((_ b)
+                       #'(my-let ((a 3) (b 4)) (+ a b)))))))
+        (dolet a)))
+;; For comparison, check with builtin let.
+(test 7 'bound-identifier-4
+      (let-syntax
+          ((dolet (lambda (x)
+                    (syntax-case x ()
+                      ((_ b)
+                       #'(let ((a 3) (b 4)) (+ a b)))))))
+        (dolet a)))
+;; Savannah bug #35552: bound-identifier=?
+;; Note the SRFI-72 specifies the result #f, but MzScheme/Racket
+;; and Chez Scheme both return #t.
+(test #t 'bound-identifier-5
+      (bound-identifier=? #'+ #'+))
+
+(define-syntax my-case
+  (lambda (x)
+    (syntax-case x ()
+      ((_ e0 ((k ...) e1 e2 ...) ...
+          (else-key else-e1 else-e2 ...))
+       (and (identifier? #'else-key)
+            (free-identifier=? #'else-key #'else))
+       #'(let ((t e0))
+           (cond
+            ((memv t '(k ...)) e1 e2 ...)
+            ...
+            (else else-e1 else-e2 ...))))
+      ((_ e0 ((ka ...) e1a e2a ...)
+          ((kb ...) e1b e2b ...) ...)
+       #'(let ((t e0))
+           (cond
+            ((memv t '(ka ...)) e1a e2a ...)
+            ((memv t '(kb ...)) e1b e2b ...)
+            ...)))
+      ((_ . rest)
+       "syntax error"))))
+
+(test "syntax error" 'my-case-1
+      (let ((else #f))
+        (my-case 0 (else (list "oops")))))
+(test '("oops") 'my-case-2
+      (let ((xy #f))
+        (my-case 0 (else (list "oops")))))
+
+;; Savannah bug report #35526, simplified version
+(define-syntax foo-35526a
+   (syntax-rules ()
+     ((foo-35526a bar-id stuff ...)
+      (let ((f (lambda () "+bar+")))
+        (let-syntax ((bar-id (syntax-rules ()
+                               ((bar-id) (f)))))
+          (list stuff ...))))))
+(define (baz-35526a)
+  (foo-35526a bar (bar) (bar)))
+(test '("+bar+" "+bar+") 'savannah-35526a (baz-35526a))
+
+;; Savannah bug report #35526, original version
+(define-syntax (foo-35526b form)
+  (syntax-case form ()
+    ((foo-id stuff ...)
+     (with-syntax ((bar-id (datum->syntax (syntax foo-id) 'bar)))
+                  (syntax
+                   (let ((f (lambda () 'bar2)))
+                     (let-syntax ((bar-id (syntax-rules ()
+                                            ((bar-id) (f)))))
+                       (list stuff ...))))))))
+(define (baz-35526b)
+  (foo-35526b (bar) (bar)))
+(test '(bar2 bar2) 'savannah-35526b (baz-35526b))
+
+;; #35555: Tail-call in syntax-case
+(define (foo-35555 forms)
+  (syntax-case forms ()
+    (((x . y)  . rest)
+     (foo-35555 #'rest))
+    (() #t)
+    (_ #f)))
+(define-syntax bar-35555
+  (lambda (forms)
+    (foo-35555 (cdr forms))))
+(test #t 'bar-35555-1 (bar-35555 (a b) (c d)))
+(test #t 'bar-35555-2 (bar-35555))
+(test #f 'bar-35555-3 (foo-35555 123))
+
+;; Savannah bug report #39946 "NullPointerException when using syntax->datum"
+(test '(+ 1 2) 'savannah-39946 (syntax->datum (syntax (+ 1 2))))
+
+;; This example is in the Kawa internals documentation.
+(define-syntax mac1
+  (syntax-rules ()
+    ((mac1-nest v1 init exp)
+     (let ((v1 init))
+       (let ((i 2))
+         (list exp i))))))
+(define j 10)
+(test '(11 2) 'test-mac1 (mac1 i 1 (+ i j)))
+
+;; Savannah bug report #40616 "Unhygienic syntax-rules"
+(define-syntax def-a
+  (syntax-rules ()
+    ((_) (define a 'wrong))))
+(test 'correct 'savannah-40616
+      (let ((a 'correct)) (def-a) a))
+
+(begin
+  (define xlist '())
+  (define-syntax def-b
+    (syntax-rules ()
+      ((_ val)
+       (begin (define a val)
+              (set! xlist (cons a xlist))))))
+  (def-b 12)
+  (def-b 42)
+  (test '(42 12) 'savannah-40616-2 xlist))

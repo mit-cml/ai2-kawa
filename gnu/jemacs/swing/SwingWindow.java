@@ -120,7 +120,8 @@ implements java.awt.event.FocusListener,
   public void setSelected()
   {
     super.setSelected();
-    select(jtextpane.getCaret());
+    if (jtextpane != null)
+      select(jtextpane.getCaret());
   }
 
   public int getPoint()
@@ -296,7 +297,6 @@ implements java.awt.event.FocusListener,
 
   public void activateRegion ()
   {
-    System.err.println("(activateRegions)");
     Caret caret = jtextpane.getCaret();
     caret.setDot(buffer.markMarker.getOffset());
     caret.moveDot(buffer.getDot());
@@ -328,7 +328,7 @@ implements java.awt.event.FocusListener,
 
   public int getHeight ()
   {
-    return jtextpane.getWidth();
+    return jtextpane.getHeight();
   }
 
   public void keyTyped(KeyEvent e)

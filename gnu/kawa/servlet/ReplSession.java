@@ -1,7 +1,11 @@
 package gnu.kawa.servlet;
-import gnu.text.*;
 import gnu.mapping.*;
 import gnu.expr.*;
+import gnu.kawa.io.InPort;
+import gnu.kawa.io.QueueReader;
+import gnu.kawa.io.OutPort;
+import gnu.kawa.io.Path;
+import gnu.kawa.io.TtyInPort;
 import gnu.lists.PrintConsumer;
 import java.io.*;
 import gnu.xml.*;
@@ -89,7 +93,7 @@ public class ReplSession extends Writer
               {
                 wait(30000);
               }
-            catch (Throwable ex)
+            catch (Exception ex)
               {
                 ex.printStackTrace();
               }

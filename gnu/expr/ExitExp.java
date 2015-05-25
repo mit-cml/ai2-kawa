@@ -3,7 +3,8 @@
 
 package gnu.expr;
 import gnu.bytecode.*;
-import gnu.mapping.*;
+import gnu.kawa.io.OutPort;
+import gnu.mapping.CallContext;
 
 /**
  * Expression to exit a lexically surrounding block.
@@ -68,10 +69,13 @@ public class ExitExp extends Expression
   {
     out.startLogicalBlock("(Exit", false, ")");
     out.writeSpaceFill();
-    if (block == null || block.label == null)
+    if (block != null)
+      {
+        out.print("Block#");
+        out.print(block.id);
+      }
+    else if (block == null)
       out.print("<unknown>");
-    else
-      out.print(block.label.getName());
     if (result != null)
       {
 	out.writeSpaceLinear();
@@ -80,7 +84,7 @@ public class ExitExp extends Expression
     out.endLogicalBlock(")");
   }
 
-  public Type getType()
+  protected Type calculateType()
   {
     return Type.neverReturnsType;
   }

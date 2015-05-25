@@ -3,10 +3,20 @@ package kawa;
 import gnu.mapping.*;
 import gnu.expr.*;
 import java.io.*;
-import gnu.text.*;
 import gnu.lists.*;
 import gnu.bytecode.ArrayClassLoader;
 import gnu.bytecode.ZipLoader;
+import gnu.kawa.io.BinaryInPort;
+import gnu.kawa.io.FilePath;
+import gnu.kawa.io.InPort;
+import gnu.kawa.io.NBufferedInputStream;
+import gnu.kawa.io.OutPort;
+import gnu.kawa.io.Path;
+import gnu.kawa.io.TtyInPort;
+import gnu.kawa.util.ExitCalled;
+import gnu.text.Lexer;
+import gnu.text.SourceMessages;
+import gnu.text.SyntaxException;
 import java.net.URL;
 
 /** Utility functions (static methods) for kawa.repl.
@@ -25,9 +35,8 @@ public class Shell
   private static Class[] noClasses = { };
   private static  Class[] boolClasses = { Boolean.TYPE };
   private static  Class[] xmlPrinterClasses
-    = {gnu.mapping.OutPort.class,  java.lang.Object.class };
-  private static  Class[] httpPrinterClasses
-    = {gnu.mapping.OutPort.class };
+    = {OutPort.class, Object.class };
+  private static  Class[] httpPrinterClasses = {OutPort.class };
   private static Object portArg = "(port)";
 
   /** A table of names of known output formats.
@@ -150,7 +159,7 @@ public class Shell
 	else
 	  return (Consumer) format;
       }
-    catch (Throwable ex)
+    catch (Exception ex)
       {
 	throw new RuntimeException("cannot get output-format '"
 				   + defaultFormatName + "' - caught " + ex);
@@ -242,11 +251,12 @@ public class Shell
       {
         // Nothing - we'll just lose some minor functionality.
       }
+    Environment saveEnv = Environment.setSaveCurrent(env);
     try
       {
 	for (;;)
 	  {
-	    int opts = Language.PARSE_FOR_EVAL|Language.PARSE_ONE_LINE;
+	    int opts = Language.PARSE_FOR_EVAL|Language.PARSE_ONE_LINE|Language.PARSE_INTERACTIVE_MODULE;
 	    try
 	      {
 		Compilation comp = language.parse(lexer, opts, null);
@@ -259,10 +269,10 @@ public class Shell
                   sawError = false;
 		if (comp == null) // ??? end-of-file
 		  break;
-		if (sawError)
-		  continue;
-		comp.getModule().setName("atInteractiveLevel$"
-					 + (++ModuleExp.interactiveCounter));
+		if (sawError) {
+                    comp.lexical.pop(comp.mainLambda);
+                    continue;
+                }
 
 		// Skip whitespace, in case (read-char) or similar is called:
 		int ch;
@@ -279,13 +289,17 @@ public class Shell
 		  }
 
 		if (! ModuleExp.evalModule(env, ctx, comp, url, perr))
-		  continue;
+		  throw new SyntaxException(messages);
                 if (out instanceof Writer)
                   ((Writer) out).flush();
 		if (ch < 0)
 		  break;
 	      }
-	    catch (Throwable e)
+            catch (Error e)
+              {
+                throw e;
+              }
+            catch (Throwable e)
 	      {
 		if (! interactive)
 		  return e;
@@ -295,6 +309,7 @@ public class Shell
       }
     finally
       {
+        Environment.restoreCurrent(saveEnv);
 	if (out != null)
 	  ctx.consumer = saveConsumer;
         Language.restoreCurrent(saveLanguage);
@@ -312,12 +327,6 @@ public class Shell
         if (e.usage != null)
           perr.println("usage: "+e.usage);
         e.printStackTrace(perr);
-      }
-    else if (ex instanceof ClassCastException)
-      {
-        messages.printAll(perr, 20);
-        perr.println("Invalid parameter, was: "+ ex.getMessage());
-        ex.printStackTrace(perr);
       }
     /*
     else if (ex instanceof java.io.IOException)
@@ -391,6 +400,16 @@ public class Shell
       }
   }
 
+    static InPort openFile(InputStream fs, Path path) throws IOException {
+        Object conv = Environment.user().get("port-char-encoding");
+        InPort src;
+        if (conv == null || conv == Boolean.TRUE)
+            return BinaryInPort.openHeuristicFile(fs, path);
+        else
+            return InPort.openFile(fs, path, conv);
+    }
+
+
   /** Run a named source file, compiled .zip, or class.
    * We try in order if {@code fname} names a compiled zip file,
    * or names some other file (in which case it is assumed to be source),
@@ -427,11 +446,19 @@ public class Shell
             Environment env = Environment.getCurrent();
             return runFile(fs, path, env, lineByLine, skipLines);
           }
+        catch (Error e)
+          {
+            throw e;
+          }
         catch (Throwable e)
           {
             e.printStackTrace(System.err);
             return false;
           }
+      }
+    catch (Error e)
+      {
+        throw e;
       }
     catch (Throwable e)
       {
@@ -440,96 +467,115 @@ public class Shell
           {
             clas = Class.forName(fname);
           }
-        catch (Throwable ex)
+        catch (Exception ex)
           {
             System.err.println("Cannot read file "+e.getMessage());
             return false;
           }
         try
           {
-            CompiledModule cmodule = CompiledModule.make(clas, language);
-            cmodule.evalModule(Environment.getCurrent(), OutPort.outDefault());
+            runClass(clas, Environment.getCurrent());
             return true;
+          }
+        catch (Error ex)
+          {
+            throw ex;
           }
         catch (Throwable ex)
           {
+              //ExitCalled.check(e);
             ex.printStackTrace();
             return false;
           }
       }
   }
 
+    public static void runClass(Class clas, Environment env) throws Throwable {
+        CompiledModule cmodule = CompiledModule.make(clas, Language.getDefaultLanguage());
+        cmodule.evalModule(env, OutPort.outDefault());
+    }
 
-  public static final boolean runFile(InputStream fs, Path path,
-                                      Environment env,
-                                      boolean lineByLine, int skipLines)
-    throws Throwable
-  {
-    if (! (fs instanceof BufferedInputStream))
-      fs = new BufferedInputStream(fs);
-    Language language = Language.getDefaultLanguage();
-    Path savePath = (Path) currentLoadPath.get();
-    try
-      {
-        currentLoadPath.set(path);
-        CompiledModule cmodule = checkCompiledZip(fs, path, env, language);
-        if (cmodule == null)
-          {
-            InPort src = InPort.openFile(fs, path);
-            while (--skipLines >= 0)
-              src.skipRestOfLine();
-            try
-              {
-                SourceMessages messages = new SourceMessages();
-                URL url = path.toURL();
-                if (lineByLine)
-                  {
-                    boolean print = ModuleBody.getMainPrintValues();
-                    Consumer out = (print ? getOutputConsumer(OutPort.outDefault())
-                                    : new VoidConsumer());
-                    Throwable ex
-                      = run(language, env, src, out, null, url, messages);
-                    if (ex != null)
-                      throw ex;
-                  }
-                else
-                  {
-                    cmodule = compileSource (src, env, url, language, messages);
-                    messages.printAll(OutPort.errDefault(), 20);
-                    if (cmodule == null)
-                      return false;
-                  }
-              }
-            finally
-              {
-                src.close();
-              }
-          }
-        if (cmodule != null)
-          cmodule.evalModule(env, OutPort.outDefault());
-      }
-    finally
-      {
-        currentLoadPath.set(savePath);
-      }
-    return true;
-  }
+    public static final boolean runFile(InputStream fs, Path path,
+                                        Environment env,
+                                        boolean lineByLine, int skipLines)
+            throws Throwable {
+        if (! (fs instanceof BufferedInputStream)
+            && ! (fs instanceof NBufferedInputStream))
+            fs = new NBufferedInputStream(fs);
+        Language language = Language.getDefaultLanguage();
+        Path savePath = (Path) currentLoadPath.get();
+        try {
+            currentLoadPath.set(path);
+            CompiledModule cmodule = checkCompiledZip(fs, path, env, language);
+            if (cmodule == null) {
+                InPort src = openFile(fs, path);
+                while (--skipLines >= 0)
+                    src.skipRestOfLine();
+                try {
+                    SourceMessages messages = new SourceMessages();
+                    URL url = path.toURL();
+                    OutPort perr = OutPort.errDefault();
+                    if (lineByLine) {
+                        boolean print = ModuleBody.getMainPrintValues();
+                        Consumer out
+                            = (print ? getOutputConsumer(OutPort.outDefault())
+                               : new VoidConsumer());
+                        Throwable ex
+                            = run(language, env, src, out, perr, url, messages);
+                        if (ex != null)
+                            throw ex;
+                    } else {
+                        cmodule = compileSource(src, env, url, language,
+                                                messages, perr);
+                        if (cmodule == null)
+                            return false;
+                    }
+                } finally {
+                    src.close();
+                }
+            }
+            if (cmodule != null)
+                cmodule.evalModule(env, OutPort.outDefault());
+        } finally {
+            currentLoadPath.set(savePath);
+        }
+        return true;
+    }
 
-  /** Parse and compile a module from the given port.
-   * Return null on error, which gets reported to {@code messages}.
-   */
-  static CompiledModule compileSource (InPort port, Environment env, URL url, Language language, SourceMessages messages)
-    throws SyntaxException, IOException
-  {
-    ModuleManager manager = ModuleManager.getInstance();
-    ModuleInfo minfo = manager.findWithSourcePath(port.getName());
-    Compilation comp
-      = language.parse(port, messages, Language.PARSE_IMMEDIATE, minfo);
-    CallContext ctx = CallContext.getInstance();
-    ctx.values = Values.noArgs;
-    Object inst = ModuleExp.evalModule1(env, comp, url, null);
-    if (inst == null || messages.seenErrors())
-      return null;
-    return new CompiledModule(comp.getModule(), inst, language);
-  }
+    /** Parse and compile a module from the given port.
+     * Return null on error, which gets reported to {@code messages}.
+     */
+    static CompiledModule compileSource(InPort port, Environment env, URL url,
+                                        Language language,
+                                        SourceMessages messages, OutPort perr)
+            throws SyntaxException, IOException {
+        ModuleManager manager = ModuleManager.getInstance();
+        ModuleInfo minfo = manager.findWithSourcePath(port.getName());
+        Lexer lexer = language.getLexer(port, messages);
+        try {
+            Compilation comp
+                = language.parse(lexer, Language.PARSE_IMMEDIATE, minfo);
+            CallContext ctx = CallContext.getInstance();
+            ctx.values = Values.noArgs;
+            Object inst = ModuleExp.evalModule1(env, comp, url, null);
+            messages.printAll(perr, 20);
+            if (inst == null || messages.seenErrors())
+                return null;
+            return new CompiledModule(comp.getModule(), inst, language);
+        }
+        catch (Error ex) {
+            throw ex;
+        }
+        catch (Throwable ex) {
+            if (! (ex instanceof SyntaxException)
+                || ((SyntaxException) ex).getMessages() != messages) {
+                lexer.error('e', "unexpected exception while compiling: "+ex);
+                messages.printAll(perr, 20);
+                ex.printStackTrace(perr);
+            }
+            else
+                messages.printAll(perr, 20);
+            return null;
+        }
+    }
 }

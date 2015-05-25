@@ -1,3 +1,83 @@
+2014-08-28  Per Bothner  <per@bothner.com>
+
+	* CompileMisc.java validateApplyValuesFilter): Fix two errors
+	in setting expression type.
+
+2014-07-02  Per Bothner  <per@bothner.com>
+
+	* CastAs.java: Update for changes to super-type.
+
+2014-02-16  Per Bothner  <per@bothner.com>
+
+	* CompileMisc.java: Make sure Error is uncaught or re-thrown.
+	* Debug.java: Likewise.
+	* NodeUtils.java: Likewise.
+	* NumberValue.java: Likewise.
+	* SequenceUtils.java: Likewise.
+
+2013-11-28  Matthieu Vachon <matthieu.o.vachon@gmail.com>
+
+	* DistinctValues.java, RelativeStepFilter.java: Don't use @Override
+	for a method implementing an interface - Java 5 doesn't like it.
+
+2013-11-03  Per Bothner  <per@bothner.com>
+
+	* CastAs.java (apply2): Update for new Values API.
+	* CompileMisc.java (validateApplyValuesFilter): Update size
+	method no longer in Nodes class.
+	* OrderedTuples.java (ignoring): New method.
+
+	* SequenceUtils.java (subList$C): Re-write to not depend on
+	TreeList internals.
+
+2013-11-02  Per Bothner  <per@bothner.com>
+
+	Reduce dependences on the implementation of the Values class.
+	* Average.java: Remove needlessly-precise downcast.
+	* MinMax.java: Likewise.
+	* Reduce.java: Likewise.
+	* BooleanValue.java: Use generic AbstractSequence position API.
+	* Compare.java: Likewise.
+
+2013-11-01  Per Bothner  <per@bothner.com>
+
+	* DistinctValues.java (consume): Rename to writePosition.
+	* RelativeStepFilter.java: Likewise.
+
+2012-07-15  Per Bothner  <per@bothner.com>
+
+	* Makefile.am (SCM_COMPILE_FLAGS): New macro.
+
+	* IntegerRange.java: No longer extend MethodProc.
+	(apply): Remove method.
+	(integerRange$X): New static method.
+	* Xutils.scm (integerRange): New function, uses integerRange$X.
+
+2012-07-14  Per Bothner  <per@bothner.com>
+
+	* SubList.java: Class removed.
+	(subList): Moved to SequenceUtils.
+	* SequenceUtils.java (subList$X, subList$C): New methods.
+	* Makefile.am: Update accordingly.
+	* Xutils.scm (sublist): New function.
+
+2012-07-10  Per Bothner  <per@bothner.com>
+
+	* Xutils.scm: Moved from gnu/kawa/slib.
+	* Makefile.am: Update accordingly.
+	* Xutils.scm (every-or-some-values, every, some): New functions.
+	* ValuesEvery.java: Removed class.
+
+2012-03-20  Per Bothner  <per@bothner.com>
+
+	* CompileMisc.java: Add needed setCanRead calls.
+
+2011-03-23  Per Bothner  <per@bothner.com>
+
+	* CompileMisc.java (validateApplyValuesFilter): Use letStart/letVariable
+	etc methods instead of creating LetExp directly.
+	(validateApplyRelativeStep): Likewise.
+
 2010-09-16  Per Bothner  <per@bothner.com>
 
 	* CompileMisc.java: Update validateApply methods, which no longer

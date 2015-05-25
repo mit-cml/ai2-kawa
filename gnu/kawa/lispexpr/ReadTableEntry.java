@@ -12,13 +12,16 @@ public abstract class ReadTableEntry
   public static final ReadTableEntry whitespace
     = new ReaderMisc(ReadTable.WHITESPACE);
   public static final ReadTableEntry singleEscape
-    = new ReaderMisc(ReadTable.SINGLE_ESCAPE);
+    = new ReaderConstituent(ReadTable.SINGLE_ESCAPE);
   public static final ReadTableEntry multipleEscape
-    = new ReaderMisc(ReadTable.MULTIPLE_ESCAPE);
+    = new ReaderConstituent(ReadTable.MULTIPLE_ESCAPE);
   public static final ReadTableEntry constituent
-    = new ReaderMisc(ReadTable.CONSTITUENT);
+    = new ReaderConstituent(ReadTable.CONSTITUENT);
   public static final ReadTableEntry brace // special handling for '{' and '}'
-    = new ReaderMisc(ReadTable.CONSTITUENT);
+    = new ReaderConstituent(ReadTable.CONSTITUENT);
+    /** Special handling of {code '&'} for SRFI-108/109. */
+    public static final ReadTableEntry ampersand
+        = new ReaderExtendedLiteral();
 
   public static ReadTableEntry getIllegalInstance()
   { return illegal; }
@@ -38,10 +41,13 @@ public abstract class ReadTableEntry
     return ReadTable.TERMINATING_MACRO;
   }
 
-  public Object read (Lexer in, int ch, int count)
-    throws java.io.IOException, SyntaxException
-  {
-    throw new Error("invalid character");
-  }
+    protected Object read (Lexer in, int ch, int count)
+        throws java.io.IOException, SyntaxException {
+        throw new Error("invalid character");
+    }
 
+    public Object read (Lexer in, int ch, int count, int sharingIndex)
+	throws java.io.IOException, SyntaxException {
+	return ((LispReader) in).bindSharedObject(sharingIndex, read(in, ch, count));
+    }
 }

@@ -108,11 +108,10 @@ public class F32Vector extends SimpleVector
     data[index] = value;
   }
 
-  public final Object setBuffer(int index, Object value)
+  @Override
+  public final void setBuffer(int index, Object value)
   {
-    Object old = Convert.toObject(data[index]);
     data[index] = Convert.toFloat(value);
-    return old;
   }
 
   protected void clearBuffer(int start, int count)
@@ -128,16 +127,7 @@ public class F32Vector extends SimpleVector
 
   public String getTag() { return "f32"; }
 
-  public boolean consumeNext (int ipos, Consumer out)
-  {
-    int index = ipos >>> 1;
-    if (index >= size)
-      return false;
-    out.writeFloat(data[index]);
-    return true;
-  }
-
-    public void consumePosRange (int iposStart, int iposEnd, Consumer out)
+  public void consumePosRange (int iposStart, int iposEnd, Consumer out)
   {
     if (out.ignoring())
       return;

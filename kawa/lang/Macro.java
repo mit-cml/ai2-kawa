@@ -11,7 +11,20 @@ public class Macro extends Syntax implements Printable, Externalizable
 
   Object instance;
 
-  private boolean hygienic = true;
+  public static final int HYGIENIC = 1;
+  /** If this flag is set, then don't expand during the scan-body phase. */
+  public static final int SKIP_SCAN_FORM = 2;
+  private int flags = HYGIENIC;
+
+  public final void setFlags(int flags) { this.flags = flags; }
+  public final boolean isHygienic() { return (flags & HYGIENIC) != 0; }
+  public final void setHygienic (boolean hygienic)
+  {
+    if (hygienic)
+      flags |= HYGIENIC;
+    else
+      flags &= ~HYGIENIC;
+  }
 
   private ScopeExp capturedScope;
 
@@ -43,7 +56,7 @@ public class Macro extends Syntax implements Printable, Externalizable
   public static Macro makeNonHygienic (Object name, Procedure expander)
   {
     Macro mac = new Macro(name, expander);
-    mac.hygienic = false;
+    mac.setHygienic(false);
     return mac;
   }
 
@@ -51,7 +64,16 @@ public class Macro extends Syntax implements Printable, Externalizable
 				       Object instance)
   {
     Macro mac = new Macro(name, expander);
-    mac.hygienic = false;
+    mac.setHygienic(false);
+    mac.instance = instance;
+    return mac;
+  }
+
+  public static Macro makeSkipScanForm (Object name, Procedure expander,
+				       Object instance)
+  {
+    Macro mac = new Macro(name, expander);
+    mac.flags = HYGIENIC|SKIP_SCAN_FORM;
     mac.instance = instance;
     return mac;
   }
@@ -69,9 +91,6 @@ public class Macro extends Syntax implements Printable, Externalizable
     return mac;
   }
 
-  public final boolean isHygienic() { return hygienic; }
-  public final void setHygienic (boolean hygienic) {this.hygienic = hygienic;}
-
   public Macro ()
   {
   }
@@ -81,13 +100,14 @@ public class Macro extends Syntax implements Printable, Externalizable
   {
     name = old.name;
     expander = old.expander;
-    hygienic = old.hygienic;
+    flags = old.flags;
   }
 
   public Macro(Object name, Procedure expander)
   {
     super(name);
-    this.expander = new QuoteExp(expander);
+    this.expander = expander instanceof Expression ? expander
+        : new QuoteExp(expander);
   }
 
   public Macro(Object name)
@@ -95,16 +115,9 @@ public class Macro extends Syntax implements Printable, Externalizable
     super(name);
   }
 
-  /* FIXME redundant */
-  public gnu.expr.Expression rewriteForm (Pair form, Translator tr)
-  {
-    return tr.rewrite(expand(form, tr));
-  }
-
-  public gnu.expr.Expression rewriteForm (Object form, Translator tr)
-  {
-    return tr.rewrite(expand(form, tr));
-  }
+    public gnu.expr.Expression rewriteForm(Pair form, Translator tr) {
+        return tr.rewrite(expand(form, tr), 'N');
+    }
 
   public String toString()
   {
@@ -120,6 +133,8 @@ public class Macro extends Syntax implements Printable, Externalizable
 
   public Object expand (Object form, Translator tr)
   {
+    Object savedMacroMark = tr.currentMacroMark;
+    tr.currentMacroMark = new Object();
     try
       {
 	Procedure pr;
@@ -147,7 +162,7 @@ public class Macro extends Syntax implements Printable, Externalizable
               {
                 System.err.println("expand "+this+" expander:"+exp);
                 System.err.flush();
-                OutPort dout = OutPort.errDefault();
+                gnu.kawa.io.OutPort dout = gnu.kawa.io.OutPort.errDefault();
 		dout.flush();
                 ((Expression) exp).print(dout);
                 dout.println(']');
@@ -158,7 +173,7 @@ public class Macro extends Syntax implements Printable, Externalizable
 	      ((Expression) exp).eval(tr.getGlobalEnvironment());
 	  }
 	Object result;
-	if (! hygienic)
+	if (! isHygienic())
 	  {
 	    form = Quote.quote(form, tr);
 	    int nargs = Translator.listLength(form);
@@ -190,10 +205,19 @@ public class Macro extends Syntax implements Printable, Externalizable
         return tr.syntaxError("evaluating syntax transformer '"
                               + getName() + "' threw " + ex);
       }
+    finally
+      {
+        tr.currentMacroMark = savedMacroMark;
+      }
   }
 
   public void scanForm (Pair st, ScopeExp defs, Translator tr)
   {
+    if ((flags & SKIP_SCAN_FORM) != 0)
+      {
+        super.scanForm(st, defs, tr);
+        return;
+      }
     String save_filename = tr.getFileName();
     int save_line = tr.getLineNumber();
     int save_column = tr.getColumnNumber();

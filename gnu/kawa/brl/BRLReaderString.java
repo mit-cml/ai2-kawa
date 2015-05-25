@@ -5,7 +5,7 @@ package gnu.kawa.brl;
 // See the file COPYING for license terms.
 
 import gnu.text.*;
-import gnu.mapping.InPort;
+import gnu.kawa.io.InPort;
 import gnu.lists.*;
 
 public class BRLReaderString extends gnu.kawa.lispexpr.ReadTableEntry
@@ -14,7 +14,7 @@ public class BRLReaderString extends gnu.kawa.lispexpr.ReadTableEntry
       throws java.io.IOException
   {
 	int startPos = in.tokenBufferLength;
-	LineBufferedReader port = in.getPort();
+	InPort port = in.getPort();
 	char saveReadState = '\0';
 	int c = ch;
 	int prev;

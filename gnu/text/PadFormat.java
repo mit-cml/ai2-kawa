@@ -29,8 +29,7 @@ public class PadFormat extends ReportFormat
     this(fmt, minWidth, ' ', 100);
   }
 
-  public int format(Object[] args, int start,
-		    Writer dst, FieldPosition fpos)
+  public int format(Object[] args, int start, Appendable dst, FieldPosition fpos)
     throws java.io.IOException
   {
     return format(fmt, args, start, dst, padChar, minWidth, 1, 0, where, fpos);
@@ -47,9 +46,7 @@ public class PadFormat extends ReportFormat
     return total - actualWidth;
   }
 
-  public static int format(Format fmt, Object[] args, int start, Writer dst,
-			   char padChar, int minWidth, int colInc, int minPad,
-			   int where, FieldPosition fpos)
+  public static int format(Format fmt, Object[] args, int start, Appendable dst, char padChar, int minWidth, int colInc, int minPad, int where, FieldPosition fpos)
     throws java.io.IOException
   {
     /*
@@ -65,6 +62,8 @@ public class PadFormat extends ReportFormat
       }
     */
 
+      // FIXME: Should use a CharArrayOutPort instead of a StringBuffer;
+      // dst is already a CharArrayOutPort, re-use it.
     StringBuffer tbuf = new StringBuffer(200);
     if (fmt instanceof ReportFormat)
       start = ((ReportFormat)fmt).format(args, start, tbuf, fpos);
@@ -93,16 +92,16 @@ public class PadFormat extends ReportFormat
 		if (ch == '-' || ch == '+')
 		  {
 		    prefix++;
-		    dst.write(ch);
+		    dst.append(ch);
 		  }
 		if (len - prefix > 2 && text.charAt(prefix) == '0')
 		  {
-		    dst.write('0');
+		    dst.append('0');
 		    ch = text.charAt(++prefix);
 		    if (ch == 'x' || ch == 'X')
 		      {
 			prefix++;
-			dst.write(ch);
+			dst.append(ch);
 		      }
 		  }
 		if (prefix > 0)
@@ -121,14 +120,14 @@ public class PadFormat extends ReportFormat
 	  }
 	*/
 	while (--padBefore >= 0)
-	  dst.write(padChar);
-	dst.write(text);
+	  dst.append(padChar);
+	dst.append(text);
 	while (--padAfter >= 0)
-	  dst.write(padChar);
+	  dst.append(padChar);
       }
     else
       {
-	dst.write(text);
+	dst.append(text);
       }
     return start;
   }

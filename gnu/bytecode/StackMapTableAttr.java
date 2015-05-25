@@ -56,7 +56,7 @@ public class StackMapTableAttr extends MiscAttr
   {
     if (type == null)
       return 0; // ITEM_Top
-    else if (type instanceof UninitializedType)
+    if (type instanceof UninitializedType)
       {
         UninitializedType utype = (UninitializedType) type;
         Label label = utype.label;
@@ -65,9 +65,11 @@ public class StackMapTableAttr extends MiscAttr
         else
           return (label.position << 8) | 8; // ITEM_uninitialized
       }
+    else if (type == Type.nullType)
+      return 5; // ITEM_Null
     else
       {
-        type = type.getImplementationType();
+        type = type.getRawType();
         if (type instanceof PrimType)
           {
             switch (type.signature.charAt(0))
@@ -84,8 +86,6 @@ public class StackMapTableAttr extends MiscAttr
                 return 0; // ITEM_Top
               }
           }
-        else if (type == Type.nullType)
-          return 5; // ITEM_Null
         else // ITEM_Object
           return ((code.getConstants().addClass((ObjectType) type).index) << 8) | 7;
       }

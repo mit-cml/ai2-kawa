@@ -4,9 +4,9 @@ import gnu.lists.*;
 import java.text.Format;
 import java.text.FieldPosition;
 import java.text.ParseException;
-import java.io.Writer;
 import gnu.math.*;
-import gnu.mapping.OutPort;
+import gnu.kawa.io.OutPort;
+import gnu.kawa.io.PrettyWriter;
 
 /** A representation of a parsed Common Lisp-style format. */
 
@@ -15,6 +15,10 @@ public class LispFormat extends CompoundFormat
   public static final String paramFromList = "<from list>";
   public static final String paramFromCount = "<from count>";
   public static final String paramUnspecified = "<unspecified>";
+
+    static final DelimitSubstitutionFormat delimitSubstitutionInstance
+        = DelimitSubstitutionFormat
+        .getInstance(ObjectFormat.getInstance(false));
 
   public LispFormat(char[] format, int offset, int length)
     throws ParseException
@@ -31,9 +35,15 @@ public class LispFormat extends CompoundFormat
     int i = offset;
     for (;;)
       {
-	if ((i >= limit || format[i] == '~') && litbuf.length() > 0)
+        // Note we create a LiteralFormat even when litbuf is empty.
+        // This is to make sure there are string-valued separators between
+        // specifiers (as well as before and after).  Otherwise
+        // (format "~a~a" 3 4) would return "3 4" rather than "34".
+        if (i >= limit || format[i] == '~')
 	  {
-	    stack.push(new LiteralFormat(litbuf));
+            LiteralFormat fmt = litbuf.length() > 0 ? new LiteralFormat(litbuf)
+                : LiteralFormat.separator;
+	    stack.push(fmt);
 	    litbuf.setLength(0);
 	  }
 	if (i >= limit)
@@ -58,10 +68,10 @@ public class LispFormat extends CompoundFormat
 		stack.push(paramFromList);
 		ch = format[i++];
 	      }
-	    else if (ch == '-' || Character.digit(ch, 10) >= 0)
+	    else if (ch == '-' || ch == '+' || Character.digit(ch, 10) >= 0)
 	      {
 		boolean neg = (ch == '-');
-		if (neg)
+		if (neg || ch == '+')
 		  ch = format[i++];
 		int val = 0;
 		int start = i;
@@ -138,6 +148,7 @@ public class LispFormat extends CompoundFormat
 	  case '$':
 	    LispRealFormat dfmt = new LispRealFormat();
 	    dfmt.op = ch;
+            dfmt.style = 'L';
 	    dfmt.arg1 = getParam(stack, speci);
 	    dfmt.arg2 = getParam(stack, speci+1);
 	    dfmt.arg3 = getParam(stack, speci+2);
@@ -153,26 +164,20 @@ public class LispFormat extends CompoundFormat
 	      }
 	    dfmt.showPlus = seenAt;
 	    dfmt.internalPad = seenColon;
-	    if (dfmt.argsUsed == 0)
-	      fmt = dfmt.resolve(null, 0);
-	    else
-	      fmt = dfmt;
+            fmt = dfmt.resolve(null, 0);
 	    break;
 	  case 'A':  case 'S':  case 'W':
-	  case 'Y':  // SRFI-48 "yuppify" (pretty-print)
-	    // We don't distinguish between ~S and ~W.  FIXME.
-	    fmt = ObjectFormat.getInstance(ch != 'A');
-	    if (numParams > 0)
-	      {
-		minWidth = getParam(stack, speci);
-		int colInc = getParam(stack, speci+1);
-		int minPad = getParam(stack, speci+2);
-		padChar = getParam(stack, speci+3);
-		fmt = new LispObjectFormat((ReportFormat) fmt,
-					   minWidth, colInc, minPad,
-					   padChar, seenAt ? 0 : 100);
-	      }
-	    break;
+	  case 'Y': {// SRFI-48 "yuppify" (pretty-print)
+              // We don't distinguish between ~S and ~W.  FIXME.
+              minWidth = getParam(stack, speci);
+              int colInc = getParam(stack, speci+1);
+              int minPad = getParam(stack, speci+2);
+              padChar = getParam(stack, speci+3);
+              fmt = new LispObjectFormat(ObjectFormat.getInstance(ch != 'A'),
+                                         minWidth, colInc, minPad,
+                                         padChar, seenAt ? 0 : 100);
+              }
+              break;
 	  case 'C':
 	    charVal = numParams > 0 ? getParam(stack, speci)
 	      : PARAM_FROM_LIST;
@@ -225,7 +230,11 @@ public class LispFormat extends CompoundFormat
 	    lfmt = (LispIterationFormat) stack.elementAt(start_nesting);
 	    lfmt.atLeastOnce = seenColon;
 	    if (speci > start_nesting + 2)
-	      lfmt.body = popFormats(stack, start_nesting + 2, speci);
+              {
+                Format body = popFormats(stack, start_nesting + 2, speci);
+                if (body != LiteralFormat.separator)
+                  lfmt.body = body;
+              }
 	    start_nesting = ((IntNum) stack.pop()).intValue();
 	    continue;
 	  case '<':
@@ -421,6 +430,9 @@ public class LispFormat extends CompoundFormat
 	    fmt = LispNewlineFormat.getInstance(count,
 						PrettyWriter.NEWLINE_LITERAL);
 	    break;
+          case 'Q':
+              fmt = delimitSubstitutionInstance;
+              break;
           default:
 	    throw new ParseException("unrecognized format specifier ~"+ch, i);
           }
@@ -574,8 +586,7 @@ class LispPluralFormat extends ReportFormat
     return fmt;
   }
 
-  public int format(Object[] args, int start, 
-		    Writer dst, FieldPosition fpos) 
+  public int format(Object[] args, int start, Appendable dst, FieldPosition fpos) 
     throws java.io.IOException
   {
     if (backup)
@@ -583,9 +594,9 @@ class LispPluralFormat extends ReportFormat
     Object arg = args[start++];
     boolean plural = arg != IntNum.one();
     if (y)
-      print(dst, plural ? "ies" : "y");
+      dst.append(plural ? "ies" : "y");
     else if (plural)
-      dst.write('s');
+      dst.append('s');
     return start;
   }
 }
@@ -613,8 +624,7 @@ class LispCharacterFormat extends ReportFormat
     return fmt;
   }
 
-  public int format(Object[] args, int start, 
-		    Writer dst, FieldPosition fpos) 
+  public int format(Object[] args, int start, Appendable dst, FieldPosition fpos) 
     throws java.io.IOException
   {
     int count = getParam(this.count, 1, args, start);
@@ -627,32 +637,31 @@ class LispCharacterFormat extends ReportFormat
   }
 
   public static void printChar(int ch, boolean seenAt, boolean seenColon,
-			       Writer dst)
+			       Appendable dst)
     throws java.io.IOException
   {
     if (seenAt)
       {
-	print(dst, Char.toScmReadableString(ch));
+	dst.append(Char.toScmReadableString(ch));
       }
     else if (seenColon)
       {
 	if (ch < ' ')
 	  {
-	    dst.write('^');
-	    dst.write(ch + 0x40);
+	    dst.append('^');
+	    dst.append((char) (ch + 0x40));
 	  }
 	else if (ch >= 0x7f)
 	  {
-	    print(dst, "#\\x");
-	    print(dst, Integer.toString(ch, 16));
+	    dst.append("#\\x");
+	    dst.append(Integer.toString(ch, 16));
 	  }
 	else
-	  dst.write(ch);
+	  Char.append(ch, dst);
       }
     else
       {
-	// if (ch > 0xFFFF) print surrogate chars; else
-	dst.write(ch);
+	Char.append(ch, dst);
       }
   }
 }
@@ -665,7 +674,8 @@ class LispNewlineFormat extends ReportFormat
     = System.getProperty("line.separator", "\n");
 
   /** One of NEWLINE_LITERAL, NEWLINE_LINEAR, NEWLINE_FILL, NEWLINE_MISER
-   * or NEWLINE_MANDATORY.  These are defined in gnu.text.PrettyWriter. */
+   * or NEWLINE_MANDATORY.  These are defined in gnu.kawa.io.PrettyWriter.
+   */
   int kind;
 
   int count;
@@ -679,8 +689,7 @@ class LispNewlineFormat extends ReportFormat
     return fmt;
   }
 
-  public int format(Object[] args, int start, 
-		    Writer dst, FieldPosition fpos) 
+  public int format(Object[] args, int start, Appendable dst, FieldPosition fpos) 
     throws java.io.IOException
   {
     int count = getParam(this.count, 1, args, start);
@@ -690,7 +699,7 @@ class LispNewlineFormat extends ReportFormat
     return start;
   }
 
-  public static void printNewline(int kind, Writer dst)
+  public static void printNewline(int kind, Appendable dst)
     throws java.io.IOException
   {
     if (dst instanceof OutPort && kind != PrettyWriter.NEWLINE_LITERAL)
@@ -699,7 +708,7 @@ class LispNewlineFormat extends ReportFormat
       // May make a difference if autoflush.  // FIXME flush if OutPort?
       ((java.io.PrintWriter) dst).println();
     else
-      dst.write(line_separator);
+      dst.append(line_separator);
   }
 }
 
@@ -720,8 +729,7 @@ class LispIndentFormat extends ReportFormat
     return fmt;
   }
 
-  public int format(Object[] args, int start, 
-		    Writer dst, FieldPosition fpos) 
+  public int format(Object[] args, int start, Appendable dst, FieldPosition fpos) 
     throws java.io.IOException
   {
     int columns = getParam(this.columns, 0, args, start);
@@ -743,9 +751,9 @@ class LispObjectFormat extends ReportFormat
   int minPad;
   int padChar;
   int where;
-  ReportFormat base;
+  ObjectFormat base;
 
-  public LispObjectFormat(ReportFormat base,
+  public LispObjectFormat(ObjectFormat base,
 			  int minWidth, int colInc, int minPad, int padChar,
 			  int where)
   {
@@ -757,8 +765,7 @@ class LispObjectFormat extends ReportFormat
     this.where = where;
   }
 
-  public int format(Object[] args, int start, 
-		    Writer dst, FieldPosition fpos) 
+  public int format(Object[] args, int start, Appendable dst, FieldPosition fpos) 
     throws java.io.IOException
   {
     int minWidth = getParam(this.minWidth, 0, args, start);
@@ -769,6 +776,21 @@ class LispObjectFormat extends ReportFormat
     if (this.minPad == LispFormat.PARAM_FROM_LIST)  start++;
     char padChar = getParam(this.padChar, ' ', args, start);
     if (this.padChar == LispFormat.PARAM_FROM_LIST)  start++;
+    if (base.readable && dst instanceof OutPort
+        // PadFormat formats to a temporary StringBuffer (i.e. not a
+        // PrettyWriter) so we don't support sharing anyway.
+        // FIXME in ParFormat.
+        && minWidth == 0) {
+        PrettyWriter pdst = ((OutPort) dst).getPrettyWriter();
+        pdst.initialiseIDHash();
+        pdst.setSharing(true);
+        try {
+            return base.format(args, start, dst, fpos);
+        } finally {
+            pdst.setSharing(false);
+            pdst.finishIDHash();
+        }
+    }
     return gnu.text.PadFormat.format(base, args, start, dst,
 				     padChar, minWidth, colInc, minPad,
 				     where, fpos);
@@ -823,12 +845,15 @@ class LispEscapeFormat extends ReportFormat
     return IntNum.make(param);
   }
 
-  /** WRONG: Tests if we should exit the the surrounding format.
-   * Returns 2*ARGS_USED+(DO_TERMINATE?1:0), where ARGS_USED is the
-   * number of arguments consumed by the specification, and
-   * DO_TERMINATE is true if we actually should exit.
-   */
-  public int format(Object[] args, int start, Writer dst, FieldPosition fpos)
+    /**
+     * WRONG: Tests if we should exit the the surrounding format.
+     * Returns 2*ARGS_USED+(DO_TERMINATE?1:0), where ARGS_USED is the
+     * number of arguments consumed by the specification, and
+     * DO_TERMINATE is true if we actually should exit.
+     *
+     */
+    
+  public int format(Object[] args, int start, Appendable dst, FieldPosition fpos)
     throws java.io.IOException
   {
     int orig_start = start;
@@ -869,7 +894,7 @@ class LispEscapeFormat extends ReportFormat
   public final static int ESCAPE_ALL = 0xF2;
 }
 
-/** Handle <code>~&lt;...~&gt;</code> - pretty-printing logical block.
+/** Handle {@code ~<...~:>} - pretty-printing logical block.
  * (Justification is not implemented.) */
 
 class LispPrettyFormat extends ReportFormat
@@ -881,8 +906,7 @@ class LispPrettyFormat extends ReportFormat
   boolean perLine;
   boolean seenAt;
 
-  public int format(Object[] args, int start,
-                    Writer dst, FieldPosition fpos)  
+  public int format(Object[] args, int start, Appendable dst, FieldPosition fpos)  
     throws java.io.IOException
   {
     String pre = prefix;
@@ -941,9 +965,7 @@ class LispIterationFormat extends ReportFormat
 
   Format body;
 
-  public static int format(Format body, int maxIterations,
-			   Object[] args, int start, 
-			   Writer dst, boolean seenColon, boolean atLeastOnce)
+  public static int format(Format body, int maxIterations, Object[] args, int start, Appendable dst, boolean seenColon, boolean atLeastOnce)
     throws java.io.IOException
   {
     for (int i = 0; ; i++)
@@ -977,8 +999,7 @@ class LispIterationFormat extends ReportFormat
     return start;
   }
 
-  public int format(Object[] args, int start,
-                    Writer dst, FieldPosition fpos)  
+  public int format(Object[] args, int start, Appendable dst, FieldPosition fpos)  
     throws java.io.IOException
   {
     int maxIterations = getParam(this.maxIterations, -1,
@@ -1000,7 +1021,7 @@ class LispIterationFormat extends ReportFormat
 	      }
 	    catch (Exception ex)
 	      {
-		print(dst, "<invalid argument for \"~{~}\" format>");
+		dst.append("<invalid argument for \"~{~}\" format>");
 		return args.length; // FIXME
 	      }
 	  }
@@ -1015,7 +1036,11 @@ class LispIterationFormat extends ReportFormat
 	Object arg = args[start];
 	Object[] curArgs = LispFormat.asArray(arg);
 	if (curArgs == null)
-	  dst.write("{"+arg+"}".toString());
+          {
+            dst.append('{');
+            dst.append(arg.toString());
+            dst.append('}');
+          }
 	else
 	  format(body, maxIterations, curArgs, 0, 
 		 dst, seenColon, atLeastOnce);
@@ -1041,7 +1066,7 @@ class LispChoiceFormat extends ReportFormat
   boolean skipIfFalse;
   Format[] choices;
 
-  public int format(Object[] args, int start, Writer dst, FieldPosition fpos)  
+  public int format(Object[] args, int start, Appendable dst, FieldPosition fpos)  
     throws java.io.IOException 
   {
     Format fmt;
@@ -1087,7 +1112,7 @@ class LispRepositionFormat extends ReportFormat
     this.absolute = absolute;
   }
 
-  public int format(Object[] args, int start, Writer dst, FieldPosition fpos)  
+  public int format(Object[] args, int start, Appendable dst, FieldPosition fpos)  
     throws java.io.IOException 
   {
     int count = getParam(this.count, absolute ? 0 : 1,
@@ -1111,7 +1136,7 @@ class LispFreshlineFormat  extends ReportFormat
     this.count = count;
   }
 
-  public int format(Object[] args, int start, Writer dst, FieldPosition fpos)  
+  public int format(Object[] args, int start, Appendable dst, FieldPosition fpos)  
     throws java.io.IOException 
   {
     int count = getParam(this.count, 1, args, start);
@@ -1124,7 +1149,7 @@ class LispFreshlineFormat  extends ReportFormat
 	    count--;
 	  }
 	while (--count >= 0)
-	  dst.write('\n');
+	  dst.append('\n');
       }
     return start; 
   }
@@ -1146,7 +1171,7 @@ class LispTabulateFormat extends ReportFormat
     this.padChar = padChar;
   }
 
-  public int format(Object[] args, int start, Writer dst, FieldPosition fpos)  
+  public int format(Object[] args, int start, Appendable dst, FieldPosition fpos)  
     throws java.io.IOException 
   {
     int colnum = getParam(this.colnum, 1, args, start);
@@ -1181,123 +1206,7 @@ class LispTabulateFormat extends ReportFormat
 	spaces = relative ? colnum : 2;
       }
     while (--spaces >= 0)
-      dst.write(padChar);
-    return start;
-  }
-}
-
-/* Support for ~F, ~$, ~E, ~G. */
-
-class LispRealFormat extends ReportFormat
-{
-  char op;
-  int arg1;
-  int arg2;
-  int arg3;
-  int arg4;
-  int arg5;
-  int arg6;
-  int arg7;
-  boolean showPlus;
-  boolean internalPad;
-  /** Twice the number of args consumed; odd if any arg is PARAM_FROM_COUNT. */
-  int argsUsed;
-
-  LispRealFormat()
-  {
-    argsUsed = (arg1 == LispFormat.PARAM_FROM_COUNT
-		|| arg2 == LispFormat.PARAM_FROM_COUNT
-		|| arg3 == LispFormat.PARAM_FROM_COUNT
-		|| arg4 == LispFormat.PARAM_FROM_COUNT
-		|| arg5 == LispFormat.PARAM_FROM_COUNT
-		|| arg6 == LispFormat.PARAM_FROM_COUNT
-		|| arg7 == LispFormat.PARAM_FROM_COUNT) ? 1 : 0;
-    if (arg1 == LispFormat.PARAM_FROM_LIST) argsUsed += 2;
-    if (arg2 == LispFormat.PARAM_FROM_LIST) argsUsed += 2;
-    if (arg3 == LispFormat.PARAM_FROM_LIST) argsUsed += 2;
-    if (arg4 == LispFormat.PARAM_FROM_LIST) argsUsed += 2;
-    if (arg5 == LispFormat.PARAM_FROM_LIST) argsUsed += 2;
-    if (arg6 == LispFormat.PARAM_FROM_LIST) argsUsed += 2;
-    if (arg7 == LispFormat.PARAM_FROM_LIST) argsUsed += 2;
-  }
-
-  public Format resolve (Object[] args, int start)
-  {
-    if (op == '$')
-      {
-	FixedRealFormat mfmt = new FixedRealFormat();
-	int decimals = getParam(this.arg1, 2, args, start);
-	if (this.arg1 == LispFormat.PARAM_FROM_LIST)  start++;
-	int digits = getParam(this.arg2, 1, args, start);
-	if (this.arg2 == LispFormat.PARAM_FROM_LIST)  start++;
-	int width = getParam(this.arg3, 0, args, start);
-	if (this.arg3 == LispFormat.PARAM_FROM_LIST)  start++;
-	char padChar = getParam(this.arg4, ' ', args, start);
-	if (this.arg4 == LispFormat.PARAM_FROM_LIST)  start++;
-
-	mfmt.setMaximumFractionDigits(decimals);
-	mfmt.setMinimumIntegerDigits(digits);
-	mfmt.width = width;
-	mfmt.padChar = padChar;
-	mfmt.internalPad = internalPad;
-	mfmt.showPlus = showPlus;
-	return mfmt;
-      }
-    else if (op == 'F')
-      {
-	FixedRealFormat mfmt = new FixedRealFormat();
-	int width = getParam(this.arg1, 0, args, start);
-	if (this.arg1 == LispFormat.PARAM_FROM_LIST)  start++;
-	int decimals = getParam(this.arg2, -1, args, start);
-	if (this.arg2 == LispFormat.PARAM_FROM_LIST)  start++;
-	int scale = getParam(this.arg3, 0, args, start);
-	if (this.arg3 == LispFormat.PARAM_FROM_LIST)  start++;
-	mfmt.overflowChar = getParam(this.arg4, '\0', args, start);
-	if (this.arg4 == LispFormat.PARAM_FROM_LIST)  start++;
-	char padChar = getParam(this.arg5, ' ', args, start);
-	if (this.arg5 == LispFormat.PARAM_FROM_LIST)  start++;
-	mfmt.setMaximumFractionDigits(decimals);
-	mfmt.setMinimumIntegerDigits(0);
-	mfmt.width = width;
-	mfmt.scale = scale;
-	mfmt.padChar = padChar;
-	mfmt.internalPad = internalPad;
-	mfmt.showPlus = showPlus;
-	return mfmt;
-      }
-    else // if (op == 'E' || op == 'G')
-      {
-	ExponentialFormat efmt = new ExponentialFormat();
-        efmt.exponentShowSign = true;
-	efmt.width = getParam(this.arg1, 0, args, start);
-	if (this.arg1 == LispFormat.PARAM_FROM_LIST)  start++;
-	efmt.fracDigits = getParam(this.arg2, -1, args, start);
-	if (this.arg2 == LispFormat.PARAM_FROM_LIST)  start++;
-	efmt.expDigits = getParam(this.arg3, 0, args, start);
-	if (this.arg3 == LispFormat.PARAM_FROM_LIST)  start++;
-	efmt.intDigits = getParam(this.arg4, 1, args, start);
-	if (this.arg4 == LispFormat.PARAM_FROM_LIST)  start++;
-	efmt.overflowChar = getParam(this.arg5, '\0', args, start);
-	if (this.arg5 == LispFormat.PARAM_FROM_LIST)  start++;
-	efmt.padChar = getParam(this.arg6, ' ', args, start);
-	if (this.arg6 == LispFormat.PARAM_FROM_LIST)  start++;
-	efmt.exponentChar = getParam(this.arg7, 'E', args, start);
-	if (this.arg7 == LispFormat.PARAM_FROM_LIST)  start++;
-	efmt.general = op == 'G';
-	efmt.showPlus = showPlus;
-	return efmt;
-      }
-  }
-
-  public int format(Object[] args, int start, Writer dst, FieldPosition fpos)
-    throws java.io.IOException
-  {
-    StringBuffer sbuf = new StringBuffer(100);
-    Format fmt = resolve(args, start);
-    start += argsUsed >> 1;
-    RealNum value = (RealNum) args[start++];
-    fmt.format(value, sbuf, fpos);
-    dst.write(sbuf.toString());
+      dst.append(padChar);
     return start;
   }
 }

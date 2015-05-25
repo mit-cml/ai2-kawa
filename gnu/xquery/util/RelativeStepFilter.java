@@ -27,7 +27,7 @@ public class RelativeStepFilter extends FilterConsumer
   }
 
   // Not sure if this is ever called ...
-  public void consume(SeqPosition position)
+  public void writePosition(SeqPosition position)
   {
     writePosition(position.sequence, position.ipos);
   }

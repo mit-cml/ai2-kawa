@@ -3,6 +3,7 @@ import gnu.mapping.*;
 import gnu.xml.*;
 import gnu.kawa.xml.KNode;
 import gnu.lists.*;
+import gnu.text.Char;
 import java.math.BigDecimal;
 
 public class TextUtils
@@ -23,43 +24,38 @@ public class TextUtils
     StringBuffer sbuf = new StringBuffer(100);
     if (node instanceof Values)
       {
-	TreeList tlist = (TreeList) node;
+	Values vals = (Values) node;
 	int index = 0;
-	for (;;)
-	  {
-	    int kind = tlist.getNextKind(index);
-	    if (kind == Sequence.EOF_VALUE)
-	      break;
-	    if (kind == Sequence.OBJECT_VALUE)
-	      stringValue(tlist.getPosNext(index), sbuf);
-	    else
-	      tlist.stringValue(tlist.posToDataIndex(index), sbuf);
-	    index = tlist.nextPos(index);
-	  }
+        for (int ipos = 0; (ipos = vals.nextPos(ipos)) != 0; )
+          {
+            stringValue(vals.getPosPrevious(ipos), sbuf);
+          }
       }
     else
       stringValue(node, sbuf);
     return sbuf.toString();
   }
 
-  public static void stringValue (Object node, StringBuffer sbuf)
-  {
-    if (node instanceof KNode)
-      {
-	KNode pos = (KNode) node;
-	NodeTree tlist = (NodeTree) pos.sequence;
-	tlist.stringValue(tlist.posToDataIndex(pos.ipos), sbuf);
-	return;
-      }
-    if (node instanceof BigDecimal)
-      node = XMLPrinter.formatDecimal((BigDecimal) node);
-    else if (node instanceof Double || node instanceof gnu.math.DFloNum)
-      node = XMLPrinter.formatDouble(((Number) node).doubleValue());
-    else if (node instanceof Float)
-      node = XMLPrinter.formatFloat(((Number) node).floatValue());
-    if (node != null && node != Values.empty)
-      sbuf.append(node);
-  }
+    public static void stringValue (Object node, StringBuffer sbuf) {
+        if (node instanceof KNode) {
+            KNode pos = (KNode) node;
+            NodeTree tlist = (NodeTree) pos.sequence;
+            tlist.stringValue(tlist.posToDataIndex(pos.ipos), sbuf);
+        } else if (node instanceof Char) {
+            Char.print(((Char) node).intValue(), sbuf);
+        } else if (node instanceof Character) {
+            sbuf.append(((Character) node).charValue());
+        } else {
+            if (node instanceof BigDecimal)
+                node = XMLPrinter.formatDecimal((BigDecimal) node);
+            else if (node instanceof Double || node instanceof gnu.math.DFloNum)
+                node = XMLPrinter.formatDouble(((Number) node).doubleValue());
+            else if (node instanceof Float)
+                node = XMLPrinter.formatFloat(((Number) node).floatValue());
+            if (node != null && node != Values.empty)
+                sbuf.append(node);
+        }
+    }
 
   public static void textValue (Object arg, Consumer out)
   {
@@ -73,12 +69,13 @@ public class TextUtils
         StringBuffer sbuf = new StringBuffer();
         if (arg instanceof Values)
           {
-            Object[] vals = ((Values) arg).getValues();
-            for (int i = 0;  i < vals.length; i++)
+            Values vals = (Values) arg;
+            int count = -1;
+            for (int ipos = 0; (ipos = vals.nextPos(ipos)) != 0; )
               {
-                if (i > 0)
+                if (++count > 0)
                   sbuf.append(' ');
-                stringValue(vals[i], sbuf);
+                stringValue(vals.getPosPrevious(ipos), sbuf);
               }
           }
         else

@@ -39,9 +39,9 @@ public class ReaderDispatch extends ReadTableEntry
 
   /** Create a fresh instance and initialize it appropriately for Common Lisp.
    */
-  public static ReaderDispatch create(ReadTable rtable)
+  public static ReaderDispatch create(ReadTable rtable, boolean nonTerminating)
   {
-    ReaderDispatch tab = new ReaderDispatch();
+    ReaderDispatch tab = new ReaderDispatch(nonTerminating);
     ReaderDispatchMisc entry = ReaderDispatchMisc.getInstance();
     tab.set(':', entry);
     tab.set('B', entry);
@@ -72,7 +72,7 @@ public class ReaderDispatch extends ReadTableEntry
     return tab;
   }
 
-  public Object read (Lexer in, int ch, int count)
+  public Object read (Lexer in, int ch, int count, int sharingIndex)
     throws java.io.IOException, SyntaxException
   {
     count = -1;
@@ -98,8 +98,8 @@ public class ReaderDispatch extends ReadTableEntry
 	in.error('e', in.getName(),
                  in.getLineNumber() + 1, in.getColumnNumber(),
                  "invalid dispatch character '"+((char) ch)+'\'');
-	return Values.empty;
+	return Char.make('?');
       }
-    return entry.read(in, ch, count);
+    return entry.read(in, ch, count, sharingIndex);
   }
 }

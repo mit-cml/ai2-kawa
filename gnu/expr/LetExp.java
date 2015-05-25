@@ -1,5 +1,6 @@
 package gnu.expr;
 import gnu.bytecode.*;
+import gnu.kawa.io.OutPort;
 import gnu.mapping.*;
 
 /**
@@ -9,20 +10,18 @@ import gnu.mapping.*;
 
 public class LetExp extends ScopeExp
 {
-  public Expression[] inits;
-  public Expression body;
+  Expression body;
 
-  public LetExp (Expression[] i) { inits = i; }
+  public LetExp () { }
 
   public Expression getBody() { return body; }
   public void setBody(Expression body) { this.body = body; }
 
   protected boolean mustCompile () { return false; }
 
-  protected Object evalVariable (int i, CallContext ctx) throws Throwable
+  protected Object evalVariable (Declaration decl, CallContext ctx) throws Throwable
   {
-    Expression init = inits[i];
-    return init.eval(ctx);
+    return decl.getInitValue().eval(ctx);
   }
 
   public void apply (CallContext ctx) throws Throwable
@@ -53,9 +52,9 @@ public class LetExp extends ScopeExp
         for (Declaration decl = firstDecl(); decl != null;
              decl = decl.nextDecl(), i++)
           {
-            if (inits[i] == QuoteExp.undefined_exp)
+            if (decl.getInitValue() == QuoteExp.undefined_exp)
               continue;
-            Object value = evalVariable(i, ctx);
+            Object value = evalVariable(decl, ctx);
             Type type = decl.type;
             if (type != null && type != Type.pointer_type)
               value = type.coerceFromObject(value);
@@ -117,34 +116,6 @@ public class LetExp extends ScopeExp
   }
   */
 
-  /* Recursive helper routine, to store the values on the stack
-   * into the variables in vars, in reverse order. */
-  void store_rest (Compilation comp, int i, Declaration decl)
-  {
-    if (decl != null)
-      {
-	store_rest (comp, i+1, decl.nextDecl());
-	if (decl.needsInit())
-	  {
-	    if (decl.isIndirectBinding())
-	      {
-		CodeAttr code = comp.getCode();
-		if (inits[i] == QuoteExp.undefined_exp)
-		  {
-		    Object name = decl.getSymbol();
-		    comp.compileConstant(name, Target.pushObject);
-		    code.emitInvokeStatic(BindingInitializer.makeLocationMethod(name));
-		  }
-		else
-		  {
-		    decl.pushIndirectBinding(comp);
-		  }
-	      }
-            decl.compileStore(comp);
-	  }
-      }
-  }
-
   public void compile (Compilation comp, Target target)
   {
     gnu.bytecode.CodeAttr code = comp.getCode();
@@ -161,16 +132,21 @@ public class LetExp extends ScopeExp
 
     /* Compile all the initializations, leaving the results
        on the stack (in reverse order).  */
-    Declaration decl = firstDecl();
-    for (int i = 0; i < inits.length; i++, decl = decl.nextDecl())
+    for (Declaration decl = firstDecl(); decl != null; decl = decl.nextDecl())
       {
 	Target varTarget;
-	Expression init = inits[i];
-        boolean needsInit = decl.needsInit();
+	Expression init = decl.getInitValue();
+        boolean initialized = init != QuoteExp.undefined_exp;
+        // Does this variable need to be initialized or is the default ok?
+        boolean needsInit = ! decl.ignorable()
+            && (initialized || decl.mayBeAccessedUninitialized());
+
 	if (needsInit && decl.isSimple())
           decl.allocateVariable(code);
+
 	if (! needsInit
-	    || (decl.isIndirectBinding() && init == QuoteExp.undefined_exp))
+            || (! initialized
+                && (decl.isIndirectBinding() || ! decl.mayBeAccessedUninitialized())))
 	  varTarget = Target.Ignore;
 	else
 	  {
@@ -186,18 +162,40 @@ public class LetExp extends ScopeExp
 	      }
 	  }
 	init.compileWithPosition (comp, varTarget);
+
+        if (needsInit)
+          {
+	    if (decl.isIndirectBinding())
+	      {
+		if (! initialized)
+		  {
+		    Object name = decl.getSymbol();
+		    comp.compileConstant(name, Target.pushObject);
+		    code.emitInvokeStatic(BindingInitializer.makeLocationMethod(name));
+		  }
+		else
+		  {
+		    decl.pushIndirectBinding(comp);
+		  }
+	      }
+            if (decl.getFlag(Declaration.ALLOCATE_ON_STACK))
+              {
+                decl.evalIndex = code.getSP();
+              }
+            else if (initialized
+                || decl.isIndirectBinding()
+                || decl.mayBeAccessedUninitialized())
+              decl.compileStore(comp);
+          }
       }
 
     code.enterScope(getVarScope());
-
-    /* Assign the initial values to the proper variables, in reverse order. */
-    store_rest (comp, 0, firstDecl());
 
     body.compileWithPosition(comp, target);
     popScope(code);
   }
 
-  public final gnu.bytecode.Type getType()
+  protected final gnu.bytecode.Type calculateType()
   {
     return body.getType();
   }
@@ -209,18 +207,9 @@ public class LetExp extends ScopeExp
 
   public <R,D> void visitInitializers (ExpVisitor<R,D> visitor, D d)
   {
-    Declaration decl = firstDecl();
-    for (int i = 0; i < inits.length; i++, decl = decl.nextDecl())
+    for (Declaration decl = firstDecl(); decl != null; decl = decl.nextDecl())
       {
-        Expression init0 = inits[i];
-        if (init0 == null)
-          throw new Error("null1 init for "+this+" i:"+i+" d:"+decl);
-        Expression init = visitor.visitAndUpdate(init0, d);
-        if (init == null)
-          throw new Error("null2 init for "+this+" was:"+init0);
-        inits[i] = init;
-        if (decl.value == init0)
-          decl.value = init;
+        decl.setInitValue(visitor.visitAndUpdate(decl.getInitValue(), d));
       }
   }
 
@@ -251,7 +240,8 @@ public class LetExp extends ScopeExp
 	  out.writeSpaceFill();
 	out.startLogicalBlock("(", false, ")");
 	decl.printInfo(out);
-	if (inits != null)
+        Expression init = decl.getInitValue();
+	if (init != null)
 	  {
 	    out.writeSpaceFill();
 	    out.print('=');
@@ -260,12 +250,10 @@ public class LetExp extends ScopeExp
 	    //out.print ("<artificial>");
 	    //else
 	    {
-	      if (i >= inits.length)
-		out.print("<missing init>");
-	      else if (inits[i] == null)
+	      if (init == null)
 		out.print("<null>");
 	      else
-		inits[i].print(out);
+		init.print(out); // 
 	      i++;
 	    }
 	  }

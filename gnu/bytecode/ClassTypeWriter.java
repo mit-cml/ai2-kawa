@@ -99,7 +99,7 @@ public class ClassTypeWriter extends PrintWriter
   public void printAttributes (AttrContainer container)
   {
     for (Attribute attr = container.getAttributes();
-	 attr != null;  attr = attr.next)
+	 attr != null;  attr = attr.getNext())
       {
 	attr.print(this);
       }
@@ -161,7 +161,7 @@ public class ClassTypeWriter extends PrintWriter
 	print(" Signature: ");
 	if (field.signature_index != 0)
 	  printOptionalIndex(field.signature_index);
-	printSignature(field.type);
+	printSignature(field.getType());
 	println();
 	printAttributes(field);
       }
@@ -305,7 +305,7 @@ public class ClassTypeWriter extends PrintWriter
 
   public final void printOptionalIndex(int index)
   {
-    if ((flags & PRINT_CONSTANT_POOL_INDEXES) != 0)
+    if (index >= 0 && (flags & PRINT_CONSTANT_POOL_INDEXES) != 0)
       {
 	print('#');
 	print(index);

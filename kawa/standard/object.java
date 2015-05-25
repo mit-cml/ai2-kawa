@@ -3,9 +3,9 @@ import gnu.expr.*;
 import kawa.lang.*;
 import gnu.lists.*;
 import java.util.Vector;
-import gnu.mapping.Symbol;
-import gnu.mapping.Namespace;
+import gnu.mapping.*;
 import gnu.bytecode.Type;
+import gnu.bytecode.ClassType;
 import gnu.kawa.functions.Convert;
 
 public class object extends Syntax
@@ -93,10 +93,12 @@ public class object extends Syntax
                 if (pair_car == interfaceKeyword)
                   {
                     Object val = ((Pair) obj).getCar();
+                    while (val instanceof SyntaxForm)
+                      val = ((SyntaxForm) val).getDatum();
                     if (val == Boolean.FALSE)
                       oexp.setFlag(ClassExp.CLASS_SPECIFIED);
                     else
-                      oexp.setFlag(ClassExp.INTERFACE_SPECIFIED);
+                      oexp.setFlag(ClassExp.INTERFACE_SPECIFIED|ClassExp.IS_ABSTRACT);
                     obj = ((Pair) obj).getCdr();
                     tr.popPositionOf(savedPos1);
                     continue;
@@ -125,6 +127,15 @@ public class object extends Syntax
                     continue;
                   }
               }
+          }
+        else if (pair_car instanceof Pair
+                 && Lambda.isAnnotationSymbol(((Pair)pair_car).getCar()))
+          {
+            if (oexp.nameDecl == null)
+              tr.error('e', "annotation for anonymous class");
+            else
+              oexp.nameDecl.addAnnotation(new LangExp(pair));
+            continue;
           }
 	if (! (pair_car instanceof Pair))
 	  {
@@ -166,9 +177,7 @@ public class object extends Syntax
                   args = ((SyntaxForm) args).getDatum();
 		pair = (Pair) args;
 		Pair keyPair = pair;
-		Object key = pair.getCar();
-                while (key instanceof SyntaxForm)
-                  key = ((SyntaxForm) key).getDatum();
+		Object key = Translator.stripSyntax(pair.getCar());
 		Object savedPos2 = tr.pushPositionOf(pair);
 		args = pair.getCdr();
 		if ((key == coloncolon || key instanceof Keyword)
@@ -176,7 +185,7 @@ public class object extends Syntax
 		  {
 		    nKeywords++;
 		    pair = (Pair) args;
-		    Object value = pair.getCar();
+		    Object value = Translator.stripSyntax(pair.getCar());
 		    args = pair.getCdr();
 		    if (key == coloncolon || key == typeKeyword)
 		      typePair = pair;
@@ -243,6 +252,11 @@ public class object extends Syntax
 		    args = pair.getCdr();
 		    seenInit = true;
 		  }
+                else if (key instanceof Pair
+                         && Lambda.isAnnotationSymbol(((Pair)key).getCar()))
+                  {
+                    decl.addAnnotation(new LangExp(keyPair));
+                  }
 		else
 		  {
 		    args = null;  // Trigger error message
@@ -275,11 +289,22 @@ public class object extends Syntax
 	    else
 	      {
 		if (typePair != null)
-		  decl.setType(tr.exp2Type(typePair));
+                  {
+                    decl.setTypeExp(new LangExp(typePair));
+                    decl.setFlag(Declaration.TYPE_SPECIFIED);
+                  }
 		if (allocationFlag != 0)
 		  decl.setFlag(allocationFlag);
 		if (accessFlag != 0)
 		  decl.setFlag(accessFlag);
+                // FIXME Shouldn't need to noteValueUnknown when
+                // the field is private or otherwise module-local.
+                // However, this can trigger a bug if the field is
+                // non-static but doesn't need a closure environment.
+                // See Savannah bug #39940.
+                // Fixing this properly is difficult.
+                /* if ((accessFlag & Declaration.PRIVATE_ACCESS) == 0) */
+                  decl.noteValueUnknown();
 		decl.setCanRead(true);
 		decl.setCanWrite(true);
 	      }
@@ -288,6 +313,8 @@ public class object extends Syntax
 	  { // Method declaration.
 	    Pair mpair = (Pair) pair_car;
 	    Object mname = mpair.getCar();
+            while (mname instanceof SyntaxForm)
+              mname = ((SyntaxForm) mname).getDatum();
 	    if (! (mname instanceof String)
 		&& ! (mname instanceof Symbol))
 	      {
@@ -307,16 +334,37 @@ public class object extends Syntax
 	  tr.error ('e', "invalid field/method definition");
 	tr.popPositionOf(savedPos1);
       }
-  if (classAccessFlag != 0)
-    oexp.nameDecl.setFlag(classAccessFlag);
+    if (classAccessFlag != 0 && oexp.nameDecl != null)
+      {
+        oexp.nameDecl.setFlag(classAccessFlag);
+        if ((classAccessFlag & Declaration.ABSTRACT_ACCESS) != 0)
+          oexp.setFlag(ClassExp.IS_ABSTRACT);
+      }
+
+    if (classNamePair != null)
+      {
+        Expression classNameExp = tr.rewrite_car((Pair) classNamePair, false);
+        Object classNameVal = classNameExp.valueIfConstant();
+        String classNameSpecifier;
+        boolean isString;
+        /* #ifdef use:java.lang.CharSequence */
+        isString = classNameVal instanceof CharSequence;
+        /* #else */
+        // isString = classNameVal instanceof CharSeq || classNameVal instanceof String;
+        /* #endif */
+        if (isString
+            && (classNameSpecifier = classNameVal.toString()).length() > 0)
+          oexp.classNameSpecifier = classNameSpecifier;
+        else
+            tr.errorWithPosition("class-name specifier must be a non-empty string literal", classNamePair);
+      }
 
     Object[] result = {
       oexp,
       components,
       inits,
       method_list,
-      superlist,
-      classNamePair
+      superlist
     };
     return result;
   }
@@ -328,7 +376,6 @@ public class object extends Syntax
     Vector inits = (Vector) saved[2];
     LambdaExp method_list = (LambdaExp) saved[3];
     Object superlist = saved[4];
-    Object classNamePair = saved[5];
     oexp.firstChild = method_list;
 
     int num_supers = Translator.listLength(superlist);
@@ -357,30 +404,16 @@ public class object extends Syntax
 	superlist = superpair.getCdr();
       }
 
-    if (classNamePair != null)
-      {
-        Expression classNameExp = tr.rewrite_car((Pair) classNamePair, false);
-        Object classNameVal = classNameExp.valueIfConstant();
-        String classNameSpecifier;
-        boolean isString;
-        /* #ifdef use:java.lang.CharSequence */
-        isString = classNameVal instanceof CharSequence;
-        /* #else */
-        // isString = classNameVal instanceof CharSeq || classNameVal instanceof String;
-        /* #endif */
-        if (isString
-            && (classNameSpecifier = classNameVal.toString()).length() > 0)
-          oexp.classNameSpecifier = classNameSpecifier;
-        else
-          {
-            Object savedPos = tr.pushPositionOf(classNamePair);
-            tr.error('e', "class-name specifier must be a non-empty string literal");
-            tr.popPositionOf(savedPos);
-          }
-      }
     oexp.supers = supers;
 
     oexp.setTypes(tr);
+
+    if (oexp.nameDecl != null)
+      Lambda.rewriteAnnotations(oexp.nameDecl, tr);
+    for (Declaration decl = oexp.firstDecl(); decl != null;  decl = decl.nextDecl())
+      {
+        Lambda.rewriteAnnotations(decl, tr);
+      }
 
     // First a pass over init-form: specifiers, since these are evaluated
     // in a scope outside the current class.
@@ -432,7 +465,9 @@ public class object extends Syntax
 		memberCarSyntax = (SyntaxForm) pair_car;
 		pair_car = memberCarSyntax.getDatum();
 	      }
-	    if (pair_car instanceof String || pair_car instanceof Symbol
+            if (Lambda.isAnnotationSymbol(pair_car))
+                ; // Skip
+	    else if (pair_car instanceof String || pair_car instanceof Symbol
 		|| pair_car instanceof Keyword)
 	      { // Field declaration.
 		Object type = null;
@@ -540,16 +575,25 @@ public class object extends Syntax
 	  {
 	    tr.popPositionOf(savedPos1);
 	  }
-	
       }
+    for (Declaration decl = oexp.firstDecl();
+	 decl != null;  decl = decl.nextDecl())
+      {
+        Expression texp = decl.getTypeExpRaw();
+        if (texp instanceof LangExp)
+          {
+            Pair typeSpecPair = (Pair) ((LangExp) texp).getLangValue(); 
+            tr.exp2Type(typeSpecPair, decl, null/*FIXME*/);
+          }
+      }
+
     // If initMethod/clinitMethod were created by the "outer" (first) call
     // to rewriteInit, then we may need to fix up their outer chain.
     if (oexp.initMethod != null)
-      oexp.initMethod.outer = oexp;
+      oexp.initMethod.setOuter(oexp);
     if (oexp.clinitMethod != null)
-      oexp.clinitMethod.outer = oexp;
+      oexp.clinitMethod.setOuter(oexp);
     tr.pop(oexp);
-    oexp.declareParts(tr);
   }
 
   private static void rewriteInit (Object d, ClassExp oexp, Pair initPair,
@@ -589,7 +633,7 @@ public class object extends Syntax
         Declaration decl = (Declaration) d;
         SetExp sexp = new SetExp(decl, initValue);
         sexp.setLocation(decl);
-        decl.noteValue(null);
+        decl.noteValueFromSet(sexp);
         initValue = sexp;
       }
     else
@@ -685,6 +729,9 @@ public class object extends Syntax
       return Declaration.ENUM_ACCESS;
     if ("final".equals(value))
       return Declaration.FINAL_ACCESS;
+    if ("abstract".equals(value))
+      return Declaration.ABSTRACT_ACCESS;
     return 0;
   }
+
 }

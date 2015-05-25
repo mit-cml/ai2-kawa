@@ -12,6 +12,27 @@ public abstract class RealNum extends Complex
   public final RealNum re() { return this; }
   public final RealNum im() { return IntNum.zero(); }
 
+  public final RealNum angle() {
+    return isNegative() ? DFloNum.make(Math.PI) :IntNum.zero();
+  }
+
+    @Override public final Quaternion vectorPart() { return IntNum.zero(); }
+    @Override public final Quaternion unitVector() { return IntNum.zero(); }
+    @Override public final Quaternion unitQuaternion() {
+        switch (sign()) {
+            case  1: return IntNum.one();
+            case  0: return IntNum.zero();
+            case -1: return IntNum.minusOne();
+            case -2: default: return this;     // NaN
+        }
+    }
+    @Override public final Quaternion conjugate() { return this; }
+
+    public static boolean isReal(Object value) {
+        return (value instanceof Number
+                && (value instanceof RealNum || ! (value instanceof Numeric)));
+    }
+
   public static RealNum asRealNumOrNull (Object value)
   {
     if (value instanceof RealNum)
@@ -23,7 +44,13 @@ public abstract class RealNum extends Complex
 
   public abstract boolean isNegative ();
 
-  /** Return 1 if >0; 0 if ==0; -1 if <0; -2 if NaN. */
+    @Override
+    public int classifyFinite() {
+        double d = doubleValue();
+        return Double.isNaN(d) ? -1 : Double.isInfinite(d) ? 0 : 1;
+    }
+
+  /** Return 1 if {@code >0}; 0 if {@code ==0}; -1 if {@code <0}; -2 if {@code NaN}. */
   public abstract int sign ();
 
   public RealNum max (RealNum x)
@@ -169,7 +196,15 @@ public abstract class RealNum extends Complex
     return new DFloNum(Math.log(x));
   }
 
-  public final Complex sin() { return new DFloNum(Math.sin(doubleValue())); }
+    @Override public final RealNum sin() {
+        return new DFloNum(Math.sin(doubleValue()));
+    }
+    @Override public final RealNum cos() {
+        return new DFloNum(Math.cos(doubleValue()));
+    }
+    @Override public final RealNum tan() {
+        return new DFloNum(Math.tan(doubleValue()));
+    }
 
   public final Complex sqrt ()
   {
@@ -177,7 +212,7 @@ public abstract class RealNum extends Complex
     if (d >= 0)
       return new DFloNum(Math.sqrt(d));
     else
-      return DComplex.sqrt(d, 0);
+      return Complex.make(IntNum.zero(), new DFloNum(Math.sqrt(-d)));
   }
 
   /** Convert double to (rounded) integer, after multiplying by 10**k. */
@@ -358,7 +393,7 @@ public abstract class RealNum extends Complex
     boolean neg = dstr.charAt(0) == '-';
     if (dstr.charAt(indexE+1) != '-')
       {
-        throw new Error("not implemented: toStringDecimal given non-negative exponent: "+dstr);
+        throw new UnsupportedOperationException("not implemented: toStringDecimal given non-negative exponent: "+dstr);
       }
     else
       {

@@ -4,12 +4,14 @@
 package gnu.xml;
 import gnu.lists.*;
 import java.io.*;
-import gnu.text.*;
 import gnu.math.RealNum;
-import gnu.text.PrettyWriter;
-import gnu.mapping.OutPort;
+import gnu.kawa.io.PrettyWriter;
+import gnu.kawa.io.OutPort;
+import gnu.kawa.io.Path;
 import gnu.mapping.ThreadLocation;
 import gnu.mapping.Symbol;
+import gnu.text.Char;
+import gnu.text.Lexer;
 import java.math.BigDecimal;
 import gnu.expr.Keyword;
 import gnu.kawa.xml.XmlNamespace;
@@ -23,7 +25,7 @@ public class XMLPrinter extends OutPort
    * -1: don't add indentation; 0: pretty-print (avoid needless newlines);
    * 1: indent (force). */
   public int printIndent = -1;
-  /** When indentating, should attributes be lined up? */
+  /** When indenting, should attributes be lined up? */
   public boolean indentAttributes;
 
   boolean printXMLdecl = false;
@@ -58,8 +60,8 @@ public class XMLPrinter extends OutPort
    * If non-null, this is the the system identifier. */
   public static final ThreadLocation doctypePublic
     = new ThreadLocation("doctype-public");
-  public static final ThreadLocation indentLoc
-    = new ThreadLocation("xml-indent");
+  public static final ThreadLocation<String> indentLoc
+    = new ThreadLocation<String>("xml-indent");
 
   public boolean strict;
 
@@ -343,6 +345,42 @@ public class XMLPrinter extends OutPort
       bout.write(name == null ? "{null name}" : (String) name);
   }
 
+  /** Write DOCTYPE using ThreadLocations doctypeSystem and doctypePublic */
+  public void writeDoctypeIfDefined (String tagname)
+  {
+    Object systemIdentifier = doctypeSystem.get(null);
+    if (systemIdentifier != null)
+      {
+        String systemId = systemIdentifier.toString();
+        if (systemId.length() > 0)
+          {
+            Object publicIdentifier = doctypePublic.get(null);
+            String publicId = publicIdentifier == null ? null
+              : publicIdentifier.toString();
+            writeDoctype(tagname, systemId, publicId);
+          }
+      }
+  }
+
+  public void writeDoctype (String tagname, String systemId, String publicId)
+  {
+    bout.write("<!DOCTYPE ");
+    bout.write(tagname);
+    if (publicId != null && publicId.length() > 0)
+      {
+        bout.write(" PUBLIC \"");
+        bout.write(publicId);
+        bout.write("\" \"");
+      }
+    else
+      {
+        bout.write(" SYSTEM \"");
+      }
+    bout.write(systemId);
+    bout.write("\">");
+    println();
+  }
+
   public void startElement(Object type)
   {
     closeTag();
@@ -352,32 +390,8 @@ public class XMLPrinter extends OutPort
           setIndentMode();
         if (prev == PROC_INST)
           write('\n');
-        Object systemIdentifier = doctypeSystem.get(null);
-        if (systemIdentifier != null)
-          {
-            String systemId = systemIdentifier.toString();
-            if (systemId.length() > 0)
-              {
-                Object publicIdentifier = doctypePublic.get(null);
-                bout.write("<!DOCTYPE ");
-                bout.write(type.toString());
-                String publicId = publicIdentifier == null ? null
-                  : publicIdentifier.toString();
-                if (publicId != null && publicId.length() > 0)
-                  {
-                    bout.write(" PUBLIC \"");
-                    bout.write(publicId);
-                    bout.write("\" \"");
-                  }
-                else
-                  {
-                    bout.write(" SYSTEM \"");
-                  }
-                bout.write(systemId);
-                bout.write("\">");
-                println();
-              }
-          }
+        if (type != null)
+            writeDoctypeIfDefined(type.toString());
       }
     if (printIndent >= 0)
       {
@@ -607,7 +621,7 @@ public class XMLPrinter extends OutPort
     bout.write(' ');
     if (printIndent >= 0)
       writeBreakFill();
-    bout.write(attrType.toString()); // FIXME: use Symbol.print
+    bout.write(attrType==null ? "{null name}" : attrType.toString());
     bout.write("=\"");
     prev = ' ';
   }
@@ -729,7 +743,7 @@ public class XMLPrinter extends OutPort
           prev = '-';
 	return;
       }
-    if (v instanceof Consumable && ! (v instanceof UnescapedData))
+    if (v instanceof Consumable)
       {
 	((Consumable) v).consume(this);
 	return;
@@ -914,7 +928,7 @@ public class XMLPrinter extends OutPort
     prev = PROC_INST;
   }
 
-  public void consume (SeqPosition position)
+  public void writePosition(SeqPosition position)
   {
     position.sequence.consumeNext(position.ipos, this);
   }

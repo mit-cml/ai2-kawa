@@ -3,7 +3,8 @@
 
 package gnu.expr;
 import gnu.bytecode.*;
-import gnu.mapping.*;
+import gnu.kawa.io.OutPort;
+import gnu.mapping.CallContext;
 
 /**
  * Class used to implement a block that can be exited.
@@ -71,16 +72,20 @@ public class BlockExp extends Expression
     exitableBlock = bl;
     this.exitTarget = exitBody == null ? target : Target.Ignore;
     body.compileWithPosition(comp, target);
-    if (exitBody != null)
+    Label doneLabel;
+    if (exitBody != null && code.reachableHere())
       {
-        Label doneLabel = new Label(code);
+        doneLabel = new Label(code);
         code.emitGoto(doneLabel);
-        code.endExitableBlock();
-        exitBody.compileWithPosition(comp, target);
-        doneLabel.define(code);
       }
     else
-      code.endExitableBlock();
+      doneLabel = null;
+    code.endExitableBlock();
+    if (exitBody != null)
+      exitBody.compileWithPosition(comp, target);
+    if (doneLabel != null)
+      doneLabel.define(code);
+
     exitableBlock = null;
   }
 
@@ -96,9 +101,14 @@ public class BlockExp extends Expression
       exitBody = visitor.visitAndUpdate(exitBody, d);
   }
 
+  int id = ++counter;
+  static int counter;
+  public String toString() { return "BlockExp#"+id; }
+
   public void print (OutPort out)
   {
-    out.startLogicalBlock("(Block", ")", 2);
+    out.startLogicalBlock("(Block#", ")", 2);
+    out.print(id);
     if (label != null)
       {
         out.print(' ');

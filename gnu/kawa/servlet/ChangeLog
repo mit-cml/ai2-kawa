@@ -1,3 +1,30 @@
+2014-02-16  Per Bothner  <per@bothner.com>
+
+	* KawaServlet.java: Make sure Error is uncaught or re-thrown.
+	* CGIServletWrapper.java: Likewise.
+	* HttpRequestContext.java: Likewise.
+	* KawaHttpHandler.java: Likewise.
+	* ReplSession.java: Likewise.
+
+2013-09-23  Per Bothner  <per@bothner.com>
+
+	* CGIServletWrapper.java: Update to servlet API 3.0.
+	(CGIRequest, CGIResponse, CGIContext): New member classes.
+	Move methods to appropriate member classes.
+
+2013-08-07  Per Bothner  <per@bothner.com>
+
+	* KawaAutoHandler.java (getModule): Call new Path#probeContentType.
+
+2012-12-10  Per Bothner  <per@bothner.com>
+
+	* KawaAutoHandler.java (getModule): Don't include initial slash in
+	path value.  This sort-of works if context-path doens't end in slash.
+	Fix some problems if path is a directory.
+
+	* KawaHttpHandler.java (addAutoHandler): Add initial "/" to
+	uriRoot if needed.
+
 2010-08-19  Per Bothner  <per@bothner.com>
 
 	* ReplSession.java: Use new Future.make factory method.

@@ -4,6 +4,7 @@ package gnu.jemacs.swt;
 
 import java.util.Iterator;
 import org.eclipse.jface.dialogs.InputDialog;
+import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.SelectionEvent;
 import org.eclipse.swt.events.SelectionListener;
@@ -56,6 +57,12 @@ public class SwtFrame extends EFrame
     return false;
   }
 
+  public void showAboutMessage () 
+  {
+    Shell shell = new Shell();
+    MessageDialog.openInformation(shell, "Information", aboutMessage());
+  }
+
   /**
    * @see gnu.jemacs.buffer.EFrame#ask(java.lang.String)
    */
@@ -75,9 +82,6 @@ public class SwtFrame extends EFrame
     return this.shell;
   }
 
-  /**
-   * @see gnu.jemacs.buffer.EFrame#setMenu(gnu.lists.LList)
-   */
   public void setMenuBar (LList list)
   {
     if (menubar != null)
@@ -107,10 +111,10 @@ public class SwtFrame extends EFrame
         }
         else if (o instanceof Pair)
         {
-          CharSequence menuName = (CharSequence) ((Pair) o).car;
+          CharSequence menuName = (CharSequence) ((Pair) o).getCar();
           MenuItem menuItem = SwtHelper.newMenuItem(parent, SWT.CASCADE, menuName.toString(), null);
           Menu subMenu = SwtHelper.newMenu(menuItem);
-          setMenuHelper(subMenu, (LList) ((Pair) o).cdr);
+          setMenuHelper(subMenu, (LList) ((Pair) o).getCdr());
           SwtHelper.setMenu(menuItem, subMenu);
         }
         else if (o instanceof FVector) 

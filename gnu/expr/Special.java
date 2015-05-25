@@ -15,10 +15,14 @@ public class Special extends Object implements Printable, Externalizable
   public static final Special key = new Special("key");
   public static final Special dfault = new Special("default");
   public static final Special abstractSpecial = new Special("abstract");
+  public static final Special nativeSpecial = new Special("native");
   public static final Object eof = gnu.lists.Sequence.eofValue;
   // Also:
   // #!void is the same as Values.Empty.
   // #!null is Java null.
+
+    public static final RuntimeException reachedUnexpected
+        = new RuntimeException("not supposed to reach this point");
 
   public Special ()
   {

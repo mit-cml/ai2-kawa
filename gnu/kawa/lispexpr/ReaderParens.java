@@ -2,10 +2,11 @@
 // This is free software;  for terms and warranty disclaimer see ./COPYING.
 
 package gnu.kawa.lispexpr;
+import gnu.kawa.io.InPort;
 import gnu.text.*;
 import gnu.mapping.Values;
 
-public class ReaderParens extends ReadTableEntry
+public final class ReaderParens extends ReadTableEntry
 {
   char open;
   char close;
@@ -54,37 +55,40 @@ public class ReaderParens extends ReadTableEntry
     this.command = command;
   }
 
- /** Read a list (possibly improper) of zero or more Scheme forms.
+  /** Read a list (possibly improper) of zero or more Scheme forms.
    * Assumes '(' has been read.
    */
-  public Object read (Lexer in, int ch, int count)
+    public Object read (Lexer in, int ch, int count, int sharingIndex)
     throws java.io.IOException, SyntaxException
   {
-    Object r = readList((LispReader) in, ch, count, close);
+    Object p = null;
     if (command != null)
       {
-        LineBufferedReader port = in.getPort();
+        InPort port = in.getPort();
         int startLine = port.getLineNumber();
         int startColumn = port.getColumnNumber();
-        Object p = ((LispReader) in).makePair(command, startLine, startColumn);
-        ((LispReader) in).setCdr(p, r);
-        r = p;
+        // startColumn is the 0-based position *after* reading ch.
+        // We want the position *before* reading ch.
+        // (makePair converts from 0-based to 1-based.)
+        p = ((LispReader) in).makePair(command, startLine, startColumn-1);
+        ((LispReader) in).bindSharedObject(sharingIndex, p);
+	sharingIndex = -1;
       }
-    return r;
+
+    return readList((LispReader) in, p, ch, count, close, sharingIndex);
   }
 
-  public static Object readList (LispReader lexer,
-				 int ch, int count, int close)
+  public static Object readList (LispReader lexer, Object last,
+				 int ch, int count, int close, int sharingIndex)
     throws java.io.IOException, SyntaxException
   {
-    LineBufferedReader port = lexer.getPort();
+    InPort port = lexer.getPort();
     char saveReadState = lexer.pushNesting(close == ']' ? '[' : '(');
     int startLine = port.getLineNumber();
     int startColumn = port.getColumnNumber();
     try
       {
-	Object last = null;
-	Object list = lexer.makeNil();
+        Object list = last == null ? lexer.makeNil() : last;
 	boolean sawDot = false;
 	boolean sawDotCdr = false;
 	ReadTable readTable = ReadTable.getCurrent();
@@ -137,7 +141,13 @@ public class ReaderParens extends ReadTableEntry
 	      }
 	    else
 	      entry = readTable.lookup(ch);
-	    Object value = lexer.readValues(ch, entry, readTable);
+	    Object first = null;
+	    if (! sawDot && last == null)
+	      {
+		first = lexer.makePair(null, startLine, startColumn-1);
+		lexer.bindSharedObject(sharingIndex, first);
+	      }
+	    Object value = lexer.readValues(ch, entry, readTable, -1);
 	    if (value == Values.empty)
 	      continue;
             value = lexer.handlePostfix(value, readTable, line, column);
@@ -163,10 +173,12 @@ public class ReaderParens extends ReadTableEntry
 	      {
 		if (last == null)
 		  {
-		    line = startLine;
-		    column = startColumn-1;
+		    lexer.setCar(first, value);
+		    value = first;
+		    sharingIndex = -1;
 		  }
-		value = lexer.makePair(value, line, column);
+		else
+		  value = lexer.makePair(value, line, column);
 	      }
 	    if (last == null)
 	      list = value;
@@ -174,7 +186,9 @@ public class ReaderParens extends ReadTableEntry
 	      lexer.setCdr(last, value);
 	    last = value;
 	  }
-	return list;
+        if (sawDot && ! sawDotCdr)
+          lexer.error("missing value after '.'");
+	return lexer.bindSharedObject(sharingIndex, list);
       }
     finally
       {

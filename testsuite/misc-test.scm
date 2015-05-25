@@ -1,4 +1,4 @@
-(test-init "Miscellaneous" 204)
+(test-init "Miscellaneous" 218)
 
 ;;; DSSSL spec example 11
 (test '(3 4 5 6) (lambda x x) 3 4 5 6)
@@ -55,6 +55,20 @@
 (test #t keyword? (car '(a: b:)))
 (test #f keyword? "bar")
 
+;; This is Savannah bug #39059: Method keywords problem
+(define (key-1 #!key (a "default a") (b "default b") (c "default c"))
+  (list c a))
+(test '("c" "a") 'key-1 (key-1 a: "a" b: "b" c: "c"))
+
+(define key-2-counter 0)
+(define (incr-key-2-counter)
+  (set! key-2-counter (+ key-2-counter 1))
+  key-2-counter)
+(define (key-2 #!key (a "default a") (b (incr-key-2-counter)) (c "default c"))
+  (list c a key-2-counter))
+(test '("c" "a" 0) 'key-2a (key-2 a: "a" b: "b" c: "c"))
+(test '("default c" "a" 1) 'key-2b (key-2 a: "a"))
+
 ;;; DSSSL spec example 44
 (test "Argentina" keyword->string \Argentina:)
 (test "foo" keyword->string foo:)
@@ -62,6 +76,12 @@
 (test "a b c" keyword->string (string->keyword "a b c"))
 (test foo: string->keyword "foo")
 (test ||: string->keyword "")
+
+;; Test keyword parameter with primitive type.
+(define (fun-with-keys1 #!key (code ::int 400) (message ::string "brrp"))
+   (format "code: ~a message: ~a." code message))
+(test "code: 400 message: brrp." 'test-fun-with-keys1 (fun-with-keys1))
+(test "code: 200 message: brrp." 'test-fun-with-keys1 (fun-with-keys1 code: 200))
 
 (test "Hello" symbol->string 'H\x65;llo)
 
@@ -94,20 +114,6 @@
 (test 3 try-vector-ref #(1 2 3) 2)
 (test "Bad array index" try-vector-ref #(1 2 3) 10)
 
-(define (test-catch)
-  (let* ((x 0)
-	 (y (catch 'key
-		   (lambda ()
-		     (set! x 2)
-		     (throw 'key 10)
-		     (set! x 1000))
-		   (lambda (key arg)
-		     (set! x (* x arg))
-		     (+ x 10)))))
-    (list x y)))
-
-(test '(20 30) test-catch)
-
 ;; Extracted from bug reported by Joerg-Cyril.Hoehle@t-systems.com
 (define (test-unary-minus)
   (- (char->integer #\0)))
@@ -137,7 +143,7 @@
       (string-set! cr-test-string i #\Linefeed)))
 (call-with-input-string
  cr-test-string
- (lambda (iport)
+ (lambda (iport ::input-port)
    (iport:setConvertCR #t)
    (test 1 input-port-column-number iport)
    (test 1 input-port-line-number iport)
@@ -392,16 +398,6 @@
            (define (bar) (foo))
            (list bar (bar))))))
 
-(test #t procedure?
-      (let () 
-        (define aa 20)
-        (define (foo) aa)
-        (define (bar)
-          (let loop ((arg 'bar))
-            (foo)
-            (not (loop (foo)))))
-        bar))
-
 (test #t not
       (let* ((foo (lambda ()
                     'foo))
@@ -558,7 +554,7 @@
       (lambda (form)
 	(list-cond
 	 (lambda (a b)
-	   (string<? (cadr a) (car b)))
+	   (string<? (cadr a) (caar b)))
 	 forms
 	 (list form)))
       forms))
@@ -597,15 +593,6 @@
 
 (define (not-a) ((lambda (x) (not x)) 'a))
 (test #f not-a)
-
-;;; Test SRFI-13 string-append/shared
-(let ((str "abc"))
-  (test "" string-append/shared)
-  (test "" string-append/shared "")
-  (test "abc" string-append/shared str)
-  (set! str (string-append/shared str "123" "xy"))
-  (test "abc123xy" 'string-append/shared str)
-  (test #t equal? "abc123xy" str))
 
 (test "Test." 'from-psyntax
       ((lambda ()
@@ -670,12 +657,20 @@
 		 (append r1 (list (param1) param1v))))))
 	(append r0 (list (param1) param1v))))
 
-(define var1 1)
-(test 2 'test-fluid-future-1a
+(begin
+  (define var1 1)
+  (test 2 'test-fluid-future-1a
+        (force
+         (fluid-let ((var1 2))
+           (future (begin  (sleep 0.1s) var1)))))
+  (test 1 'test-fluid-future-1b var1))
+
+(define-variable var2 1)
+(test 2 'test-fluid-future-2a
       (force
-       (fluid-let ((var1 2))
-	 (future (begin  (sleep 0.1s) var1)))))
-(test 1 'test-fluid-future-1b var1)
+       (fluid-let ((var2 2))
+         (future (begin  (sleep 0.1s) var2)))))
+(test 1 'test-fluid-future-2b var2)
 
 ;; Bug reported 2005-05-08 by dominique.boucher@nuecho.com.
 (require <moduleFT>)
@@ -739,7 +734,10 @@
 (test "<code xmlns=\"http://www.w3.org/1999/xhtml\">Foo</code>" 'html-contructor-1lit
       (as-xml #<html:code>Foo</html:code>))
 (test "<a xmlns=\"http://www.w3.org/1999/xhtml\" href=\"foo.html\">Foo</a>" 'html-contructor-2lit
-      (as-xml #<html:a {'href}="&{"foo"}.&(string-append "ht" "ml")">Foo</>))
+      (as-xml #<html:a ['href]="&["foo"].&(string-append "ht" "ml")">Foo</>))
+;; old syntax
+(test "<a xmlns=\"http://www.w3.org/1999/xhtml\" href=\"foo.html\">Foo</a>" 'html-contructor-2lit
+      (as-xml #<html:a ['href]="&["foo"].&(string-append "ht" "ml")">Foo</>))
 (define-xml-namespace h "HTML")
 (test "<h:code xmlns:h=\"HTML\">Foo</h:code>" 'html-contructor-3lit
       (as-xml #<h:code>Foo</>))
@@ -749,23 +747,9 @@
       (let ((body1 "Foo")
 	    (body2 "Bar")
 	    (code 'html:code))
-	(as-xml #<{(quote html:b)}><{code}>&{body1}&(car (list body2))</></>)))
+	(as-xml #<[(quote html:b)]><[code]>&[body1]&(car (list body2))</></>)))
 
 (test "<list><b xmlns=\"http://www.w3.org/1999/xhtml\">bold 1</b> <b xmlns=\"http://www.w3.org/1999/xhtml\">bold2</b></list>" 'html-contructor-5 (as-xml (map html:b '("bold 1" "bold2"))))
-
-;; Based on Savannah bug#18736, "intenal compile error -- svn rev 5816".
-;; From Thomas Kirk <tk@research.att.com>
-(test #t 'test-savannah-18736
-      (let* ((elapsed 0)
-	     (oldtime (java.lang.System:currentTimeMillis))
-	     (val ((lambda () (sleep 0.015))))
-	     (ignored
-	      (begin
-		(set! elapsed (- (java.lang.System:currentTimeMillis) oldtime))
-		val)))
-	;; While time resolution is non-portable, assume a sleep of 20ms
-	;; will be detectable as taking at least 10ms.
-	(>= elapsed 10)))
 
 ;; Test for Savannah bug #18909 "Recursive call to function in closure causes
 ;; NullPointerException".  Chris Wegrzyn <chris.wegrzyn@gmail.com>
@@ -858,6 +842,7 @@
 (test 7 inline-two-calls -5)
 (test #f check-even 200001)
 (test #t check-even 18)
+(test #f check-even-unspec-return 23)
 
 ;; Savannah bug #27011: ArrayIndexOutOfBoundsException after 20 local variables
 (define (big-let) ; no argument!
@@ -905,12 +890,6 @@
   (set! x20 x0 ) 
   x0)
 (test "a" big-let)
-
-;; Savannah bug #27014 "AND vs. VOID"
-(begin
-  (define (foo) (and (bar) (bar)))
-  (define baz #f)
-  (define (bar) (set! baz #f)))
 
 ;; Savannah bug #27019 "setLength method of StringBuilder not found"
 (define sb (java.lang.StringBuilder "abcdef"))
@@ -960,3 +939,76 @@
      (loop))
    (e java.lang.Exception 
       (e:printStackTrace))))
+
+;; Savannah bug #32656: ArrayIndexOutOfBoundsException in mergeLocalType
+(test 2 'savannah-32656
+      (letrec ((f (lambda (x)
+                    (case x
+                      ((0) (f x))
+                      ((1) (g x))
+                      ((2) (h x)))))
+               (g (lambda (x)
+                    (case x
+                      ((0) (f x))
+                      ((1) (g x))
+                      ((2) (h x)))))
+               (h (lambda (x)
+                    (case x
+                      ((0) (f x))
+                      ((1) (g x))
+                      ((2) ;(h x)
+                       x)))))
+        (f 2)))
+
+;; Savannah bug #32657: Verification error with JDK7
+(begin
+  (define (foo-savannah-32657) ()
+    (let ((x (bar-savannah-32657))
+          (fail (lambda () (error "fail"))))
+      (if (instance? x <pair>)
+          (let ((y :: <pair> x))
+            (let ((z (y:getCar)))
+              (if (eq? (y:getCdr) '())
+                  z
+                  (fail))))
+          (fail))))
+  (define (bar-savannah-32657) ::<list>
+    (list 1))
+  (test 1 'savannah-32657 (foo-savannah-32657)))
+
+;; Testcase simplified from slime/config/swank-kawa.scm
+(define-syntax mif
+  (syntax-rules ()
+    ((mif ((p . ps) value) then)
+     (let ((fail (lambda () (error "mlet failed")))
+           (tmp value))
+       (if (instance? tmp <pair>)
+           (let* ((tmp :: <pair> tmp))
+             then)
+           (fail))))))
+(define (dispatch-events)
+  (let ((tmp0 '(a b c)))
+    (mif ((c . event) tmp0)
+            1234)))
+(test 1234 dispatch-events)
+
+;; Savavvah bug #36592 "nested map causes compiler inliner NPE"
+(test '(1 2 3) 'savannah-36592
+      (map (lambda (x) x) (map (lambda (x) x) '(1 2 3))))
+
+(define falseBool1 (java.lang.Boolean #f))
+(define falseBool2 (java.lang.Boolean #f))
+(test #f 'eq1-falseBool (eq? falseBool1 falseBool2))
+(test #f 'eq2-falseBool (apply eq? falseBool1 falseBool2 '()))
+(test #t 'eqv1-falseBool (eqv? falseBool1 falseBool2))
+(test #t 'eqv2-falseBool (apply eqv? falseBool1 falseBool2 '()))
+(test #t 'eqv3-falseBool (eqv? falseBool1 #f))
+(test #t 'equal1-falseBool (equal? falseBool1 falseBool2))
+(test #t 'equal2-falseBool (apply equal? falseBool1 falseBool2 '()))
+
+;; # is a terminating macro character in Scheme.
+(test '(a b) 'adjacent-sharp-comment '(a#|com|#b))
+
+;; Savannah bug report #39944 "Possible bug with omitted keyword arguments"
+(define (f-39944 #!key (y -1) (z -2)) z)
+(test 42 'savannah-39944 (f-39944 z: 42))

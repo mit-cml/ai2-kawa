@@ -2,9 +2,9 @@ package gnu.kawa.models;
 import java.awt.*;
 import java.awt.geom.*;
 import java.awt.image.*;
+import gnu.kawa.io.Path;
 import gnu.mapping.WrappedException;
 import java.net.URL;
-import gnu.text.*;
 
 public class DrawImage extends Model
   implements Paintable, java.io.Serializable
@@ -30,7 +30,7 @@ public class DrawImage extends Model
           {
             image = javax.imageio.ImageIO.read(src.openInputStream());
           }
-        catch (Throwable ex)
+        catch (Exception ex)
           {
             throw WrappedException.wrapIfNeeded(ex);
           }

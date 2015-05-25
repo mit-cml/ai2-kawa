@@ -6,6 +6,7 @@ import gnu.mapping.*;
 import gnu.mapping.Location; // As opposed to gnu.bytecode.Location
 import gnu.bytecode.*;
 import gnu.kawa.functions.AddOp;
+import gnu.kawa.io.OutPort;
 import gnu.math.IntNum;
 
 /** An Expression to set (bind) or define a new value to a named variable.
@@ -16,6 +17,9 @@ public class SetExp extends AccessExp
 {
   /** The new value to assign to the variable. */
   Expression new_value;
+
+  /** Index into {@code values} array of binding. */
+  int valueIndex;
 
   public SetExp (Object symbol, Expression val)
   { this.symbol = symbol;  new_value = val; }
@@ -43,13 +47,13 @@ public class SetExp extends AccessExp
 
   /** Get the Expression for calculating the new ("right-hand") value. */
   public final Expression getNewValue() { return new_value; }
+  public void setNewValue(Expression newValue) { this.new_value = newValue; }
 
-  public static final int DEFINING_FLAG = NEXT_AVAIL_FLAG;
-  public static final int GLOBAL_FLAG = NEXT_AVAIL_FLAG << 1;
-  public static final int PREFER_BINDING2 = NEXT_AVAIL_FLAG << 2;
-  public static final int PROCEDURE = NEXT_AVAIL_FLAG << 3;
-  public static final int SET_IF_UNBOUND = NEXT_AVAIL_FLAG << 4;
-  public static final int HAS_VALUE = NEXT_AVAIL_FLAG << 5;
+  public static final int DEFINING_FLAG = AccessExp.NEXT_AVAIL_FLAG;
+  public static final int GLOBAL_FLAG = AccessExp.NEXT_AVAIL_FLAG << 1;
+  public static final int PROCEDURE = AccessExp.NEXT_AVAIL_FLAG << 2;
+  public static final int SET_IF_UNBOUND = AccessExp.NEXT_AVAIL_FLAG << 3;
+  public static final int HAS_VALUE = AccessExp.NEXT_AVAIL_FLAG << 4;
 
   public final boolean isDefining ()
   {
@@ -170,7 +174,8 @@ public class SetExp extends AccessExp
         && decl.context instanceof ModuleExp
 	&& isDefining() && ! decl.ignorable())
       {
-        if (decl.shouldEarlyInit())
+        if (decl.shouldEarlyInit()
+            && decl.field != null && ! decl.field.hasConstantValueAttr()) 
           BindingInitializer.create(decl, new_value, comp);
         if (needValue)
           {
@@ -253,7 +258,7 @@ public class SetExp extends AccessExp
             type = decl.getType();
 	    Variable var = decl.getVariable();
 	    if (var == null)
-	      var = decl.allocateVariable(code);
+                var = decl.allocateVariable(code, true);
             int delta = canUseInc(new_value, decl);
             if (delta != BAD_SHORT)
               {
@@ -267,6 +272,8 @@ public class SetExp extends AccessExp
             else
               {
                 new_value.compile(comp, decl);
+                if (! checkReachable(comp))
+                  return;
                 if (needValue)
                   {
                     code.emitDup(type);  // dup or dup2
@@ -275,35 +282,34 @@ public class SetExp extends AccessExp
                 code.emitStore(var);
               }
 	  }
-	else if (decl.context instanceof ClassExp && decl.field == null
-		 && ! getFlag(PROCEDURE)
-		 && ((ClassExp) decl.context).isMakingClassPair())
-	  {
-	    String setName = ClassExp.slotToMethodName("set", decl.getName());
-	    ClassExp cl = (ClassExp) decl.context;
-	    Method setter = cl.type.getDeclaredMethod(setName, 1);
-	    cl.loadHeapFrame(comp);
-	    new_value.compile(comp, decl);
-	    if (needValue)
-	      {
-		code.emitDupX();
-		valuePushed = true;
-	      }
-	    code.emitInvoke(setter);
-	  }
-	else
+        else
 	  {
 	    Field field = decl.field;
-            if (! field.getStaticFlag())
+            boolean isStatic = field != null && field.getStaticFlag();
+            Method setter;
+            if (field == null)
+              {
+                String setName = ClassExp.slotToMethodName("set",
+                                                           decl.getName());
+                ClassExp cl = (ClassExp) decl.context;
+                setter = cl.compiledType.getDeclaredMethod(setName, 1);
+                comp.usedClass(setter.getDeclaringClass());
+              }
+            else
+              {
+                setter = null;
+                comp.usedClass(field.getDeclaringClass());
+              }
+            if (! isStatic)
               decl.loadOwningObject(owner, comp);
-            type = field.getType();
 	    new_value.compile(comp, decl);
-            comp.usedClass(field.getDeclaringClass());
-            if (field.getStaticFlag())
+            if (! checkReachable(comp))
+              return;
+            if (isStatic)
               {
                 if (needValue)
                   {
-                    code.emitDup(type);
+                    code.emitDup();
                     valuePushed = true;
                   }
                 code.emitPutStatic(field);
@@ -315,7 +321,10 @@ public class SetExp extends AccessExp
                     code.emitDupX();
                     valuePushed = true;
                   }
-                code.emitPutField(field);
+                if (field != null)
+                    code.emitPutField(field);
+                else
+                    code.emitInvoke(setter); 
               }
 	  }
       }
@@ -329,16 +338,35 @@ public class SetExp extends AccessExp
       comp.compileConstant(Values.empty, target);
   }
 
+  boolean checkReachable (Compilation comp)
+  {
+    boolean reachable = comp.getCode().reachableHere();
+    if (! reachable)
+      comp.error('w', "'"+getSymbol()+"' can never be set because expression never finishes", new_value);
+    return reachable;
+  }
+
   /** "Failure" return value of canUseInc. */
   public static final int BAD_SHORT = 0x10000;
 
   /* Check if we can use the 'iinc' instruction.
-   * @return return increment, or BAD_SHORT.
+   * Also, if the {@code rhs} is the same as (i.e. a reference to)
+   * {@code target}, return zero, to indicate a possible no-op.
+   * I.e. we treat {@code target=target} as if it were
+   * {@code target=target+0} - even is {@code target} is non-numeric.
+   * @return return increment, or {@code BAD_SHORT}.
    */
   public static int canUseInc (Expression rhs, Declaration target)
   {
     ApplyExp aexp;
     Variable var = target.getVariable();
+    if (target.isSimple()
+        && rhs instanceof ReferenceExp)
+      {
+        ReferenceExp rexp = (ReferenceExp) rhs;
+        if (rexp.binding == target && ! rexp.getDontDereference())
+          return 0;
+      }
   body:
     if (target.isSimple()
         && var.getType().getImplementationType().promote() == Type.intType
@@ -395,7 +423,7 @@ public class SetExp extends AccessExp
     return BAD_SHORT;
   }
 
-  public final gnu.bytecode.Type getType()
+  protected final gnu.bytecode.Type calculateType ()
   {
     return ! getHasValue() ? Type.voidType
       : binding == null ? Type.pointer_type : binding.getType();
@@ -415,7 +443,8 @@ public class SetExp extends AccessExp
     out.startLogicalBlock(isDefining () ? "(Define" : "(Set", ")", 2);
     out.writeSpaceFill();
     printLineColumn(out);
-    if (binding == null || symbol.toString() != binding.getName())
+    if (symbol != null
+        && (binding == null || symbol.toString() != binding.getName()))
       {
 	out.print('/');
 	out.print(symbol);

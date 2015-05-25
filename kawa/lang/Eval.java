@@ -9,14 +9,9 @@ import gnu.lists.*;
 
 /* This implements the R5RS "eval" procedure. */
 
-public class Eval extends Procedure1or2
+public class Eval
 {
-  public static final Eval eval = new Eval();
-  static { eval.setName("eval"); }
-
-  final static String evalFunctionName = "atEvalLevel$";
-
-  public static void eval (Object sexpr, Environment env, CallContext ctx)
+  public static void evalForm$X (Object sexpr, Environment env, CallContext ctx)
     throws Throwable
   {
     PairWithPosition body;
@@ -29,6 +24,23 @@ public class Eval extends Procedure1or2
 	body.setFile("<eval>");
       }
     evalBody(body, env, new SourceMessages(), ctx);
+  }
+
+  public static Object eval (Object sexpr, Environment env)
+        throws Throwable
+  {
+    CallContext ctx = CallContext.getInstance();
+    int oldIndex = ctx.startFromContext();
+    try
+      {
+	evalForm$X(sexpr, env, ctx);
+	return ctx.getFromContext(oldIndex);
+      }
+    catch (Throwable ex)
+      { 
+	ctx.cleanupFromContext(oldIndex);
+	throw ex;
+      }
   }
 
   public static Object evalBody (Object body, Environment env,
@@ -49,23 +61,6 @@ public class Eval extends Procedure1or2
       }
   }
 
-  public static Object eval (Object sexpr, Environment env)
-        throws Throwable
-  {
-    CallContext ctx = CallContext.getInstance();
-    int oldIndex = ctx.startFromContext();
-    try
-      {
-	eval(sexpr, env, ctx);
-	return ctx.getFromContext(oldIndex);
-      }
-    catch (Throwable ex)
-      { 
-	ctx.cleanupFromContext(oldIndex);
-	throw ex;
-      }
-  }
-
   public static void evalBody (Object body, Environment env,
 			       SourceMessages messages, CallContext ctx)
     throws Throwable
@@ -76,7 +71,7 @@ public class Eval extends Procedure1or2
       {
  	if (env != saveGlobalEnv)
 	  Environment.setCurrent(env);
-	Translator tr = new Translator(language, messages,
+	Translator tr = (Translator) language.getCompilation(messages,
                                        NameLookup.getInstance(env, language));
         tr.immediate = true;
         // The state value BODY_PARSED-1 causes require#importDefinitions
@@ -87,19 +82,18 @@ public class Eval extends Procedure1or2
         Compilation saveComp = Compilation.setSaveCurrent(tr);
         try
           {
-            int first = tr.formStack.size();
             tr.scanBody(body, mod, false);
-            tr.firstForm = first;
             tr.finishModule(mod);
+            if (body instanceof PairWithPosition)
+                mod.setFile(((PairWithPosition) body).getFileName());
+            tr.setEvalName();
+            tr.process(Compilation.RESOLVED);
           }
         finally
           {
             Compilation.restoreCurrent(saveComp);
           }
 
-	if (body instanceof PairWithPosition)
-	  mod.setFile(((PairWithPosition) body).getFileName());
-	mod.setName(evalFunctionName + (++ModuleExp.interactiveCounter));
 	ModuleExp.evalModule(env, ctx, tr, null, null);
 	if (messages.seenErrors())
 	  throw new RuntimeException("invalid syntax in eval form:\n"
@@ -110,30 +104,5 @@ public class Eval extends Procedure1or2
 	if (env != saveGlobalEnv)
 	  Environment.setCurrent(saveGlobalEnv);
       }
-  }
-
-  public Object apply1 (Object arg1)
-    throws Throwable
-  {
-    return eval (arg1, Environment.user ());
-  }
-
-  public Object apply2 (Object arg1, Object arg2)
-    throws Throwable
-  {
-    return eval (arg1, (Environment) arg2);
-  }
-
-  public void apply (CallContext ctx)
-    throws Throwable
-  {
-    Procedure.checkArgCount(this, ctx.count);
-    Object exp = ctx.getNextArg();
-    Environment env;
-    env = (Environment) ctx.getNextArg(null);
-    if (env == null)
-      env = Environment.user();
-    ctx.lastArg();
-    eval(exp, env, ctx);
   }
 }

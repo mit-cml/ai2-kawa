@@ -3,7 +3,14 @@
 
 package gnu.expr;
 import gnu.bytecode.*;
-import gnu.mapping.*;
+import gnu.kawa.io.OutPort;
+import gnu.mapping.CallContext;
+import gnu.mapping.Environment;
+import gnu.mapping.EnvironmentKey;
+import gnu.mapping.Procedure;
+import gnu.mapping.Symbol;
+import gnu.mapping.UnboundLocationException;
+import gnu.math.IntNum;
 
 /**
  * This class represents a variable reference (an identifier).
@@ -16,11 +23,14 @@ public class ReferenceExp extends AccessExp
   /** Unique id number, to ease print-outs and debugging. */
   int id = ++counter;
 
-  public static final int DONT_DEREFERENCE = NEXT_AVAIL_FLAG;
-  public static final int PROCEDURE_NAME = NEXT_AVAIL_FLAG << 1;
-  public static final int PREFER_BINDING2 = NEXT_AVAIL_FLAG << 2;
+  public static final int DONT_DEREFERENCE = AccessExp.NEXT_AVAIL_FLAG;
+  public static final int PROCEDURE_NAME = AccessExp.NEXT_AVAIL_FLAG<<1;
   /** Flag indicates a reference to a type name. */
-  public static final int TYPE_NAME = NEXT_AVAIL_FLAG << 3;
+  public static final int TYPE_NAME = AccessExp.NEXT_AVAIL_FLAG<<2;
+  public static final int ALLOCATE_ON_STACK_LAST = AccessExp.NEXT_AVAIL_FLAG<<3;
+
+  /** Links in list headed by {@see LambdaExp#siblingReferences}. */
+  ReferenceExp siblingReferencesNext;
 
   /* If true, must have binding.isIndirectBinding().  Don't dereference it. */
   public final boolean getDontDereference()
@@ -83,10 +93,11 @@ public class ReferenceExp extends AccessExp
     throws Throwable
   {
     Object value;
+    Expression dvalue;
     if (binding != null && binding.isAlias() && ! getDontDereference()
-        && binding.value instanceof ReferenceExp)
+        && (dvalue = binding.getValueRaw()) instanceof ReferenceExp)
       {
-        ReferenceExp rexp = (ReferenceExp) binding.value;
+        ReferenceExp rexp = (ReferenceExp) dvalue;
         if (rexp.getDontDereference() && rexp.binding != null)
           {
             Expression v = rexp.binding.getValue();
@@ -97,7 +108,7 @@ public class ReferenceExp extends AccessExp
                 return;
               }
           }
-        value = binding.value.eval(ctx);
+        value = dvalue.eval(ctx);
       }
     else if (binding != null && binding.field != null
              && binding.field.getDeclaringClass().isExisting()
@@ -120,12 +131,12 @@ public class ReferenceExp extends AccessExp
     // This isn't just an optimization - it's needed for evaluating procedural
     // macros (e.g. syntax-case) defined in a not-yet-compiled module.
     else if (binding != null
-        && (binding.value instanceof QuoteExp
-            || binding.value instanceof LambdaExp)
-        && binding.value != QuoteExp.undefined_exp
+        && ((dvalue = binding.getValue()) instanceof QuoteExp
+            || dvalue instanceof LambdaExp)
+        && dvalue != QuoteExp.undefined_exp
         && (! getDontDereference() || binding.isIndirectBinding()))
       {
-        value = binding.value.eval(ctx);
+        value = dvalue.eval(ctx);
       }
     else if (binding == null
              || (binding.context instanceof ModuleExp
@@ -159,6 +170,7 @@ public class ReferenceExp extends AccessExp
   public void compile (Compilation comp, Target target)
   {
     if (! (target instanceof ConsumerTarget)
+        || binding.getFlag(Declaration.ALLOCATE_ON_STACK)
         || ! ((ConsumerTarget) target).compileWrite(this, comp))
       binding.load(this, flags, comp, target);
   }
@@ -189,6 +201,10 @@ public class ReferenceExp extends AccessExp
             Expression dval = decl.getValue();
             if (dval != null)
               return dval.validateApply(exp, visitor, required, decl);
+            Type dtype = decl.type;
+            if (dtype instanceof ClassType
+                && ((ClassType) dtype).isSubclass("kawa.lang.Continuation"))
+                exp.setType(Type.neverReturnsType);
           }
       }
     else if (getSymbol() instanceof Symbol)
@@ -206,6 +222,8 @@ public class ReferenceExp extends AccessExp
   {
     ps.print("(Ref/");
     ps.print(id);
+    if (getDontDereference())
+      ps.print(",dont-deref");
     if (symbol != null
 	&& (binding == null || symbol.toString() != binding.getName()))
       {
@@ -220,28 +238,23 @@ public class ReferenceExp extends AccessExp
     ps.print(")");
   }
 
-  public gnu.bytecode.Type getType()
+  protected gnu.bytecode.Type calculateType()
   {
     Declaration decl = binding;
     if (decl == null || decl.isFluid())
       return Type.pointer_type;
     if (getDontDereference())
-      return Compilation.typeLocation;
-    decl = Declaration.followAliases(decl);
-    Type type = decl.getType();
-    if (type == null || type == Type.pointer_type)
       {
-        Expression value = decl.getValue();
-        if (value != null && value != QuoteExp.undefined_exp)
-          {
-            // Kludge to guard against cycles.
-            // Not verified if it is really needed, but just in case ...
-            Expression save = decl.value;
-            decl.value = null;
-            type = value.getType();
-            decl.value = save;
-          }
+        if (decl.field != null && ! decl.isIndirectBinding())
+          return decl.field.getStaticFlag()
+            ? Compilation.typeStaticFieldLocation
+            : Compilation.typeFieldLocation;
+        return Compilation.typeLocation;
       }
+    decl = Declaration.followAliases(decl);
+    Type type = decl.isAlias() && decl.isIndirectBinding()
+        ? Type.objectType // FIXME - should use a parameterized Location type
+        : decl.getType();
     if (type == Type.toStringType)
       type = Type.javalangStringType;
     return type;

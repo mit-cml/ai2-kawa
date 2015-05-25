@@ -1,5 +1,6 @@
 (require <kawa.lib.prim_syntax>)
 (require <kawa.lib.std_syntax>)
+(require <kawa.lib.case_syntax>)
 (require <kawa.lib.syntax>)
 (require <kawa.lib.strings>)
 (require <kawa.lib.ports>)
@@ -15,18 +16,25 @@
 (define (boolean? x) :: <boolean>
   (or (eq? x #t) (eq? x #f)))
 
+(define (boolean=? b1 b2 #!rest (r ::object[])) ::boolean
+  (let ((n (- r:length 1)))
+    (if b1
+        (and b2
+             (let loop ((i ::int n))
+               (or (< i 0) (and (r i) (loop (- i 1))))))
+        (and (not b2)
+             (let loop ((i ::int n))
+               (or (< i 0) (and (not (r i)) (loop (- i 1)))))))))
+
 (define (symbol? x) :: <boolean>
   (instance? x <gnu.mapping.Symbol>))
 
 (define (symbol->string (s <symbol>)) :: constant-string
   (s:toString))
 
-(define-procedure symbol=?
-  (lambda (s1::symbol s2::symbol)::boolean
-	  (gnu.mapping.Symbol:equals s1 s2))
-  (lambda (s1::symbol s2::symbol #!rest r)::boolean
-	  (and (gnu.mapping.Symbol:equals s1 s2)
-	       (apply symbol=? s2 r))))
+(define (symbol=? s1::symbol s2::symbol #!rest r)::boolean
+  (and (gnu.mapping.Symbol:equals s1 s2)
+       (or (null? r) (apply symbol=? s2 r))))
 
 (define (symbol-local-name s::symbol) ::constant-string
   (s:getLocalPart))
@@ -71,7 +79,9 @@
   (case version
     ((4) (static-field <kawa.standard.Scheme> 'r4Environment))
     ((5) (static-field <kawa.standard.Scheme> 'r5Environment))
-    (else (error "scheme-report-environment version must be 4 or 5"))))
+    (else (primitive-throw
+           (kawa.lang.NamedException:makeError
+            "scheme-report-environment version must be 4 or 5")))))
 
 (define (interaction-environment)
   (invoke-static <gnu.mapping.Environment> 'user))
@@ -95,22 +105,37 @@
    (thunk)
    (after)))
 
-(define (force arg)
-  (kawa.lang.Promise:force arg))
+(define (promise? obj) ::boolean
+  (instance? obj gnu.mapping.Lazy))
 
-;;; The one-argument case is a standard DSSSL procedure.
-;;; The multi-argument extension matches Guile.
-(define (error msg . args)
-  (set! msg (call-with-output-string (lambda (port) (display msg port))))
-  (set! args (map
-	      (lambda (arg)
-		(call-with-output-string (lambda (port) (write arg port))))
-	      args))
-  (apply throw 'misc-error msg args))
+(define (make-promise obj) ::gnu.mapping.Lazy
+  (if (gnu.mapping.Lazy? obj) obj
+      (gnu.mapping.Promise:makeBoundPromise obj)))
+
+(define (promise-set-value! promise::gnu.mapping.Promise value) ::void
+  (promise:setValue value))
+
+(define (promise-set-alias! promise::gnu.mapping.Promise aliasee::gnu.mapping.Lazy) ::void
+  (promise:setAlias aliasee))
+
+(define (promise-set-exception! promise::gnu.mapping.Promise exception::java.lang.Throwable) ::void
+  (promise:setException exception))
+
+(define (promise-set-thunk! promise::gnu.mapping.Promise thunk::gnu.mapping.Procedure) ::void
+  (promise:setThunk thunk))
+
+(define (force arg)
+  (gnu.mapping.Promise:force1 arg))
+
+(define (force* arg)
+  (gnu.mapping.Promise:force arg))
+
+(define (eager value)
+  eager)
 
 (define (base-uri #!optional (node #!null))
   (let ((uri (if (eq? node #!null)
-		 (gnu.text.Path:currentPath)
+		 (gnu.kawa.io.Path:currentPath)
 		 ((as <gnu.kawa.xml.KNode> node):baseURI))))
     (if (eq? uri #!void) #f uri)))
 
@@ -130,3 +155,6 @@
 	 (proc :: <gnu.expr.GenericProc>)
 	 #!rest (args :: <object[]>)) :: <void>
   (invoke proc 'setProperties args))
+
+(define (features) ::list
+  (kawa.standard.IfFeature:featureList))

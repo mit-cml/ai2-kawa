@@ -3,10 +3,12 @@
 
 package gnu.lists;
 import java.io.*;
+import java.util.Arrays;
 
-/** Simple adjustable-length vector whose elements are Object references. */
+/** Simple adjustable-length vector whose elements are Object references.
+ */
 
-public class FVector extends SimpleVector
+public class FVector<E> extends SimpleVector<E>
   implements Externalizable, Consumable
   /* #ifdef JAVA2 */
   , Comparable
@@ -66,6 +68,13 @@ public class FVector extends SimpleVector
     return new FVector(data);
   }
 
+    public void copyFrom (int index, FVector src, int start, int end) {
+        int count = end-start;
+        if (count < 0 || index+count > size || end > src.size)
+            throw new ArrayIndexOutOfBoundsException();
+        System.arraycopy(src.data, start, data, index, count);
+    }
+
   /** Get the allocated length of the data buffer. */
   public int getBufferLength()
   {
@@ -74,6 +83,7 @@ public class FVector extends SimpleVector
 
   public void setBufferLength(int length)
   {
+    checkCanWrite();
     int oldLength = data.length;
     if (oldLength != length)
       {
@@ -88,30 +98,32 @@ public class FVector extends SimpleVector
 
   public void shift(int srcStart, int dstStart, int count)
   {
+    checkCanWrite();
     System.arraycopy(data, srcStart, data, dstStart, count);
   }
 
-  public final Object getBuffer(int index)
+  public final E getBuffer(int index)
   {
-    return data[index];
+    return (E) data[index];
   }
 
-  public final Object get (int index)
+  public final E get (int index)
   {
     if (index >= size)
       throw new ArrayIndexOutOfBoundsException();
-    return data[index];
+    return (E) data[index];
   }
 
-  public final Object setBuffer(int index, Object value)
+  @Override
+  public final void setBuffer(int index, Object value)
   {
-    Object old = data[index];
+    checkCanWrite();
     data[index] = value;
-    return old;
   }
 
   protected void clearBuffer(int start, int count)
   {
+    checkCanWrite();
     Object[] d = data;
     while (--count >= 0)
       d[start++] = null;
@@ -165,22 +177,10 @@ public class FVector extends SimpleVector
   }
   */
 
-  // FIXME - bad name - setAll should take a Collection
-  public final void setAll (Object new_value)
-  {
-    Object[] d = data;
-    for (int i = size; --i >= 0; )
-      d[i] = new_value;
-  }
-
-  public boolean consumeNext(int ipos, Consumer out)
-  {
-    int index = ipos >>> 1;
-    if (index >= size)
-      return false;
-    out.writeObject(data[index]);
-    return true;
-  }
+    public final void fill(Object new_value, int start, int end) {
+        checkCanWrite();
+        Arrays.fill(data, start, end, new_value);
+    }
 
   public void consumePosRange (int iposStart, int iposEnd, Consumer out)
   {

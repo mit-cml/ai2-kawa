@@ -95,11 +95,10 @@ public class U64Vector extends SimpleVector
     return Convert.toObjectUnsigned(data[index]);
   }
 
-  public Object setBuffer(int index, Object value)
+  @Override
+  public void setBuffer(int index, Object value)
   {
-    long old = data[index];
     data[index] = Convert.toLongUnsigned(value);
-    return Convert.toObjectUnsigned(old);
   }
 
   public final void setLongAt(int index, long value)
@@ -126,15 +125,6 @@ public class U64Vector extends SimpleVector
   }
 
   public String getTag() { return "u64"; }
-
-  public boolean consumeNext (int ipos, Consumer out)
-  {
-    int index = ipos >>> 1;
-    if (index >= size)
-      return false;
-    out.writeLong(data[index]);
-    return true;
-  }
 
   public void consumePosRange (int iposStart, int iposEnd, Consumer out)
   {

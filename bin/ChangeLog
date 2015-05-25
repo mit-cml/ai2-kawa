@@ -1,3 +1,68 @@
+2014-11-26  Per Bothner  <per@bothner.com>
+
+	* kawa.sh.in: Fix array handling and make it more portable.
+
+2014-11-19  Per Bothner  <per@bothner.com>
+
+	* kawa.sh.in: Add support for -Dkawa.command.line.
+	Also shift any -D and -J options before the kawa.repl class name.
+
+2014-11-18  Per Bothner  <per@bothner.com>
+
+	* kawa.sh.in: New file - template for kawa.sh.
+
+2014-10-14  Per Bothner  <per@bothner.com>
+
+	* configure.in (AC_INIT): Set version to 1.90.
+
+2014-02-21  Per Bothner  <per@bothner.com>
+
+	* configure.ac: Add substitution for JAVA - needed by cgi-servlet.c.
+
+2014-02-20  Per Bothner  <per@bothner.com>
+
+	* configure.ac: New file, used for enable-kawa-frontend support.
+	* Makefile.am: Remove GCJ support. Only used for compiling executables.
+	Scripts like kawa.sh are generated from toplevel.
+	* qexo.in: New file - template for qexo script.
+
+2013-12-30  Per Bothner  <per@bothner.com>
+
+	* Makefile.am: Update for new automake convention.
+
+2013-09-23  Matthieu Vachon  <matthieu.o.vachon@gmail.com>
+	    Per Bothner  <per@bothner.com>
+
+	* Makefile.am: Regularize tmp file naming.
+
+2013-09-22  Per Bothner  <per@bothner.com>
+
+	* kawa.c: Pass -J and -D flags to java launcher.
+	Calculate and set kawa.command.line property..
+
+2012-05-25  Per Bothner  <per@bothner.com>
+
+	* Makefile.am (EXTRA_DIST): New rule, needed for CygWin builds.
+
+2011-08-01  Per Bothner  <per@bothner.com>
+
+	* Makefile.am (kawa.sh): Add conf_classpath to classpath,
+	in the no-kawa-frontend case.
+
+2011-07-30  Per Bothner  <per@bothner.com>
+
+	* kawa.bat.in: New file - input template for kawa.bat, for Windows.
+	* Makefile.am: New rules to make kawa.bat.
+
+2011-07-29  Per Bothner  <per@bothner.com>
+
+	* kawapath.c: Add EXTRAPATH to runtime classpath.
+	* Makefile.am: Pass conf_classpath as EXTRAPATH.
+
+2011-07-21  Per Bothner  <per@bothner.com>
+
+	* Makefile.am (kawa.sh): Fix so it works on Cygwin.
+
 2009-09-25  Per Bothner  <per@bothner.com>
 
 	* Makefile.am: add explicit definitions of binPROGRAMS_INSTALL;

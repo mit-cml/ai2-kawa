@@ -1,3 +1,245 @@
+2014-12-01  Jamison Hope  <jrh@theptrgroup.com>
+
+	* srfi14.scm (char-set<=): Fix bug reported by Seth Alves.
+
+2014-11-27  Seth Alves <alves@hungry.com>
+
+	* srfi60.scm: Add more aliases.
+
+2014-11-26  Per Bothner  <per@bothner.com>
+
+	* srfi60.scm: Add define-alias for arithmetic-shift.
+
+2014-11-24  Per Bothner  <per@bothner.com>
+
+	* cut.scm: Import (scheme base) to avoid dangling references.
+
+2014-11-20  Per Bothner  <per@bothner.com>
+
+	* srfi13.scm (string-copy, string-copy!, string-fill!, string->list):
+	Replaced by aliases to implementations exported by kawa.lib.strings.
+
+2014-09-26  Per Bothner  <per@bothner.com>
+
+	* DefineRecordType.scm: Move to kawa/lib.
+	* Makefile.am: Update accordingly.
+
+2014-09-04  Per Bothner  <per@bothner.com>
+
+	* enums.scm: Update for syntax-error -> report-syntax-error renaming.
+	* srfi2.scm: Likewise.
+
+2014-08-04  Per Bothner  <per@bothner.com>
+
+	* srfi13.scm (string-for-each): Replace by alias for
+	srfi-13-string-for-each.
+
+2014-07-02  Per Bothner  <per@bothner.com>
+
+	* srfi14.scm (char-set): Update since character is now primitive.
+
+2014-05-31  Per Bothner  <per@bothner.com>
+
+	* Makefile.am (EXTRA_DIST): Add char-tables.iscm.
+	* srfi14.scm: Use include-relative rather than include.
+
+2014-05-05  Per Bothner  <per@bothner.com>
+
+	* syntaxutils.scm: Add quotation for @ symbol (i.e. |@|)
+	since @ is now used for $splice$ read syntax.
+
+2014-04-23  Per Bothner  <per@bothner.com>
+
+	* Makefile.am: New rules to regenerate char-tables.iscm using
+	gnu/kawa/util/generate-charsets.scm.
+
+	* char-tables.iscm: New file - soon to be auto-generated.
+	* srfi14.scm: Move the actual character tables into separate file.
+
+2014-02-18  Jamison Hope  <jrh@theptrgroup.com>
+
+	* srfi60.scm: New implementation of SRFI-60.
+	* Makefile.am: Update accordingly.
+
+2014-02-06  Seth Alves
+
+	* srfi13.scm (string-trim-right):  Import bug-fix from reference
+	implementation.
+
+2014-01-30   Mark H Weaver <mhw@netris.org>
+
+	* testing.scm (%test-evaluate-with-catch): Improved Guile's
+	implementation to record 'actual-error' if there's an error.
+
+	* testing.scm: Fix typo '%test-approximimate=' -> '%test-approximate='.
+
+	* testing.scm (test-error): In the default implementation
+	'%test-report-result' was being called twice: once by '%test-error',
+	and once by 'test-assert'.
+
+2014-01-29  Mark H Weaver <mhw@netris.org>
+
+	* testing.scm: Patches to better support Guile-2.
+
+2013-10-19  David Van Horn
+	    Per Bothner  <per@bothner.com>
+
+	* ralists.scm: Port of SRFI-101 "Purely Functional Random-Access
+	Pairs and Lists" reference implementation.  Low-level code
+	re-written in Java as gnu/lists/RAPair.java.
+	* Makefile.am: Update accordingly.
+
+2013-09-25  Per Bothner  <per@bothner.com>
+
+	* srfi1.scm (make-list, list-copy): Commented out, since
+	now in lists.scm.
+
+2013-09-06  Per Bothner  <per@bothner.com>
+
+	* testing.scm: Generalize test-approximimate to complex.
+	(%test-approximimate=): Handle non-real complex numbers.
+
+2013-06-02  Per Bothner  <per@bothner.com>
+
+	* conditions.scm: Minor tweaks.
+
+2013-02-23  Per Bothner  <per@bothner.com>
+
+	* printf.scm (formal-real): Add missing else for case.
+	* srfi14.scm (->char-set): Add missing else for case.
+
+2013-02-02  Per Bothner  <per@bothner.com>
+
+	* testing.scm (test-on-test-begin-simple): Fix thinko.
+
+2012-12-26  Álvaro Castro-Castilla
+
+	* testing.scm: Modified for Scheme Spheres.
+
+2012-12-23  Per Bothner  <per@bothner.com>
+
+	* srfi14.scm (%boundary-pairs-union): Fix for Savannah bug #37633
+	"char-set-union with same char-sets".  Fix by anonymous;
+	verified by Jamison Hope.
+
+2012-12-22  Per Bothner  <per@bothner.com>
+
+	* pregexp.scm (pregexp-error): Just define as error function.
+	(pregexp-match-positions-aux): Remove unreachable constant.
+
+2012-11-18  Per Bothner  <per@bothner.com>
+
+	* testing.scm: Add test-group to list of exported names.
+
+2012-09-11  Helmut Eller  <eller.helmut@gmail.com>
+
+	Fix Savannah bug #15579.
+	Handle some complex arglists, in particular #!rest args.
+	* syntaxutils.scm (unrewrite-arglist): New function.
+	(unrewrite): Use it.
+
+2012-07-10  Per Bothner  <per@bothner.com>
+
+	* Xutils.scm: Moved to gnu/xquery/util.
+	* Makefile.am: Update accordingly.
+
+	* Xutils.scm: New file.
+	(count-values): New function.
+	* Makefile.am: Update accordingly.
+
+2012-07-03  Per Bothner  <per@bothner.com>
+
+	* Makefile.am: Conditionalize gui.scm on WITH_AWT.
+
+2012-03-11  Per Bothner  <per@bothner.com>
+
+	* srfi69.scm (symbol-hash, vector-hash): Remove non-exported
+	un-used functions.
+
+	* conditions.scm: Add some missing exports.
+
+	* StreamsPrimitive.scm (stream-force): Moved from here ...
+	* StreamsType.scm: ... here, because it is no part of the API
+	for streams.primitive.
+
+2012-02-07  Jamison Hope  <jrh@theptrgroup.com>
+
+	* srfi13.scm (let-optionals*): Re-implement to better match reference
+	implementation.  This fixes a crash when calling string-contains.
+
+2012-02-05  Per Bothner  <per@bothner.com>
+
+	* enums.scm: Use #, and #,@ instead of , and ,@ in quasisyntax.
+
+2012-01-31  Per Bothner  <per@bothner.com>
+
+	* StreamsType.scm: Rewrite to build on top of
+	the new delay/lazy/force primitives.
+	* StreamsPrimitive.scm: Mostly re-write.
+
+2011-12-09  Per Bothner  <per@bothner.com>
+
+	* gui.scm (image-width, image-height): Fix typo.
+	* Makefile.am (SCM_COMPILE_FLAGS): New flags.
+
+2011-10-29  Per Bothner  <per@bothner.com>
+
+	* readtable.scm (define-reader-ctor): Improve type specifiers
+	to avoid compiler warning.
+
+2011-09-24  Jamison Hope  <jrh@theptrgroup.com>
+
+	* srfi14.scm: Update character sets to match Unicode 6 and the
+	Java-7 java.lang.Character predicates.
+
+2011-05-02  Per Bothner  <per@bothner.com>
+
+	* syntaxutils.scm (unrewrite-let): Update for new LetExp representation.
+
+2011-02-25  Jamison Hope  <jrh@theptrgroup.com>
+
+	* srfi13.scm: Fixes to allows compilation without warnings.
+	(check-arg, char-cased?): New procedures.
+	(:optional, let-optionals*): New syntax.
+
+2011-02-10  Jamison Hope  <jrh@theptrgroup.com>
+
+	* srfi14.scm: Fix Java-6 dependency.
+
+2011-02-08  Jamison Hope  <jrh@theptrgroup.com>
+
+	* srfi14.scm: New implementation of SRFI-14.
+	* Makefile.am: Update accordingly.
+
+2011-01-17  Per Bothner  <per@bothner.com>
+
+	* syntaxutils.scm (rewrite-form): Call Language#getCompilation rather
+	than hard-wiring in call the Translator constructor.
+
+2011-01-03  Per Bothner  <per@bothner.com>
+
+	* enums.scm (%define-enum): Inline use of symbol-append.
+	Use string literal instead of quoted symbol for "[]".
+	(symbol-append): Remove function.
+
+2010-11-20  Philip L. Bewig
+            Jamison Hope <jrh@theptrgroup.com>
+            Per Bothner  <per@bothner.com>
+
+	Implementation of SRFI-41.
+	* StreamsPrimitive.scm: New file, implements (streams primitive).
+	* StreamsDerived.scm: New file, implements (streams derived).
+	* Streams.scm: New file, implements (streams).
+	* StreamsType.scm: New file, defines stream-type.
+	* Makefile.am (java_SCM): Update accordingly.
+
+2010-11-18  Per Bothner  <per@bothner.com>
+
+	* DefineRecordType.scm (define-record-type):  Instead of expanding to
+	define-simple-class, expand to define-class with an explicit
+	'interface: #f' argument.  This is to force a member class, rather
+	than a package-level class.
+
 2010-11-06  Per Bothner  <per@bothner.com>
 
 	* enums.scm (%define-enum): Add static valueOf method.
@@ -105,11 +347,11 @@
 
 2006-08-11  Per Bothner  <per@bothner.com>
 
-	* testing.scm (%test-comp1body):  Remove inccorect setting of
+	* testing.scm (%test-comp1body):  Remove incorrect setting of
 	expected-value property - to R5RS standard function exp.
 
 	* testing.scm (test-assert): Fix thinko expr -> test-expression.
-	
+
 2006-06-06  Per Bothner  <per@bothner.com>
 
 	* testing.scm: Rename non-exported names to consistently start with %.
@@ -228,7 +470,7 @@
 
 	* testing.scm: Add module-compile-options if Kawa, to catch bugs.
 	This did catch some bugs; fixed those.
-	
+
 2005-10-16  Alex Shinn <alexshinn@gmail.com>
 
 	* testing.scm (%test-record-define%): Add predicate and allocator as

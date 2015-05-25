@@ -1,3 +1,60 @@
+2014-09-04  Per Bothner  <per@bothner.com>
+
+	* MiscOps.scm (if): Update renamed syntax-error -> report-syntax-error.
+
+2013-11-10  Per Bothner  <per@bothner.com>
+
+	* defgroup.java: Update for new 'formStack' and scanDefinitions API.
+	* defcustom.java: Likewise.
+
+2013-09-15  Per Bothner  <per@bothner.com>
+
+	* MiscOps.scm (prefix-numeric-value): New function stub.
+
+	* lambda.java (rewriteBody): Set NO_FIELD on interactive lambda
+	property - we don't need a field, and this avoids an ordering problem.
+
+	* ELisp.java (asNumber): Use Arithmetic.asNumeric.
+
+2012-12-31  Per Bothner  <per@bothner.com>
+
+	* MiscOps.scm (princ, prin1): New functions.
+	* ELisp.java (initELisp): Update definitions of princ, prin1.
+	(writeFormat, displayFormat): Mak public since needed by new functions.
+
+2012-12-22  Per Bothner  <per@bothner.com>
+
+	* MiscOps.scm (condition-case): New syntax.
+
+2012-10-20  Charles Turner <chturne@gmail.com>
+
+	Re-factor type lookup to avoid Scheme dependencies.
+	* ELisp.java: Don't depend on static Scheme methods.
+
+2011-10-24  Per Bothner  <per@bothner.com>
+
+	* lambda.java (rewriteBody): Update for new default argument handling.
+
+2011-05-02  Per Bothner  <per@bothner.com>
+
+	* lambda.java (rewriteBody): Update for new LetExp/FluidLetExp api.
+
+2011-03-23  Per Bothner  <per@bothner.com>
+
+	* lambda.java (rewriteBody): Use letStart/letVariable
+	etc methods instead of creating LetExp directly.
+	* SaveExcursion.java (rewrite): Likewise.
+
+2011-03-16  Per Bothner  <per@bothner.com>
+
+	* ELisp.java: Update fluid_let constructor calls.
+	* lambda.java (rewriteBody): Set IS_DYNAMIC on fluid variable,
+	to suppress warning.
+
+2011-02-05  Per Bothner  <per@bothner.com>
+
+	* MiscOps.scm (if): Update to use define-rewrite-syntax.
+
 2010-10-23  Per Bothner  <per@bothner.com>
 
 	* MiscOps.scm (format): Update to call formatToFString.

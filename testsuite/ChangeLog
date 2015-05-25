@@ -1,3 +1,1305 @@
+2014-12-01  Jamison Hope  <jrh@theptrgroup.com>
+
+	* lib-test.scm: Add test for char-set<= bug reported by Seth
+	Alves.
+
+2014-11-26   Seth Alves <alves@hungry.com>
+	     Per Bothner  <per@bothner.com>
+
+	* lib-export.scm: New test for 'guard'.
+	* lib-colon2.scm: New test for names with colons.
+
+2014-11-24  Seth Alves <alves@hungry.com>
+	    Per Bothner  <per@bothner.com>
+
+	* lib-colon1.scm: New test for named is colon in library.
+	* lib-export.scm: New test for exporting define-syntax,
+	define-record-type, and let-values from a library.
+	* Makefile.am (SCRIPTS_TO_RUN): Update accordindgly.
+
+2014-11-22  Per Bothner  <per@bothner.com>
+
+	* system-test.scm: Add test using shell and quotes.
+
+2014-11-18  Per Bothner  <per@bothner.com>
+
+	* system-test.scm: Use kawa.sh, in case we were built without
+	the kawa front-end executable.
+
+	* Makefile.am (EXTRA_DIST): Fix typo.
+
+2014-11-17  Per Bothner  <per@bothner.com>
+
+	* r7rs-tests.scm: Downcasing capital dotted I is no longer expected
+	to fail on Java 8, following an update of the latter.
+
+2014-11-17  Jamison Hope  <jrh@theptrgroup.com>
+
+	* quaternion-test.scm: New file with test cases for quaternions.
+	* Makefile.am: Update accordingly.
+
+2014-11-16  Per Bothner  <per@bothner.com>
+
+	* aux-libs.scm: New file, defined two libraries.
+	* lib-impsrc1.scm: New test of import-from-source of aux-libs.scm
+	* lib-impsrc2.scm: new test of bad import.
+	* lib-dup.scm: New test of file with duplicate libraries.
+	* Makefile.am: Update accordingly.
+
+2014-11-13  Per Bothner  <per@bothner.com>
+
+	* num-test.scm: Add test for Complex:equals bug
+	reported by Jamison Hope.
+
+2014-11-13  Jeff Gonis <jeff.gonis@gmail.com>
+	    Per Bothner  <per@bothner.com>
+
+	* lib-square.scm: New test for define-library with name conflict.
+	* lib-squaref.scm: Likewise in line-at-at-time mode.
+	* Makefile.am: Update accordingly.
+
+	* lib-test.scm (test-ev-req): Tweak to use expanded string literals.
+
+2014-10-28  Per Bothner  <per@bothner.com>
+
+	* r7rs-tests.scm: More merging with Chibi upstream.
+
+2014-10-27  Per Bothner  <per@bothner.com>
+
+	* Makefile.am (check-scm): Pass in --r5rs to disable colon processing.
+
+	* r7rs-tests.scm: Merge in more tests from Chibi upstream.
+
+2014-10-26  Per Bothner  <per@bothner.com>
+
+	* r7rs-tests.scm: Fix string-foldcase of sigma.
+	* text-test.scm: Likewise.
+
+2014-10-24  Per Bothner  <per@bothner.com>
+
+	* r7rs-tests.scm: Enable test for inexact lcm.
+	* r7rs-tests.scm: Enable tests for inexact numerator and denominator.
+
+2014-10-17  Per Bothner  <per@bothner.com>
+
+	* r7rs-tests.scm: Enable some tests for eval.
+
+2014-10-14  Per Bothner  <per@bothner.com>
+
+	* r7rs-tests.scm: 'r7rs is now in the features list.
+
+	* r7rs-tests.scm: Enable test for delay-force.
+
+	* lib-cycle.scm (evn): Add cond-expand clauses so we can test that.
+
+2014-10-13  Per Bothner  <per@bothner.com>
+
+	* life-grid.scm: New test, taken from r7rs document.
+	* life-grid.expected: Corresponding expected output.
+	* lib-cycle.scm: New test for define-library - with cycle.
+	* Makefile.am: Upadte accordingly.
+
+2014-10-09  Per Bothner  <per@bothner.com>
+	    Helmut Eller  <eller.helmut@gmail.com>
+
+	* errors5.scm: Add test for Savannah bug #43341 "Import should
+	warn about non existing bindings" and other 'import' errors.
+	* Makefile.am: Update accordingly.
+
+2014-09-23  Per Bothner  <per@bothner.com>
+
+	* r7rs-tests.scm: Enable "Combination of [numeric] prefixes" tests.
+
+2014-09-23  Helmut Eller  <eller.helmut@gmail.com>
+	    Per Bothner  <per@bothner.com>
+
+	* sva42382.scm: New test for Savannah bug #42382
+	"Assigned but unused argument".
+	* Makefile.am: Update accordingly.
+
+2014-09-22  Per Bothner  <per@bothner.com>
+
+	* r7rs-tests.scm: Enable tests for define-values.
+
+2014-09-21  Alcides Flores Pineda <alcides.fp@gmail.com>
+	    Per Bothner  <per@bothner.com>
+
+	* num-test.scm: New test for mixing Kawa Numeric with Java double.
+
+2014-09-21  Alex Shinn <alexshinn@gmail.com>
+
+	* r7rs-tests.scm: Merge two more tests from Chibi,
+	including a previously-failing one.
+
+2014-09-18  Alex Shinn <alexshinn@gmail.com>
+
+	* r7rs-tests.scm: Import a exact-integer-sqrt test from the Chibi
+	version. This forced a re-implementation of exact-integer-sqrt.
+
+2014-09-17  Helmut Eller  <eller.helmut@gmail.com>
+	    Per Bothner  <per@bothner.com>
+
+	* module3.scm (all-zeros): Add test for Savannah bug #43233
+	"Dumping circular literals".
+	* obj-test.scm: Test all-zeros.
+
+2014-09-16  Alex Shinn <alexshinn@gmail.com>
+	    Per Bothner  <per@bothner.com>
+
+	* numeric-tests.scm: New numeric tests imported fro Chibi-scheme.
+	* Makefile.am: Updated accordingly.
+	* num-test.scm: Rename name used for log file to avoid conflict.
+
+2014-09-16  Per Bothner  <per@bothner.com>
+
+	* r7rs-tests.scm: Add some string->number tests.
+
+2014-09-15  Per Bothner  <per@bothner.com>
+
+	* srfi-109-test.scm: Test for bug reported by Ito Kazumitsu.
+
+2014-09-15  Helmut Eller  <eller.helmut@gmail.com>
+	    Per Bothner  <per@bothner.com>
+
+	* sva43131.scm: New test based on Savannah bug #43131
+	"Poor support for re-defining toplevel variables".
+	* test.scm: Move test, which now passes but only if --no-inline, to ...
+	* define3.scm: New file for moved test.
+	* Makefile.am: Update accordingly.
+
+2014-09-07  Per Bothner  <per@bothner.com>
+
+	* errors4.scm: New test from r7rs of 'syntax-error'.
+	* Makefile.am: Update accordingly.
+
+2014-09-03  Per Bothner  <per@bothner.com>
+
+	* r7rs-tests.scm: Tests for ellipsis in middle of syntax pattern list.
+
+2014-09-02  Per Bothner  <per@bothner.com>
+
+	* r7rs-tests.scm (count-to-2): New test for handling uderscores
+	in macros.
+
+	* r7rs-tests.scm: Add tests for two r7rs extensions for ellipsis
+	in syntax-rules/syntax-case: (... TEMPLATE) as a generalization of
+	(... ...); specifying an alternate symbol in place of ... .
+
+2014-08-30  Per Bothner  <per@bothner.com>
+
+	* r7rs.scm: Enable test for (... ...) in syntax-rules.
+
+2014-08-28  Per Bothner  <per@bothner.com>
+
+	* convert1.scm: New tests for char->integer and integer->char.
+	* Makefile.am: Update accordingly.
+	* errors3.scm: Update exception message.
+
+2014-08-21  Per Bothner  <per@bothner.com>
+
+	* Makefile.am (CASES): Remove non-portable macro.
+	(inlining.log): Replace use of CASES.
+	* Makefile.am (EXTRA_DIST): Add case-test.scm.
+
+2014-08-13  Andrea Bernardini <andrebask@gmail.com>
+
+       Tests for the new implementation of "case".
+       * bad-voidexp.scm: Move one test to case-test.scm.
+       * case-test.scm: New tests for "case" expressions.
+       * case-warnings.scm: New tests for warnings reported by "case"
+       expressions.
+       * inlining.expected: Add output for case-warnings.scm output.
+       * inlining-test.scm: Add tests for inlining of "case" expressions.
+       * Makefile.am: Add new test files.
+       * Makefile.in: Add new test files.
+       * unreach1.scm: Add a test that contains a non terminating
+       case expression.
+
+ 22014-08-14  Per Bothner  <per@bothner.com>
+
+	* text-test.scm: Add some tests of string-replace!.
+
+2014-08-11  Per Bothner  <per@bothner.com>
+
+	* inlining-test.scm: Add tests for string-append!.
+	* inlining.expected: Update accordingly.
+	* Makefile.am: Likewise.
+	* text-test.scm (translate-space-to-newline): New test.
+
+	* text-test.scm: Use local variables rather than top-level variables.
+
+2014-08-06  Per Bothner  <per@bothner.com>
+
+	* text-test.scm: Add tests for string-set! and string-copy for
+	string with non-BMP characters.
+
+2014-08-05  Per Bothner  <per@bothner.com>
+
+	* text-test.scm: Add tests for string-length and string-ref for
+	string with non-BMP characters.
+
+2014-08-04  Per Bothner  <per@bothner.com>
+
+	* r7rs-tests.scm: Enable string-map tests.
+
+	* text-test.scm: Add tests for string-for-each.
+	* inlining-test.scm: Likewise.
+	* Makefile.am: Update accordingly.
+	* inlining.expected: Likewise.
+
+2014-07-31  Per Bothner  <per@bothner.com>
+
+	* lib-test.scm: Add test for string-cursor-for-each.
+
+	* sva42722.scm: New test for Savannah bug #42722
+	"Explicit type declaration, later instance? check issues".
+
+2014-07-31  Per Bothner  <per@bothner.com>
+
+	* errors2.scm: Test new error on swapped instance? arguments.
+	* srfi-69-test.scm: Fix typo.
+
+2014-07-27  Per Bothner  <per@bothner.com>
+
+	* lib-test.scm: Updated expected output for expand.
+
+	* splice1.scm: Add test for fixed regression.
+
+2014-07-22  Per Bothner  <per@bothner.com>
+
+	The SRFI-13 function string-append/shared is no longer
+	automatically imported.
+	* misc-test.scm: Move string-append/shared tests from here ...
+	* text-test.scm: ... to here.
+
+	* lib-test.scm: New test for string-cursor API.
+
+2014-07-20  Per Bothner  <per@bothner.com>
+
+	* annotations1.scm (authentication-identity): New test for using
+	alias of nested type as type name.
+
+2014-07-06  Per Bothner  <per@bothner.com>
+
+	* splice1.scm: Add test for calling local function with splice.
+
+	* sva42689.scm: New test for Savannah bug #42689
+	'Bytecode verify error involving use of "location"'.
+	* Makefile.am: Update accordingly.
+
+2014-07-03  Per Bothner  <per@bothner.com>
+
+	* srfi-109-test.scm: Add some tests involving splicing.
+
+	* r7rs-tests.scm: Enable tests for floor/ etc.
+
+2014-07-02  Per Bothner  <per@bothner.com>
+
+	* num-test.scm: Add some integer? and exact-integer? tests.
+	* r7rs-tests.scm: Enable exact-integer? tests.
+
+	* inlining-test.scm (read1): New test for read-char and character
+	inlining.
+	* inlining.expected: Update appropriately.
+	* Makefile.am: Update accordingly.
+
+2014-06-30  Per Bothner  <per@bothner.com>
+
+	* errors3.scm: Add test to make sure runtime Exception happens.
+	* Makefile.am: Update.
+
+2014-06-25  Per Bothner  <per@bothner.com>
+
+	* inner-1.scm: Add simplified test.  Fix incorrect expected output.
+
+2014-06-07  Per Bothner  <per@bothner.com>
+
+	* inlining-test.scm (raise1): New test functions.
+	* Makefile.am: Update.
+	* inlining.expected: Update.
+
+2014-06-04  Per Bothner  <per@bothner.com>
+
+	* inlining-test.scm (get-car11): New test for calling car function.
+	* Makefile.am (inlining.log): Also measure size of get-carXX methods.
+	* inlining.expected: Update appropriately.
+
+	* define2.scm: New test for lambda in define-early-constant.
+
+2014-05-17  Helmut Eller  <eller.helmut@gmail.com>
+	    Per Bothner  <per@bothner.com>
+
+	* sva42377.scm: New test for  Savannah bug #42377 "ClassFormatError".
+	* Makefile.am: Update accordingly.
+
+2014-05-12  Per Bothner  <per@bothner.com>
+
+	* standards1.scm: New test for --r7rs flag.
+	* Makefile.am: Update accordingly.
+
+2014-05-09  Per Bothner  <per@bothner.com>
+
+	* r7rs-tests.scm: Note that downcasing uppercase dotted I
+	is expected to fail on Java 8. See Java bug JDK-8041791.
+
+	* splice1.scm: Two tests for vararg method calls with splice.
+
+2014-05-07  Per Bothner  <per@bothner.com>
+
+	* splice1.scm: New tests for splice feature.
+	* Makefile.am: Update accordingly
+	* annotations1.scm: Add symbol-quoting to test deprecated syntax..
+	* bad-keywords1.scm: Add a test.
+	* inlining-test.scm: Update syntax for some deprecated TYPE:@ tests.
+
+2014-04-27  Per Bothner  <per@bothner.com>
+
+	* bad-keywords1.scm: New test for keyword mis-use.
+	* Makefile.am: Update accordingly.
+
+2014-03-19  Per Bothner  <per@bothner.com>
+
+	* system-test.scm: Update for newline inside '"' as
+	argument separator.
+
+2014-02-23  Per Bothner  <per@bothner.com>
+
+	* r7rs-tests.scm: Make more robust for Windows line endings.
+
+	* threadring.scm (m): New variable, from command-line.
+	(MAX_NODES, MAX_THREADS): Initialize from m.
+	* Makefile.am: Call threadring with m=103, instead of default 503,
+	which tends to run out the thread stack memory.
+
+2014-02-19  Per Bothner  <per@bothner.com>
+
+	* num-test.scm (logop-compare): Use bitwise-bit-set? instead of
+	logbit? which had non-standard argument order.
+
+2014-02-17  Per Bothner  <per@bothner.com>
+
+	* exit1.scm: New test of 'exit'.
+	* exit2.scm: New test of 'emergency-exit'.
+	* Makefile.am (SCRIPTS_TO_RUN): Update accordingly.
+
+2014-02-08  Per Bothner  <per@bothner.com>
+
+	* r7rs-tests.scm: A file-error? test is no longer expected to fail.
+
+2014-02-06  Per Bothner  <per@bothner.com>
+
+	* misc-test.scm: Update for change of NamedLocation#setWithSave.
+
+2014-01-27  Per Bothner  <per@bothner.com>
+
+	* system-test.scm: Add tests of final-newline-removal.
+
+2014-01-08  Per Bothner  <per@bothner.com>
+
+	* r7rs-tests.scm: Add nested guard-in-guard test.
+
+2014-01-05  Per Bothner  <per@bothner.com>
+
+	* Makefile.am (EXTRA_DIST): Belatedly add system-test.scm.
+
+2014-01-04  Per Bothner  <per@bothner.com>
+
+	* r7rs-tests.scm: Re-order and update to match upstream Chibi.
+
+2013-12-30  Per Bothner  <per@bothner.com>
+
+	* system-test.scm: Some tests of reading or writing from/to ports.
+	Needed to add a sleep now that this is done using a thread.
+
+2013-12-29  Per Bothner  <per@bothner.com>
+
+	* inlining.expected: Update after better code-egenation for 'eq?'.
+
+2013-12-26  Per Bothner  <per@bothner.com>
+
+	* system-test.scm:  Add tests for redirection to output port.
+
+2013-12-25  Per Bothner  <per@bothner.com>
+
+	* system-test.scm: More tests, some re-factoring.
+
+2013-12-22  Per Bothner  <per@bothner.com>
+
+	* system-test.scm: Test process-related and system-related
+	functionality.
+	* Makefile.am: Update accordingly.
+
+2013-12-13  Per Bothner  <per@bothner.com>
+
+	* r7rs-tests.scm: Enable tests for exception-handling.
+	Add new tests for exception-handling.
+	(guard): Remove ad-hoc definition.
+
+2013-12-08   John Tobey <jtobey@john-edwin-tobey.org>
+	     Per Bothner  <per@bothner.com>
+
+	* module3.scm, obj-test.scm: Testcase for Savannah bug #40822
+	"Exporting macro-defined macro:	Internal error".
+
+2013-12-05  John Tobey <jtobey@john-edwin-tobey.org>
+
+	* sva40729.scm: Test for Savannah bug #40814
+	"R6RS/R7RS ellipsis escapes".
+	* Makefile.am: Update accordingly.
+
+2013-12-02  Per Bothner  <per@bothner.com>
+
+	* inlining.expected: Update - StackTarget#forceLazyIfNeeded now
+	emits call to 2-argument Promise#force.
+
+	* inlining.expected: Update - we avoid some needless calls
+	to Promise.force.
+
+2013-12-01  Per Bothner  <per@bothner.com>
+
+	* r7rs-tests.scm: Add a skeletal definition of guard so we can use
+	it for varrious tests.
+	Import some tests from upstream.
+
+2013-12-01  Jussi Piitulainen <jpiitula@ling.helsinki.fi>
+	    John Cowan <cowan@mercury.ccil.org>
+            Per Bothner  <per@bothner.com>
+
+	* r7rs-tests.scm: Add a test for letrec*.
+	Enable existing letrec* test.
+
+2013-11-30  John Tobey <jtobey@john-edwin-tobey.org>
+
+	* sva40729.scm: New test for Savannah bug #40729 "NPE in
+	inline-compiler for AppendValues".
+	* Makefile.am (SCRIPTS_TO_RUN): Update accordingly.
+
+2013-11-26  John Tobey <jtobey@john-edwin-tobey.org>
+	    Per Bothner  <per@bothner.com>
+
+	* sva40649.scm: New test for Savannah bug #40649 "NPE in
+	inline-compiler for CallCC", plus some related tests.
+	* Makefile.am: Update accordingly.
+
+2013-11-18   John Tobey <jtobey@john-edwin-tobey.org>
+	     Per Bothner  <per@bothner.com>
+
+	* mac-test.scm: Another test from Savannah bug #40616
+	"Unhygienic syntax-rules".
+
+2013-11-18  Per Bothner  <per@bothner.com>
+
+	* mac-test.scm: Add example from Kawa "internals" documentation.
+
+2013-11-18   John Tobey <jtobey@john-edwin-tobey.org>
+	     Per Bothner  <per@bothner.com>
+
+	* mac-test.scm: Test from Savannah bug #40616
+	"Unhygienic syntax-rules".
+
+2013-11-10  John Tobey <jtobey@john-edwin-tobey.org>
+	    Per Bothner  <per@bothner.com>
+
+	* sva40494.scm: New test for Savannah bug #40494
+	"internal error on kawa -C bug.scm, 1.14 and head".
+	* Makefile.am: Update accordingly.
+
+2013-10-30  Per Bothner  <per@bothner.com>
+
+	* xml-test.scm: Update prefix in namespace-declaration is symbol,
+	not string.
+	Add test for unquoted enclosed expression for attribute value.
+
+2013-10-23  Per Bothner  <per@bothner.com>
+
+	* xml-test.scm: Add test for indentation control marker '&|'.
+
+2013-10-19  David Van Horn
+	    Per Bothner  <per@bothner.com>
+
+	* srfi-101-test.scm: Port of SRFI-101 test suite.
+	* Makefile.am: Update accordingly.
+
+2013-10-07  Ito Kazumitsu
+	    Per Bothner  <per@bothner.com>
+
+	* reflect2.scm: New testcase.
+	* Makefile.am: Update accordingly.
+
+2013-10-07  Per Bothner  <per@bothner.com>
+
+	* module2.scm, obj-test.scm: Add tests for export with rename.
+
+2013-09-29  Per Bothner  <per@bothner.com>
+
+	* r7rs-tests.scm: Merge some updates from upstream.
+
+2013-09-27  Matthieu Vachon  <matthieu.o.vachon@gmail.com>
+	    Per Bothner  <per@bothner.com>
+
+	* unreach.scm: Test for Savannah bug #40123
+	"Nested with-compile-options problem".
+
+2013-09-26  Per Bothner  <per@bothner.com>
+
+	* r7rs-tests.scm: Enabled list-set! and list-copy tests.
+	Added more tests for list-copy - already accepted upstream.
+
+2013-09-24  Per Bothner  <per@bothner.com>
+
+	* r7rs-tests.scm: More complex test for case including =>.
+	Already accepted upstream.
+
+	* srfi-38-test.scm: Update - datum labels now start at 0.
+
+2013-09-23  Per Bothner  <per@bothner.com>
+
+	* Makefile.am (EXTRA_DIST ): Belatedly add r7rs-tests.scm.
+
+2013-09-21  Matthieu Vachon  <matthieu.o.vachon@gmail.com>
+
+	* sva40077.scm: New test based on Savannah bug#40077 "Boolean
+	logical `not` on float number can result in ClassCastException".
+
+22013-09-22  Per Bothner  <per@bothner.com>
+
+	* command1.scm, commands2.scm, command3.scm: New tests to
+	check behavior of (command-line).
+	* Makefile.am: Update accordingly.
+
+2013-09-10  Matthieu Vachon  <matthieu.o.vachon@gmail.com>
+	    Per Bothner  <per@bothner.com>
+
+	* sva39940.scm: New test based on Savannah bug#39940
+	"Class member of type <procedure> compilation exception".
+	Also some variations.
+
+2013-09-07  Per Bothner  <per@bothner.com>
+
+	* sva39947.scm: Added testcase for Savannah bug #39947
+	"Bad resolution of java.util.HashSet.addAll()".
+	* Makefile.am: Updated accordingly.
+
+	* sva39945.scm: New testcase for Savannah bug #39945: "Too few
+	arguments" warning when declaring an anonymous class in a let block"
+
+2013-09-06  Per Bothner  <per@bothner.com>
+
+	* r7rs-tests.scm: Port to Kawa.  Disable or mark as fail-expected
+	functionality that doesn;t (yet) work on Kawa.
+	* Makefile.am: Update accordingly.
+
+	* misc-test.scm (make-mf): Update since string<? is now less
+	lenient.
+
+	* srfi-38-test.scm: Use write-shared to match R7RS semantics.
+
+2013-09-05  Per Bothner  <per@bothner.com>
+
+	* lib-test.scm: Fix thinko in bytevector constructor.
+
+2013-09-04  Per Bothner  <per@bothner.com>
+
+	* mac-test.scm: New test for Savannah bug #39946
+	"NullPointerException when using syntax->datum".
+
+	* misc-test.scm: New test-case from Savannah bug report #39944
+	"Possible bug with omitted keyword arguments" which currently passes.
+
+2013-08-25  Per Bothner  <per@bothner.com>
+
+	* misc-test.scm: Add test that '#' is a terminator.
+
+2013-07-26  Per Bothner  <per@bothner.com>
+
+	* formatst.scm: New tests for adjacent formats, and using values.
+	* srfi-109-test.scm: Tweak expected output for format changes.
+
+2013-07-18  Alex Moiseenko <imdagger@yandex.ru>
+	    Per Bothner  <per@bothner.com>
+
+	* sva38026.scm: New test for Savannah bug #38026
+	"Mixed variables scope".
+	* Makefile.am: Update accordingly.
+
+2013-07-18  Matthieu Vachon  <matthieu.o.vachon@gmail.com>
+	    Per Bothner  <per@bothner.com>
+
+	* sva39150.scm: New test for Savannah bug #39150
+	"AppendValue procedure compiler InternalError".
+	* Makefile.am: Update accordingly.
+
+2013-07-16  Per Bothner  <per@bothner.com>
+
+	* mac-test.scm: Add test for Savannah bug #39501
+	"invalid use of unquote-splicing".
+
+2013-07-11  Per Bothner  <per@bothner.com>
+
+	* inlining.expected: Update results.
+
+2013-06-30  Matthieu Vachon  <matthieu.o.vachon@gmail.com>
+	    Per Bothner  <per@bothner.com>
+
+	* sva39060.scm: New test for Savannah bug #39060
+	"ClassFormatException (Absent Code attribute)".
+	* Makefile.ma: Update accordingly.
+
+2013-06-29  Per Bothner  <per@bothner.com>
+
+	* misc.test.scm: Add some tests for non-canonical Booleans.
+
+2013-06-28  John Cowan  <cowan@mercury.ccil.org>
+	    Per Bothner  <per@bothner.com>
+
+	* defclass2.scm: New test for non-simple inheritace
+	in immediate line-by-line mode.
+	* Makefile.am (SCRIPTS_TO_RUN): Update accrdingly.
+
+2013-06-22  Per Bothner  <per@bothner.com>
+
+	* inlining-test.scm (check-even): Add return-type specifier.
+	(check-even-unspec-return): New function.
+	(eqv1): New function.
+	* misc-test.scm: Add test.
+	* inlining.expected: Update accordingly.
+	* Makefile.am: Likewise.
+
+2013-06-20  Per Bothner  <per@bothner.com>
+
+	* inlining-test.scm (numcomp1, numcomp2, numcomp3, numcomp4, numcomp5):
+	New functions, to test non-type-optimized <, <=, etc.
+	* inlining.expected: Update accordingly.
+	* Makefile.am: Likewise.
+
+2013-06-12  Matthieu Vachon  <matthieu.o.vachon@gmail.com>
+    	    Per Bothner  <per@bothner.com>
+
+	* eval1.scm: Renamed to symbol1.scm.
+	* Makefile.am: Update.
+	* symbol1.scm: Added test for Savannah bug #39229
+	"Empty string symbol lexer problem".
+
+2013-06-11  Per Bothner  <per@bothner.com>
+
+	* eval1.scm: New file.
+	Add tests for new unknown-namespace handling with eval.
+	* Makefile.am: Update.
+	* lib-test.scm: Update for new unknown-namespace Symbol handling.
+
+2013-06-09  Per Bothner  <per@bothner.com>
+
+	* java-array-test.scm: Add some tests of apply with arrays.
+
+2013-06-08  Matthieu Vachon  <matthieu.o.vachon@gmail.com>
+	    Per Bothner  <per@bothner.com>
+
+	* use-slots.scm: Add test for Savannah bug #39048
+	"Bad method call resolution?".
+
+2013-06-02  Matthieu Vachon  <matthieu.o.vachon@gmail.com>
+	    Per Bothner  <per@bothner.com>
+
+	* overload1.scm: Add test for Savannah bug #39047
+	"Wrong incompatible type (boolean) with expected int".
+
+2013-06-02  Per Bothner  <per@bothner.com>
+
+	* inner-1.scm (next-leaf-generator): New test.
+
+2013-05-25 Matthieu Vachon  <matthieu.o.vachon@gmail.com>
+	   Per Bothner  <per@bothner.com>
+
+	* misc-test.scm: Add test based on Savannah bug #39059
+	"Method keywords problem".  Also test for side effects in
+	default expressions for ignored parameters.
+
+2013-05-11  Matthieu Vachon  <matthieu.o.vachon@gmail.com>
+	    Per Bothner  <per@bothner.com>
+
+	* overload1.scm: New tests: Savannah bugs #38890 "Wrong more than one
+	applicable method warning" and #38891 "Wrong warning with literal
+	double value".
+	* Makefile.am: Update accordingly.
+
+2013-03-25  Per Bothner  <per@bothner.com>
+
+	* srfi-108-test.scm: Add some define-simple-constructor and other tests.
+	* test-utils.scm: Format values using ~w.
+
+2013-03-20  Per Bothner  <per@bothner.com>
+
+	* xml-test.scm: Add tests for embedded comment and line-continuation.
+
+2013-03-18  Per Bothner  <per@bothner.com>
+
+	* formatst.scm: Update "%g" tests to match Comon Lisp spec.
+
+2013-03-02  Per Bothner  <per@bothner.com>
+
+	* xml-test.scm: Update.
+
+2013-03-02  Per Bothner  <per@bothner.com>
+
+	* srfi-108-test.scm (xtest): Move macro to ...
+	* test-utils.scm: ... new file.
+	* Makefile.am: update accordingly.
+	* xml-test.scm: Use xtest. Rename xmltest->xtest.
+
+	* srfi-109-test.scm: More tests, mainly of &|.
+
+2013-02-24  Per Bothner  <per@bothner.com>
+
+	* bad-voidexp.scm: Add test that explicit cast to object supresses
+	warning.
+
+2013-02-23  Per Bothner  <per@bothner.com>
+
+	* bad-voidexp.scm: New test suite.
+	* Makefile.am: Update accordingly.
+	* test.scm: Move tests that create warnings to  bad-voidexp.scm.
+	* misc-test.scm: Likewise.
+
+	* srfi-108-test.scm: Update to use use "$<<$" and "$>>$" bindings
+	for quasi-value escaped-expression delimiters.
+	* srfi-109-test.scm: Likewise.
+
+2013-02-13  Per Bothner  <per@bothner.com>
+
+	* srfi-108-test.scm (xtest): Use 3-operand datum->syntax to set
+	source location (line number) in a useful manner.
+	* srfi-109-test.scm (strtest): Likewise.
+
+2013-02-10  Per Bothner  <per@bothner.com>
+
+	* misc-test.scm: Move 3 tests that produce warnings from here ...
+	* unreach3.scm: .. to here.
+
+2013-02-02  Per Bothner  <per@bothner.com>
+
+	* srfi-109-test.scm: Added and updated tests.
+	* srfi-108-test.scm: New file with SRFI-108 tests.
+	* bad-srfi-109.scm: New file testing error reporting of
+	malformed SRFI-109 forms.
+	* Makefile.am: Update accordingly.
+
+2013-01-23  Per Bothner  <per@bothner.com>
+
+	* xml-test.scm: Add a test for an attribute-valued enclosed expressions.
+
+	* xml-test.scm (xmltest): New macro.  Use it.
+	Add some more tests.
+
+2013-01-21  Per Bothner  <per@bothner.com>
+
+	* srfi-109-test.scm: New testsuite.
+	* Makefile.am: Update accordingly.
+	* misc-test.scm: Update for new XML literal syntax.
+	* formatst.scm: Update for new preferred character names.
+
+2012-12-29  Alex Moiseenko <imdagger@yandex.ru>
+
+	* defclass1.scm: New testcase for define-class with get- methods
+
+2012-12-23  Jamison Hope  <jrh@theptrgroup.com>
+
+	* lib-test.scm: Test for Savannah bug #37633
+	"char-set-union with same char-sets".
+
+2012-12-22  Per Bothner  <per@bothner.com>
+
+	* unreach1.scm: Add tests of unreachable let-initializers.
+
+2012-12-15  Per Bothner  <per@bothner.com>
+
+	* unreach1.scm: Fix erroneous calls to primitive-throw.
+	* errors2.scm: New test for bad primitive-throw.
+	* Makefile.am: Update accordingly.
+
+2012-12-10  Per Bothner  <per@bothner.com>
+
+	* webtest/info/+default+: Minor tweaks.
+
+2012-11-29  Per Bothner  <per@bothner.com>
+
+	* lib-test.scm: Some more vector and bytevectors tests from R7RS.
+
+2012-11-21  Per Bothner  <per@bothner.com>
+
+	* Makefile.am (EXTRA_DIST): Add jmc.expected.
+
+2012-11-20  Per Bothner  <per@bothner.com>
+
+	* lib-test.scm: SOme more tests of vector functions.
+
+	* lib-test.scm: Add a vector-fill! test
+
+2012-11-18  Per Bothner  <per@bothner.com>
+
+	* MyFunc.java (MyFunc): Add SourceName attribute.
+
+2012-11-09  Per Bothner  <per@bothner.com>
+
+	* num-test.scm: Add tests for comparing exact infinite rationals.
+
+2012-11-06  Alex Moiseenko <imdagger>
+
+	* sva37684.scm: New test case for Savannah bug #37684
+	"Nested class types of fields".
+	* Makefile.am: Update accordingly.
+
+2012-11-05  Per Bothner  <per@bothner.com>
+
+	* annotations1-bytecode.expected: Update.
+
+2012-11-02  Per Bothner  <per@bothner.com>
+
+	* module2.scm: Add a define-alias to test that module-implements
+	works with an alias.
+
+2012-10-21  Per Bothner  <per@bothner.com>
+
+	* xml-test.scm: New test-suite.
+	* Makefile.am (check-xml): Update accordingly.
+
+2012-10-07  Helmut Eller  <eller.helmut@gmail.com>
+	    Per Bothner  <per@bothner.com>
+
+	* sva36863.scm: New test, based on Savannah bug #36863
+	"then clause grows stack with no else clause".
+	* Makefile.am: Update accordingly.
+
+2012-10-06  Per Bothner  <per@bothner.com>
+
+	* unreach1.scm: Added or improved tests for unreachable code.
+	* unreach3.scm: Likewise.
+	* inlining.expected: Update.
+
+2012-09-27  Per Bothner  <per@bothner.com>
+
+	Add tests of separate compilation of define-alias of classes.
+	* classes1.scm (my-id-class-2): New type alias of simple class.
+	* classes2.scm (my-id-instance-2): Test use of my-id-class-2.
+	* module1a.scm (jlString): Type alias of existing class.
+	* module2.scm (length-diff1): Test use of jlString.
+	* classes2.scm (cls-d): New type alias of non-simple class.
+	* obj-test.scm: Test cls-d.
+
+2012-09-18  Alex Moiseenko  <imdagger@yandex.ru>
+            Per Bothner  <per@bothner.com>
+
+	* lambda-in-class-1.scm: New testcase, from mail to kawa list.
+	* Makefile.am: Update accodingly.
+
+2012-09-11  Helmut Eller  <eller.helmut@gmail.com>
+
+	* lib-test.scm: More expand tests.
+
+2012-08-16  Per Bothner  <per@bothner.com>
+	    Weiqi Gao <weiqigao@gmail.com>
+
+	* unreach3.scm: New test for exit.
+	* Makefile.am: Update accordingly.
+
+2012-08-01  Helmut Eller  <eller.helmut@gmail.com>
+	    Per Bothner  <per@bothner.com>
+
+	* sva36917.scm: New test-case forSavannah bug #36917 "Memory leak".
+	* Makefile.am: Update accordingly.
+
+2012-07-27  Per Bothner  <per@bothner.com>
+	    Peter Feigl
+
+	* mac-obj.scm: New test-case for object form in macro.
+	This was originally an Android report - see Kawa mailing list
+	thread "Macros for Android".
+
+2012-07-16  Helmut Eller  <eller.helmut@gmail.com>
+	    Per Bothner  <per@bothner.com>
+
+	* sva36853.scm: New testcase, for Savanna bug #36853
+	"Propagate type parameters".
+	* Makefile.am (SCRIPTS_TO_RUN): Update accordingly.
+
+2012-06-27  Per Bothner  <per@bothner.com>
+
+	* define1.scm: Add a test for define-alias of constant field.
+
+2012-06-25  Per Bothner  <per@bothner.com>
+
+	* define1.scm: New test.
+	* Makefile.am: Update accordingly.
+
+2012-06-19  Per Bothner  <per@bothner.com>
+
+	* inlining.expected: Update for some better boolean folding.  (In this
+	case, we only seems to get rid of a useless goto, and I'm not sure why.)
+
+2012-06-13  Helmut Eller  <eller.helmut@gmail.com>
+	    Per Bothner  <per@bothner.com>
+
+	* sva36413.scm: New test, for Savannah bug#36413
+	"Unused function in module".
+	* Makefile.am: Update accordingly.
+
+2012-06-10  Thomas Kirk <tk@research.att.com>
+	    Per Bothner  <per@bothner.com>
+
+	* misc-test.scm: Test for Savannah bug #36592
+	"nested map causes compiler inliner NPE".
+
+2012-06-08  Helmut Eller  <eller.helmut@gmail.com>
+	    Per Bothner  <per@bothner.com>
+
+	* sva36556.scm: New test for Savannah bug #36556 "Macro problem".
+	* Makefile.am: Update accordingly.
+	* mac-test.scm (foo-35526a, foo-35526b): The test-case was incorrect.
+	Note the original Savannah test-case was correct, but somehow when
+	creating a version for the Kawa testsuite, I made a mistake.
+	The fix for Savannah bug #36556 uncovered the error.
+
+2012-06-06  Per Bothner  <per@bothner.com>
+
+	* inner-1.scm: New test.
+	* Makefile.am: Update.
+
+2012-05-05  Helmut Eller  <eller.helmut@gmail.com>
+	    Per Bothner  <per@bothner.com>
+
+	* sva36039.scm: New test for Savannah bug #36039 "inlining problem".
+	* Makefile.am: Update accordingly.
+	* inlining.expected: Update.
+
+2012-05-03  Helmut Eller  <eller.helmut@gmail.com>
+	    Per Bothner  <per@bothner.com>
+
+	* unreach1.scm: New test for Savannah bug #35524
+	"Unreachable code is not an error".
+
+2012-05-03  Per Bothner  <per@bothner.com>
+
+	* bad-defclass.scm: New tests for bad define-class syntax,
+	including Savannah bug #36335 "NPE on syntax error".
+	* Makefile.am: Update accordingly.
+
+	* unreach1.scm: New tests for unreachable code.
+	* sva35728.scm: Rename to ...
+	* unreach2.scm: .. new name.
+	* Makefile.am: Update accordingly.
+
+2012-05-02  Helmut Eller  <eller.helmut@gmail.com>
+	    Per Bothner  <per@bothner.com>
+
+	* sva35728.scm: New testcase based on Savannah bug# 35728
+	"More unreachable code".
+	* Makefile.am: Update accordingly.
+
+2012-04-22  Helmut Eller  <eller.helmut@gmail.com>
+	    Per Bothner  <per@bothner.com>
+
+	* mac-test.scm: New test for Savannah bug #35555
+	"Tail-call in syntax-case".
+
+2012-04-18  Helmut Eller  <eller.helmut@gmail.com>
+	    Per Bothner  <per@bothner.com>
+
+	* mac-test.scm: New test for Savannah bug #35526 "Nested macro".
+
+2012-04-14  Helmut Eller  <eller.helmut@gmail.com>
+	    Per Bothner  <per@bothner.com>
+
+	* mac-test.scm: New test for Savannah bug #35552: "bound-identifier=?".
+
+2012-03-25  Per Bothner  <per@bothner.com>
+
+	* mac-test.scm: More tests from r6rs.
+	* errors1.scm: New test for duplicate declarations in let.
+	* Makefile.am: Update accordingly.
+
+	* mac-test.scm: 5 more tests.
+
+2012-03-21  Per Bothner  <per@bothner.com>
+
+	* Makefile.am: Pass --no-warn-xxx flags various places.  These are
+	needed after fixing bug that causes warnings to be ignored.
+	* mac-test.scm: Various changes to avoid or suppress warnings.
+	Also use more syntax abbreviations, such as #`.
+	* misc-test.scm: Add type-specifier to avoid a no known slot warning.
+
+2012-03-14  Per Bothner  <per@bothner.com>
+
+	* inlining-test.scm (sum1, sum2, constant-propagation2,
+	constant-propagation3): New tests.
+	* inlining.expected: Update accordingly.
+	* Makefile.am: Likewise.
+
+2012-03-11  Per Bothner  <per@bothner.com>
+
+	* module0.scm: Add missing export.
+	* module2.scm: Likewise.
+	* module3.scm: Likewise.
+	* srfi-64-test.scm: Fix typo.
+
+2012-02-25  Per Bothner  <per@bothner.com>
+
+	* polytype.scm: Convert to using SRFI-64-style test.
+	* Makefile.am: Update accordingly.
+
+2012-02-13  Per Bothner  <per@bothner.com>
+
+	* mac-test.scm: Update to use datum->syntax and #' syntax.
+	* regex-test.scm: Update to use syntax->datum.
+
+2012-02-09  Per Bothner  <per@bothner.com>
+
+	* bridge.scm: Tweak to check for recent "isXxx" method fix.
+
+2012-02-09  Jamison Hope  <jrh@theptrgroup.com>
+
+	* bridge.scm: New tests for bridge methods.
+	* Makefile.am: Update accordingly.
+
+2012-02-07  Per Bothner  <per@bothner.com>
+
+	* text-test.scm: Add a test for SRFI-13's strings-contains.
+
+2012-02-05  Per Bothner  <per@bothner.com>
+
+	* classes1.scm: Use #, and #,@ instead of , and ,@ in quasisyntax.
+	* regex-test.scm: Likewise.
+
+2012-01-31  Per Bothner  <per@bothner.com>
+
+	* lib-test.sc: Add more tests from SRFI-41.
+
+2012-01-27  Helmut Eller  <eller.helmut@gmail.com>
+	    Per Bothner  <per@bothner.com>
+
+	* sva35362.scm: New testcase for Savannah bug #35362 -
+	"endless loop + unused continuation".
+	* Makefile.am: Update accordingly.
+
+2012-01-27  Per Bothner  <per@bothner.com>
+
+	* promise1.scm: New testcase.
+	* Makefile.am: Update accordingly.
+
+2012-01-19  Per Bothner  <per@bothner.com>
+
+	* mac-test.scm: New test of free-identifier=? and bound-identifier=?.
+
+2012-01-15  Per Bothner  <per@bothner.com>
+
+	* srfi-45-test1.scm: New tests, from SRFI-45.
+	* srfi-45-test2.scm: Boundedness tests from SRFI-45.
+	* lazy-test.scm: Update type name from lazy[T} to promise[T]
+	* Makefile.am: Update acordingly.
+
+2012-01-07  Bill Robinson <airbaggins@gmail.com>
+	    Per Bothner  <per@bothner.com>
+
+	* reflect1.scm: New testcase.
+	* Makefile.am (SCRIPTS_TO_RUN): Update accordingly.
+
+2012-01-01  Per Bothner  <per@bothner.com>
+
+	* lazy-test.scm: New tests for lazy evaluation.
+	* Makefile.am: Update accordinl.
+	* inlining.expected: Update for implicit forcing.
+
+	* inlining.expected: Update for fannkuch.
+
+2011-12-19  Per Bothner  <per@bothner.com>
+
+	* lib-test.scm: New tests of R7RS bytevector functions.
+
+2011-12-12  Per Bothner  <per@bothner.com>
+
+	* anonymous-lambda-1.scm: New test.
+	* Makefile.am: Update accordingly.
+
+2011-11-29  Per Bothner  <per@bothner.com>
+
+	* misc-test.scm: New test-case.
+
+2011-11-03  Per Bothner  <per@bothner.com>
+
+	* classes1.scm (SimpleA:withVarArg): New varargs method.
+	* obj-test.scm: New test.
+
+2011-10-25  Taylor Venable <venablet@ipfw.edu>
+	    Per Bothner  <per@bothner.com>
+
+	* misc-test.scm: New check for #!key parameter with primitive type.
+
+2011-10-15  Jamison Hope  <jrh@theptrgroup.com>
+	    Per Bothner  <per@bothner.com>
+
+	* java-array-test.scm: New testcase.
+	* Makefile.am: Updated accordingly.
+
+2011-10-08  Charles Turner  <chturne@gmail.com>
+
+	* srfi-38-test.scm: New tests for the SRFI-38 extension.
+	* Makefile.am: Updated accordingly.
+
+2011-09-24  Jamison Hope  <jrh@theptrgroup.com>
+	    Per Bothner  <per@bothner.com>
+
+	* lib-test.scm: Update SRFI-14 tests for Java-7.
+
+2011-08-27  Helmut Eller  <eller.helmut@gmail.com>
+	    Per Bothner  <per@bothner.com>
+
+	* sva34005.scm: New testcase for Savannah bug #34005
+	"ambiguous call to getDeclaredMethod("make", 1)".
+	* Makefile.am: Update accordingly.
+
+2011-08-24  Per Bothner  <per@bothner.com>
+	    Helmut Eller  <eller.helmut@gmail.com>
+
+	* module3.scm (check-thunk): New test for Savannah bug #34004:
+	"Nullpointer exception in compiler".
+	* obj-test.scm: Call check-thunk.
+
+2011-08-04  Per Bothner  <per@bothner.com>
+
+	* inlining-test.scm (top-level-recurse1, top-level-recurse2): New tests.
+	* inlining.expected: Update accordingly.
+	* Makefile.am: Likewise.
+
+2011-07-30  Per Bothner  <per@bothner.com>
+
+	* Makefile.am: Various cleanups for testing moduleM.scm.
+
+2011-07-24  Per Bothner  <per@bothner.com>
+
+	* moduleM.scm: New test, for main/runable module with module-extends.
+	* moduleM.expected: Expected output.
+	* Makefile.am: Update accordingly.
+
+2011-07-21  Per Bothner  <per@bothner.com>
+
+	* Makefile.am: Various changes to make (most of) the tests work on
+	Cygwin - make use of CLASSPATH_SEPARATOR; quote path strings
+	in case of spaces or semi-colons.
+	(DIFF): New variable, so we can run diff with --strip-trailing-cr.
+	* HelloCgiS.scm: Minor tweak to match expected output.
+
+	* Makefile.am (check-text): Specify port-char-encoding to be UTF-8,
+	since text-test.scm contains non-Ascii characters.
+
+2011-07-11  Per Bothner  <per@bothner.com>
+
+	* num-test.scm: Cannot sort in-place a constant-vector, so
+	use vector function instead.
+
+	* jaxb-annotations3.scm: Fix typo.
+	* jaxb-annotations3.expected: Update accordingly.
+
+2011-06-29  Per Bothner  <bothner@kuling.bothner.com>
+
+	* inlining-test.scm (get-from-vector1, get-from-vector2): New functions.
+	* Makefile.am: Test for new methods.
+	* inlining.expected: Update accordingly.
+
+2011-04-29  Per Bothner  <per@bothner.com>
+
+	* inlining-test.scm (factorial-infer2): New method - currently unused.
+
+2011-04-18  Per Bothner  <per@bothner.com>
+
+	* uninit1.scm: New test, for uninitialized variable accesses.
+	* inlining-test.scm (constant-propagation1, factorial-infer1):
+	New tests.
+	* inlining.expected: Update accordingly.
+	* Makefile.am: Update accordingly.
+	* binarytrees.scm (test): Use internal define, which is now optimized.
+
+2011-04-10  Per Bothner  <per@bothner.com>
+
+	* mac-test.scm: Add tests for cond-expand feature class-exists:NAME.
+
+2011-03-07  Helmut Eller  <eller.helmut@gmail.com>
+
+	* misc-test.scm: New test for Savannah bug #32678
+	"set! and endless loop".
+
+2011-03-04  Helmut Eller  <eller.helmut@gmail.com>
+
+	* misc-test.scm: New test for Savannah bug #32656
+	"ArrayIndexOutOfBoundsException in mergeLocalType".
+
+2011-03-04  Helmut Eller  <eller.helmut@gmail.com>
+
+	* misc-test.scm: New test for Savannah bug #32657
+	"Verification error with JDK7".
+
+2011-02-08  Jamison Hope  <jrh@theptrgroup.com>
+
+	* lib-test.scm: New tests for srfi-14.
+
+2011-01-24  Jamison Hope  <jrh@theptrgroup.com>
+
+	* lib-test.scm: New tests for rnrs/lists functions.
+
+2011-01-24  Helmut Eller  <eller.helmut@gmail.com>
+	    Per Bothner  <per@bothner.com>
+
+	* num-test.scm: Some new tests.
+
+2011-01-03  Per Bothner  <per@bothner.com>
+
+	* jaxb-annotations3.scm: Use new bracket syntax.
+
+2011-01-02  Per Bothner  <per@bothner.com>
+
+	* meteor.scm: Change 'pts' from array-or-array to flat array.
+	(p-cell): New macro.
+	(make-2d-array): Remove macro.
+	* jmc.scm (Class[]): Remove unneeded define-alias.
+	* num-test.scm: Don't sort literal vectors.
+
+2010-12-28  Per Bothner  <per@bothner.com>
+
+	* jaxb-annotations3.scm: New test/demo of using JAXB annotations.
+	* jaxb-annotations3.expected: Expected output.
+	* Makefile.am: Update accordingly.
+	* annotations1-bytecode.expected: Minor update.
+
+2010-12-27  Per Bothner  <per@bothner.com>
+
+	* num-test.scm: New R6RS tests.
+
+	* num-test.scm: One expected failure no longer fails.
+
+2010-12-26  Per Bothner  <per@bothner.com>
+
+	* annotations1.scm: Add some method anc class annotations.
+	* annotations1-bytecode.expected: Update accordingly.
+
+	* bad-annotations2.scm: New test for catching errors.
+	* bad-annotations2.expected: Expected error messages from above.
+	* Makefile.am: Update acordingly.
+
+2010-12-24  Per Bothner  <per@bothner.com>
+
+	* annotations1.scm: New test for testing annotations.
+	* MyAnnotType.java: Provide annotation type used by annotations1.scm.
+	* annotations1-bytecode.expected: Expected bytecode dump output.
+	* Makefile.am: Update accordingly.
+
+	* Makefile.am (CPJAVA, KPKAWA, LIST_CODE_SIZE): New macros
+	to reduce repetition and verbosity.
+
+2010-11-26  Per Bothner  <per@bothner.com>
+
+	* lib-test.scm: New tests for symbol constructor function.
+
+2010-11-19  Per Bothner  <per@bothner.com>
+
+	* lib-test.scm: Add a bunch of SRFI-41 (streams) tests.
+
 2010-11-04  Per Bothner  <per@bothner.com>
 
 	* module2.scm: Add define-variable to avoid warning.
@@ -1449,7 +2751,7 @@
 
 2002-10-27  Per Bothner  <per@bothner.com>
 
-	* misc-test.scm:  Change Österlund -> &Ouml;sterlund to avoid
+	* misc-test.scm:  Change Ã–sterlund -> &Ouml;sterlund to avoid
 	character encoding issues.
 
 2002-10-20  Per Bothner  <per@bothner.com>
@@ -1895,3 +3197,7 @@ Sun Dec 15 22:37:03 1996  Per Bothner  <bothner@deneb.cygnus.com>
 Fri Dec 13 17:04:54 1996  Per Bothner  <bothner@deneb.cygnus.com>
 
 	New directory - for test suites for Kawa.
+
+;; Local Variables:
+;; coding: utf-8-unix
+;; End:

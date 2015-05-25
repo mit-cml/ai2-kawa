@@ -4,6 +4,7 @@
 package gnu.xml;
 import gnu.lists.*;
 import gnu.text.*;
+import gnu.kawa.io.InPort;
 import gnu.mapping.Symbol;
 /* #ifdef SAX2 */
 import org.xml.sax.*;
@@ -39,7 +40,8 @@ public class XMLFilter implements
    * In contrast, base may be either {@code ==out} or {@code ==tlist}. */
   public Consumer out;
 
-  Consumer base;
+  /** Either tlist or out. */
+  private Consumer base;
 
   public static final int COPY_NAMESPACES_PRESERVE = 1;
   public static final int COPY_NAMESPACES_INHERIT = 2;
@@ -52,15 +54,15 @@ public class XMLFilter implements
    * For each nested document or element there is the saved value of
    * namespaceBindings followed by a either a MappingInfo or Symbol
    * from the emitBeginElement/startElement.  This is followed by a MappingInfo
-   * or Symbol for each attribute we seen for the current element. */
+   * or Symbol for each attribute we have seen for the current element. */
   Object[] workStack;
   NamespaceBinding namespaceBindings;
 
   private SourceMessages messages;
   SourceLocator locator;
-  LineBufferedReader in;
+  InPort in;
 
-  public void setSourceLocator (LineBufferedReader in)
+  public void setSourceLocator (InPort in)
   { this.in = in;  this.locator = this; }
   public void setSourceLocator (SourceLocator locator)
   { this.locator = locator; }
@@ -79,16 +81,18 @@ public class XMLFilter implements
    * (In the future it should also count begun comment and
    * processing-instruction constructors, when those support nesting.) */
   protected int stringizingLevel;
+
   /** Value of {@code nesting} just before outermost startElement
    * while {@code stringizingLevel > 0}.
    * I.e. if we're nested inside a element nested inside an attribute
    * then {@code stringizingElementNesting >= 0},
    * otherwise {@code stringizingElementNesting == -1}. */
   protected int stringizingElementNesting = -1;
-  /** Postive if all output should be ignored.
+  /** Positive if all output should be ignored.
    * This happens if we're inside an attribute value inside an element which
-   * is stringized because it is in turm inside an outer attribute. Phew.
-   * If gets increment by nested attributes so we can tell when to stop. */
+   * is stringized because it is in turn inside an outer attribute. Phew.
+   * It gets incremented by nested attributes so we can tell when to stop.
+   */
   protected int ignoringLevel;
 
   // List of indexes in tlist.data of begin of attribute.
@@ -444,6 +448,8 @@ public class XMLFilter implements
                 else
                   uri = resolve(prefix, i > 0);
               }
+            else if (! (saved instanceof Symbol))
+                throw new ClassCastException("expected element start tag (a symbol) - instead got a "+saved.getClass().getName());
             else
               {
                 Symbol symbol = (Symbol) saved;
@@ -648,7 +654,7 @@ public class XMLFilter implements
       ((TreeList) base).writeDocumentUri(uri);
   }
 
-  public void consume (SeqPosition position)
+  public void writePosition(SeqPosition position)
   {
     writePosition(position.sequence, position.ipos);
   }
@@ -696,7 +702,9 @@ public class XMLFilter implements
       }
     else
       {
-        closeStartTag();
+        boolean inImplicitAttr = previous == SAW_KEYWORD;
+        if (! inImplicitAttr)
+          closeStartTag();
         if (v instanceof UnescapedData)
           {
             base.writeObject(v);
@@ -709,6 +717,8 @@ public class XMLFilter implements
             TextUtils.textValue(v, this);  // Atomize.
             previous = SAW_WORD;
           }
+        if (inImplicitAttr)
+          endAttribute();
       }
   }
 
@@ -794,7 +804,8 @@ public class XMLFilter implements
   {
     previous = 0;
     if (ignoringLevel == 0)
-      ((TreeList) base).writeJoiner();
+        if (base instanceof TreeList) // Always true for well-formed data
+            ((TreeList) base).writeJoiner();
   }
 
   /** Process a CDATA section.
@@ -935,11 +946,8 @@ public class XMLFilter implements
     return true;
   }
 
-  public void startAttribute (Object attrType)
-  {
-    previous = 0;
-    if (attrType instanceof Symbol)
-      {
+    public void startAttribute (Object attrType) {
+        previous = 0;
         Symbol sym = (Symbol) attrType;
         String local = sym.getLocalPart();
         attrLocalName = local;
@@ -947,20 +955,20 @@ public class XMLFilter implements
         String uri = sym.getNamespaceURI();
         if (uri == "http://www.w3.org/2000/xmlns/"
             || (uri == "" && local == "xmlns"))
-          error('e', "arttribute name cannot be 'xmlns' or in xmlns namespace");
-      }
-    if (nesting == 2 && workStack[1] == null)
-      error('e', "attribute not allowed at document level");
-    if (attrCount < 0 && nesting > 0)
-      error('e', "attribute '"+attrType+"' follows non-attribute content");
-    if (! startAttributeCommon())
-      return;
-    workStack[nesting+attrCount-1] = attrType;
-    if (nesting == 0)
-      base.startAttribute(attrType);
-    else
-      tlist.startAttribute(0);
-  }
+          error('e', "attribute name cannot be 'xmlns' or in xmlns namespace");
+
+        if (nesting == 2 && workStack[1] == null && stringizingLevel == 0)
+            error('e', "attribute not allowed at document level");
+        if (attrCount < 0 && nesting > 0)
+            error('e', "attribute '"+attrType+"' follows non-attribute content");
+        if (startAttributeCommon()) {
+            workStack[nesting+attrCount-1] = attrType;
+            if (nesting == 0)
+                base.startAttribute(attrType);
+            else
+                tlist.startAttribute(0);
+        }
+    }
 
   /** Process an attribute, with the given attribute name.
    * The attribute value is given using {@code write}.

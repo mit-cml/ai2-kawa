@@ -49,9 +49,9 @@
     ((! name obj args ...)
      (invoke obj 'name args ...))))
 
-(define-syntax @
+(define-syntax |@|
   (syntax-rules ()
-    ((@ name obj)
+    ((|@| name obj)
      (field obj 'name))))
 
 (define-syntax packing
@@ -69,12 +69,13 @@
 
 ;; Take a Sexp and return the expanded Expression tree.
 (define (rewrite-form exp #!key 
-		      (lang (gnu.expr.Language:getDefaultLanguage))
+		      (lang ::gnu.expr.Language (gnu.expr.Language:getDefaultLanguage))
 		      (env (interaction-environment))) :: <gnu.expr.Expression>
   (define-alias C <gnu.expr.Compilation>)
   (let* ((namelookup (<gnu.expr.NameLookup>:getInstance env lang))
 	 (messages (<gnu.text.SourceMessages>))
-	 (translator (<kawa.lang.Translator> lang messages namelookup))
+	 (translator ::kawa.lang.Translator
+                     (lang:getCompilation messages namelookup))
 	 (module (! pushNewModule translator (as <String> #!null)))
 	 (saved-comp (C:set-save-current translator)))
     (try-finally
@@ -89,12 +90,8 @@
     (<gnu.expr.SetExp> 
      `(set ,(! get-symbol exp) ,(unrewrite (! get-new-value exp))))
     (<gnu.expr.LambdaExp>
-     `(lambda ,(packing (pack)
-                 (do ((decl :: <gnu.expr.Declaration>
-			    (! first-decl exp) (! next-decl decl)))
-                     ((eq? decl #!null))
-                   (pack (! get-symbol decl))))
-	,(unrewrite (@ body exp))))
+     `(lambda ,(unrewrite-arglist exp)
+	,(unrewrite (|@| body exp))))
     (<gnu.expr.ReferenceExp> (! get-symbol exp))
     (<gnu.expr.ApplyExp> (unrewrite-apply exp))
     (<gnu.expr.BeginExp> `(begin . ,(unrewrite* (! get-expressions exp))))
@@ -106,9 +103,44 @@
 		  (list (unrewrite eclause))))))
     (#t exp)))
 
+(define (unrewrite-arglist (exp <gnu.expr.LambdaExp>))
+  (let* ((min (|@| min_args exp))
+	 (rest? (negative? (|@| max_args exp)))
+	 (key? (not (eq? (|@| keywords exp) #!null)))
+	 (opt (|@| opt_args exp))
+	 (required '())
+	 (optional '())
+	 (key '())
+	 (rest #f)
+	 (aux '()))
+    (do ((decl :: <gnu.expr.Declaration> (! first-decl exp)
+	       (! next-decl decl))
+	 (i 0 (+ i 1)))
+	((eq? decl #!null))
+      (let ((var (! get-symbol decl)))
+	(cond ((< i min) 
+	       (set! required (cons var required)))
+	      ((< i (+ min opt))
+	       (set! optional (cons var optional)))
+	      ((and rest? (= i (+ min opt)))
+	       (set! rest var))
+	      ((and key? (< i (+ min opt 
+				 (if rest? 1 0)
+				 (|@| length (|@| keywords exp)))))
+	       (set! key (cons var key)))
+	      (#t 
+	       (error "nyi")))))
+    `(,@(reverse required)
+      ,@(cond ((zero? opt) ())
+	      (#t `(#!optional . ,(reverse optional))))
+      ,@(cond (rest? `(#!rest ,rest))
+	      (#t '()))
+      ,@(cond (key? `(#!key . ,(reverse key)))
+	      (#t '())))))
+
 (define (unrewrite* (exps <gnu.expr.Expression[]>))
   (packing (pack)
-    (do ((len (@ length exps))
+    (do ((len (|@| length exps))
 	 (i 0 (+ i 1)))
 	((= i len))
       (pack (unrewrite (exps i))))))
@@ -120,11 +152,11 @@
                 (i 0 (+ i 1)))
                ((eq? decl #!null))
              (pack (list (! get-symbol decl)
-                         (unrewrite ((@ inits exp) i))))))
-     ,(unrewrite (@ body exp))))
+                         (unrewrite (! getInitValue decl))))))
+     ,(unrewrite (|@| body exp))))
 
 (define (unrewrite-quote (exp <gnu.expr.QuoteExp>))
-  (let ((val (@ value exp))
+  (let ((val (|@| value exp))
         (type-name (lambda (name) (string->symbol (format "<~a>" name)))))
     (typecase val
       ((or <number> <boolean> <character> <keyword> <string> 
@@ -145,8 +177,8 @@
          (fval (! get-function-value exp)))
     (cond ((and (not (eq? fbinding #!null))
 		(not (eq? apply-to-args #!null))
-                (eq? (@ field fbinding)
-		     (@ field apply-to-args)))
+                (eq? (|@| field fbinding)
+		     (|@| field apply-to-args)))
            args)
           ((typecase fval
              (<gnu.kawa.functions.Convert>

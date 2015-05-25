@@ -1,10 +1,18 @@
-// Copyright (c) 2003, 2004, 2006  Per M.A. Bothner.
+// Copyright (c) 2003, 2004, 2006, 2014  Per M.A. Bothner.
 // This is free software;  for terms and warranty disclaimer see ./COPYING.
 
 package gnu.expr;
+
 import gnu.bytecode.*;
 import gnu.mapping.*;
+import gnu.kawa.functions.MakeSplice;
+import gnu.kawa.reflect.CompileArrays;
+import gnu.kawa.io.OutPort;
 import gnu.text.SourceMessages;
+import gnu.text.SyntaxException;
+/* #ifdef use:java.lang.invoke */
+import java.lang.invoke.*;
+/* #endif */
 
 /** This class is used to represent "combination" or "application".
  * A function and arguments are evaluated, and then the function applied.
@@ -26,10 +34,24 @@ public class ApplyExp extends Expression
   /** The next ApplyExp in ((ReferenceExp)func).binding.firstCall list. */
   public ApplyExp nextCall;
 
+    /** Index of argument for first keyword argument.
+     * If zero, no keyword arguments.  If non-zero, then
+     * {@code firstKeywordArgIndex-1} is the index in the {@code args}
+     * array of the first keyword.
+     */
+    public int firstKeywordArgIndex;
+    public int numKeywordArgs;
+
+    /** Index of first argument that is a MakeSplice.
+     * The value is -1 is no argument is a splice.
+     */
+    public int firstSpliceArg = -1;
+
   public final Expression getFunction() { return func; }
   public final Expression[] getArgs() { return args; }
   public final int getArgCount() { return args.length; }
-  public void setFunction(Expression func) { this.func = func; }
+    public void setFunction(Expression func) { this.func = func; }
+  public void setFunction(Procedure proc) { this.func = new QuoteExp(proc); }
   public void setArgs(Expression[] args) { this.args = args; }
   public Expression getArg(int i) { return args[i]; }
   public void setArg(int i, Expression arg) { args[i] = arg; }
@@ -37,20 +59,75 @@ public class ApplyExp extends Expression
   public final void setTailCall(boolean tailCall)
   { setFlag(tailCall, TAILCALL); }
 
+  public ApplyExp setFuncArgs (Expression func, Expression[] args)
+  {
+    setFunction(func);
+    setArgs(args);
+    setFlag(false, Expression.VALIDATED);
+    return this;
+  }
+
+  public ApplyExp setFuncArgs (Procedure proc, Expression[] args)
+  {
+    return setFuncArgs(new QuoteExp(proc), args);
+  }
+
   /** If getFunction() is constant, return its value; otherwise null. */
   public final Object getFunctionValue()
   {
     return func instanceof QuoteExp ? ((QuoteExp) func).getValue() : null;
   }
 
-  public ApplyExp (Expression f, Expression[] a) { func = f; args = a; }
+    /** Copy over splice and keyword start indexes.
+     * @param src orginal ApplyExp (may be the same as this)
+     * @aram amount to adjust indexes by
+     */
+    public void adjustSplice(ApplyExp src, int delta) {
+        if (src.firstSpliceArg >= 0)
+            this.firstSpliceArg = src.firstSpliceArg + delta;
+        if (src.firstKeywordArgIndex > 0)
+            this.firstKeywordArgIndex = src.firstKeywordArgIndex + delta;
+    }
 
-  public ApplyExp (Procedure p, Expression[] a) { func = new QuoteExp(p); args = a; }
+    public int spliceCount() {
+        int count = 0;
+        if (firstSpliceArg >= 0) {
+            Expression[] args = this.args;
+            int nargs = args.length;
+            for (int i = firstSpliceArg; i < nargs; i++) {
+                if (MakeSplice.argIfSplice(args[i]) != null)
+                    count++;
+            }
+        }
+        return count;
+    }
 
-  public ApplyExp (Method m, Expression[] a)
+    public boolean isSimple() {
+        return firstSpliceArg < 0 && firstKeywordArgIndex == 0;
+    }
+
+    public boolean isSimple(int min) {
+        return isSimple() && getArgCount() >= min;
+    }
+
+    public boolean isSimple(int min, int max) {
+        int ac = getArgCount();
+        return isSimple() && ac >= min && ac <= max;
+    }
+
+    public boolean isAppendValues() {
+        return func instanceof QuoteExp
+            && (((QuoteExp) func).getValue()
+                == gnu.kawa.functions.AppendValues.appendValues);
+    }
+
+  public ApplyExp (Expression f, Expression... a) { func = f; args = a; }
+
+  public ApplyExp (Procedure p, Expression... a) { this(new QuoteExp(p), a); }
+
+  public ApplyExp (Method m, Expression... a)
   {
-    func = new QuoteExp(new PrimProcedure(m));
-    args = a;
+    this(new QuoteExp(new PrimProcedure(m)), a);
   }
 
   protected boolean mustCompile () { return false; }
@@ -65,17 +142,19 @@ public class ApplyExp extends Expression
     ((Procedure) proc).checkN(vals, ctx);
   }
 
-  public static void compileToArray(Expression[] args, Compilation comp)
+  private static void compileToArray(Expression[] args, int start, Compilation comp)
   {
     CodeAttr code = comp.getCode();
-    if (args.length == 0)
+    int argslength = args.length;
+    int nargs = argslength - start;
+    if (nargs == 0)
       {
 	code.emitGetStatic(Compilation.noArgsField);
 	return;
       }
-    code.emitPushInt(args.length);
+    code.emitPushInt(nargs);
     code.emitNewArray(Type.pointer_type);
-    for (int i = 0; i < args.length; ++i)
+    for (int i = start; i < argslength; ++i)
       {
 	Expression arg = args[i];
 	if (comp.usingCPStyle()
@@ -116,89 +195,100 @@ public class ApplyExp extends Expression
     compile(exp, comp, target, false);
   }
 
-  static void compile (ApplyExp exp, Compilation comp, Target target,
-                       boolean checkInlineable)
-  {
-    int args_length = exp.args.length;
-    Expression exp_func = exp.func;
-    LambdaExp func_lambda = null;
-    String func_name = null;
-    Declaration owner = null;
-    Object quotedValue = null;
-    if (exp_func instanceof LambdaExp)
-      {
-	func_lambda = (LambdaExp) exp_func;
-	func_name = func_lambda.getName();
-	if (func_name == null)
-	  func_name = "<lambda>";
-      }
-    else if (exp_func instanceof ReferenceExp) 
-      { 
-        ReferenceExp func_ref = (ReferenceExp) exp_func;
-        owner = func_ref.contextDecl();
-        Declaration func_decl = func_ref.binding;
-        while (func_decl != null && func_decl.isAlias()
-               && func_decl.value instanceof ReferenceExp)
-          {
-            func_ref = (ReferenceExp) func_decl.value;
-            if (owner != null || func_decl.needsContext() || func_ref.binding == null)
-              break;
+    static void compile (ApplyExp exp, Compilation comp, Target target,
+                         boolean checkInlineable) {
+        int args_length = exp.args.length;
+        Expression exp_func = exp.func;
+        LambdaExp func_lambda = null;
+        String func_name = null;
+        Declaration owner = null;
+        Object quotedValue = null;
+        if (exp_func instanceof LambdaExp) {
+            func_lambda = (LambdaExp) exp_func;
+            func_name = func_lambda.getName();
+            if (func_name == null)
+                func_name = "<lambda>";
+        } else if (exp_func instanceof ReferenceExp) { 
+            ReferenceExp func_ref = (ReferenceExp) exp_func;
+            owner = func_ref.contextDecl();
+            Declaration func_decl = func_ref.binding;
+            Expression dval;
+            while (func_decl != null && func_decl.isAlias()
+                   && (dval = func_decl.getValueRaw()) instanceof ReferenceExp) {
+                func_ref = (ReferenceExp) dval;
+            if (owner != null || func_decl.needsContext()
+                || func_ref.binding == null)
+                break;
             func_decl = func_ref.binding;
             owner = func_ref.contextDecl();
-          }
-        if (! func_decl.getFlag(Declaration.IS_UNKNOWN))
-	  {
-	    Expression value = func_decl.getValue();
-	    func_name = func_decl.getName();
-	    if (value != null && value instanceof LambdaExp) 
-	      func_lambda = (LambdaExp) value;
-	    if (value != null && value instanceof QuoteExp) 
-              quotedValue = ((QuoteExp) value).getValue();
-	  }
-      }
-    else if (exp_func instanceof QuoteExp)
-      {
-        quotedValue = ((QuoteExp) exp_func).getValue();
-      }
-    if (checkInlineable && quotedValue instanceof Procedure)
-      {
-        Procedure proc = (Procedure) quotedValue;
-        if (target instanceof IgnoreTarget && proc.isSideEffectFree())
-          {
-            for (int i = 0; i < args_length;  i++)
-              exp.args[i].compile(comp, target);
-            return;
-          }
-        try
-          {
-            if (inlineCompile(proc, exp, comp, target))
-              return;
-          }
-        catch (Throwable ex)
-          {
-            comp.getMessages().error('e', "caught exception in inline-compiler for "+quotedValue+" - "+ex, ex);
-            return;
-          }
-      }
+            }
+            if (! func_decl.getFlag(Declaration.IS_UNKNOWN)) {
+                Expression value = func_decl.getValue();
+                func_name = func_decl.getName();
+                if (value != null && value instanceof LambdaExp) 
+                    func_lambda = (LambdaExp) value;
+                if (value != null && value instanceof QuoteExp) 
+                    quotedValue = ((QuoteExp) value).getValue();
+            }
+        } else if (exp_func instanceof QuoteExp) {
+            quotedValue = ((QuoteExp) exp_func).getValue();
+        }
+        if (checkInlineable && quotedValue instanceof Procedure) {
+            Procedure proc = (Procedure) quotedValue;
+            if (target instanceof IgnoreTarget && proc.isSideEffectFree()) {
+                for (int i = 0; i < args_length;  i++)
+                    exp.args[i].compile(comp, target);
+                return;
+            }
+            try {
+                if (inlineCompile(proc, exp, comp, target))
+                    return;
+            } catch (Error ex) {
+                throw ex;
+            } catch (Throwable ex) {
+                SourceMessages msg = comp.getMessages();
+                msg.error('f',
+                          "caught exception in inline-compiler for "
+                          +quotedValue+" - "+ex, ex);
+                throw new SyntaxException(msg);
+            }
+        }
 
-    gnu.bytecode.CodeAttr code = comp.getCode();
-    Method method;
+        CodeAttr code = comp.getCode();
+        Method method;
 
+    // Check for tail-recursion.
+    boolean tail_recurse
+      = exp.isTailCall()
+      && func_lambda != null && func_lambda == comp.curLambda
+      // No keyword or optional arguments.
+      && func_lambda.opt_args == 0 && func_lambda.keywords == null;
+
+    int spliceCount = exp.spliceCount();
+    int nonSpliceCount = args_length - spliceCount;
+        
     if (func_lambda != null)
       {
-	if ((func_lambda.max_args >= 0 && args_length > func_lambda.max_args)
-	    || args_length < func_lambda.min_args)
+	if ((func_lambda.max_args >= 0 && nonSpliceCount > func_lambda.max_args)
+	    || (nonSpliceCount < func_lambda.min_args) && spliceCount == 0)
 	  // This is supposed to get caught by InlineCalls.
 	  throw new Error ("internal error - wrong number of parameters for "
 			   + func_lambda);
 	int conv = func_lambda.getCallConvention();
+        if (func_lambda.primMethods==null && ! func_lambda.isClassGenerated()
+            && ! func_lambda.getInlineOnly())
+            func_lambda.allocMethod(func_lambda.outerLambda(), comp);
         // Mostly duplicates logic with LambdaExp.validateApply.
         // See comment there.
 	if (comp.inlineOk(func_lambda)
+            && ! tail_recurse
 	    && (conv <= Compilation.CALL_WITH_CONSUMER
 		|| (conv == Compilation.CALL_WITH_TAILCALLS
 		    && ! exp.isTailCall()))
-	    && (method = func_lambda.getMethod(args_length)) != null)
+	    && (method = func_lambda.getMethod(nonSpliceCount, spliceCount)) != null
+            && (exp.firstSpliceArg < 0
+                || (PrimProcedure.takesVarArgs(method)
+                    && func_lambda.min_args <= exp.firstSpliceArg)))
 	  {
 	    PrimProcedure pproc = new PrimProcedure(method, func_lambda);
 	    boolean is_static = method.getStaticFlag();
@@ -280,20 +370,13 @@ public class ApplyExp extends Expression
 	return;
       }
     */
-
-    // Check for tail-recursion.
-    boolean tail_recurse
-      = exp.isTailCall()
-      && func_lambda != null && func_lambda == comp.curLambda;
-
     if (func_lambda != null && func_lambda.getInlineOnly() && !tail_recurse
-	&& func_lambda.min_args == args_length)
+	&& func_lambda.min_args == nonSpliceCount)
       {
-        pushArgs(func_lambda, exp.args, null, comp);
+        pushArgs(func_lambda, exp.args, exp.args.length, null, comp);
         if (func_lambda.getFlag(LambdaExp.METHODS_COMPILED))
           {
-            popParams(code, func_lambda, null, false);
-            code.emitTailCall(false, func_lambda.getVarScope());
+            code.emitTailCall(false, func_lambda.startForInlining);
             return;
           }
         func_lambda.flags |= LambdaExp.METHODS_COMPILED;
@@ -301,12 +384,15 @@ public class ApplyExp extends Expression
 	comp.curLambda = func_lambda;
 	func_lambda.allocChildClasses(comp);
 	func_lambda.allocParameters(comp);
+        Label startForInlining = new Label(code);
+        startForInlining.define(code);
+        func_lambda.startForInlining = startForInlining;
 	popParams (code, func_lambda, null, false);
 	func_lambda.enterFunction(comp);
 	func_lambda.body.compileWithPosition(comp, target);
 	func_lambda.compileEnd(comp);
 	func_lambda.generateApplyMethods(comp);
-        code.popScope();
+        code.popScope(); // Matches enterScope in allocParameters.
 	comp.curLambda = saveLambda;
 	return;
       }
@@ -318,7 +404,7 @@ public class ApplyExp extends Expression
 	ClassType typeContext = Compilation.typeCallContext;
 	exp_func.compile(comp, new StackTarget(Compilation.typeProcedure));
 	// evaluate args to frame-locals vars;  // may recurse!
-	if (args_length <= 4)
+	if (args_length <= 4 && exp.isSimple())
 	  {
 	    for (int i = 0; i < args_length; ++i)
 	      exp.args[i].compileWithPosition(comp, Target.pushObject);
@@ -329,7 +415,11 @@ public class ApplyExp extends Expression
 	  }
 	else
 	  {
-	    compileToArray (exp.args, comp);
+            if (exp.firstSpliceArg >= 0)
+                CompileArrays.createArray(Type.objectType, comp,
+                                          exp.args, 0, args_length);
+            else
+                compileToArray (exp.args, 0, comp);
 	    comp.loadCallContext();
 	    code.emitInvoke(Compilation.typeProcedure
 			    .getDeclaredMethod("checkN", 2));
@@ -352,23 +442,37 @@ public class ApplyExp extends Expression
 	return;
       }
 
+        if (exp.firstSpliceArg >= 0) {
+            Expression[] args = exp.getArgs();
+            exp_func.compile(comp, Target.pushObject);
+            CompileArrays.createArray(Type.objectType, comp,
+                                      args, 0, args.length);
+            code.emitInvoke(Compilation.typeProcedure
+                            .getDeclaredMethod("applyN", 1));
+            target.compileFromStack(comp, Type.pointer_type);
+            return;
+        }
+
     if (!tail_recurse)
       exp_func.compile (comp, new StackTarget(Compilation.typeProcedure));
 
     boolean toArray
-      = (tail_recurse ? func_lambda.min_args != func_lambda.max_args
+      = (tail_recurse ? func_lambda.max_args < 0
          : args_length > 4);
     int[] incValues = null; // Increments if we can use iinc.
-    if (toArray)
+    if (tail_recurse)
       {
-	compileToArray(exp.args, comp);
-	method = Compilation.applyNmethod;
-      }
-    else if (tail_recurse)
-      {
-        incValues = new int[exp.args.length];
-        pushArgs(func_lambda, exp.args, incValues, comp);
+        int fixed = func_lambda.min_args;
+        incValues = new int[fixed];
+        pushArgs(func_lambda, exp.args, fixed, incValues, comp);
+        if (toArray)
+          compileToArray(exp.args, fixed, comp);
         method = null;
+      }
+    else if (toArray)
+      {
+        compileToArray(exp.args, 0, comp);
+	method = Compilation.applyNmethod;
       }
     else
       {
@@ -382,13 +486,29 @@ public class ApplyExp extends Expression
       }
     if (! code.reachableHere())
       {
-        comp.error('e', "unreachable code");
+        if (comp.warnUnreachable())
+          comp.error('w', "unreachable code");
         return;
       }
     if (tail_recurse)
       {
-	popParams(code, func_lambda, incValues, toArray);
-	code.emitTailCall(false, func_lambda.getVarScope());
+        Label startLabel = func_lambda.startForInlining;
+        boolean mustStore = startLabel == null;
+        if (incValues != null && ! mustStore)
+          {
+            for (int i = incValues.length;  --i >= 0; )
+              if (incValues[i] != SetExp.BAD_SHORT)
+                {
+                  mustStore = true;
+                  break;
+                }
+          }
+        if (mustStore)
+          {
+            popParams(code, func_lambda, incValues, toArray);
+            startLabel = func_lambda.getVarScope().getStartLabel();
+          }
+        code.emitTailCall(false, startLabel);
 	return;
       }
     code.emitInvokeVirtual(method);
@@ -411,10 +531,12 @@ public class ApplyExp extends Expression
     return visitor.visitApplyExp(this, d);
   }
 
-  public void visitArgs (InlineCalls visitor)
-  {
-    args = visitor.visitExps(args, args.length, null);
-  }
+    public void visitArgs(InlineCalls visitor) {
+        int nargs = args.length;
+        args = visitor.visitExps(args, nargs,
+                                 isAppendValues() ? null
+                                 : InlineCalls.ValueNeededType.instance);
+    }
 
   protected <R,D> void visitChildren(ExpVisitor<R,D> visitor, D d)
   {
@@ -436,7 +558,7 @@ public class ApplyExp extends Expression
     out.writeSpaceFill();
     printLineColumn(out);
     func.print(out);
-    for (int i = 0; i < args.length; ++i)
+    for (int i = 0; args != null && i < args.length; ++i)
       {
 	out.writeSpaceLinear();
 	args[i].print(out);
@@ -445,11 +567,11 @@ public class ApplyExp extends Expression
   }
 
   /** Only used for inline- and tail-calls. */
-  private static void pushArgs (LambdaExp lexp, Expression[] args,
+  private static void pushArgs (LambdaExp lexp,
+                                Expression[] args, int args_length,
                                 int[] incValues, Compilation comp)
   {
     Declaration param = lexp.firstDecl();
-    int args_length = args.length;
     for (int i = 0; i < args_length; ++i)
       {
         Expression arg = args[i];
@@ -474,27 +596,19 @@ public class ApplyExp extends Expression
       vars = vars.nextVar();
     if (vars != null && vars.getName() == "$ctx")
       vars = vars.nextVar();
-    if (vars != null && vars.getName() == "argsArray")
-      {
-	if (toArray)
-	  {
-	    popParams (code, 0, 1, null, decls, vars);
-	    return;
-	  }
-        vars = vars.nextVar();
-      }
-    popParams (code, 0, lexp.min_args, incValues, decls, vars);
+    popParams (code, 0, lexp.min_args, toArray, incValues, decls, vars);
   }
 
   // Recursive helper function.
-  private static void popParams (CodeAttr code, int paramNo, int count,
+  private static void popParams (CodeAttr code, int paramNo,
+                                 int count, boolean toArray,
                                  int[] incValues,
                                  Declaration decl, Variable vars)
   {
     if (count > 0)
       {
         count--;
-	popParams (code, paramNo+1, count, incValues, decl.nextDecl(),
+	popParams (code, paramNo+1, count, toArray, incValues, decl.nextDecl(),
                    decl.getVariable() == null ? vars : vars.nextVar());
         if (! decl.ignorable())
           {
@@ -504,19 +618,8 @@ public class ApplyExp extends Expression
               code.emitStore(vars);
           }
       }
-  }
-
-  /** Cache for getType(). */
-  protected Type type;
-
-  public final gnu.bytecode.Type getTypeRaw()
-  {
-    return type;
-  }
-
-  public final void setType (gnu.bytecode.Type type)
-  {
-    this.type = type;
+    else if (toArray)
+      code.emitStore(vars); // rest array
   }
 
   public boolean side_effects ()
@@ -549,17 +652,12 @@ public class ApplyExp extends Expression
     return afunc;
   }
 
-  public final gnu.bytecode.Type getType()
+  protected gnu.bytecode.Type calculateType()
   {
-    if (type != null)
-      return type;
     Expression afunc = derefFunc(func);
-    // In case of cycles.
-    type = Type.objectType;
     if (afunc instanceof QuoteExp)
       {
         Object value = ((QuoteExp) afunc).getValue();
-        Inlineable compiler;
         // This logic is deprecated - instead set type during InlineCalls.
         if (value instanceof Procedure)
           type = ((Procedure) value).getReturnType(args);
@@ -571,22 +669,53 @@ public class ApplyExp extends Expression
     return type;
   }
 
-  public static Inlineable asInlineable (Procedure proc)
-  {
-    if (proc instanceof Inlineable)
-      return (Inlineable) proc;
-    return (Inlineable) Procedure.compilerKey.get(proc);
-  }
+    public static boolean isInlineable(Procedure proc) {
+        return
+            proc instanceof Inlineable
+            || Procedure.compilerKey.get(proc) != null
+            || proc.getProperty(Procedure.compilerXKey, null) != null;
+    }
 
-  static boolean inlineCompile (Procedure proc, ApplyExp exp, Compilation comp, Target target)
-    throws Throwable
-  {
-    Inlineable compiler = asInlineable(proc);
-    if (compiler == null)
-      return false;
-    compiler.compile(exp, comp, target);
-    return true;
-  }
+    static boolean inlineCompile(Procedure proc, ApplyExp exp,
+                                 Compilation comp, Target target)
+            throws Throwable {
+        if (proc instanceof PrimProcedure)
+            return ((PrimProcedure) proc).compile(exp, comp, target);
+        Object propval = proc.getProperty(Procedure.compilerXKey, null);
+        if (propval instanceof String) {
+            Object method = InlineCalls.resolveInliner(proc, (String) propval,
+                                                       compilerMethodType);
+            if (method != null)
+                propval = method;
+        }
+        /* #ifdef use:java.lang.invoke */
+        if (propval instanceof MethodHandle) {
+            return (boolean) ((MethodHandle) propval).invokeExact(exp, comp, target, proc);
+        }
+        /* #else */
+        // if (propval instanceof java.lang.reflect.Method)
+        //    return (Boolean) ((java.lang.reflect.Method) propval)
+        //        .invoke(null, new Object[] { exp, comp, target, proc });
+        /* #endif */
+        if (propval != null) {
+            comp.error('e', "compiler property string for "+proc
+                       +" is not of the form CLASS:METHOD");
+            return false;
+        }
+        if (! exp.isSimple())
+            return false;
+        Inlineable compiler;
+        if (proc instanceof Inlineable)
+            compiler = (Inlineable) proc;
+        else if ((propval = Procedure.compilerKey.get(proc)) != null)
+            compiler = (Inlineable) Procedure.compilerKey.get(proc);
+        else
+            compiler = null;
+        if (compiler == null)
+            return false;
+        compiler.compile(exp, comp, target);
+        return true;
+    }
 
   public final Expression inlineIfConstant(Procedure proc, InlineCalls visitor)
   {
@@ -622,7 +751,11 @@ public class ApplyExp extends Expression
       }
     try
       {
-	return new QuoteExp(proc.applyN(vals), type);
+	return new QuoteExp(proc.applyN(vals), type).setLine(this);
+      }
+    catch (Error ex)
+      {
+        throw ex;
       }
     catch (Throwable ex)
       {
@@ -639,4 +772,19 @@ public class ApplyExp extends Expression
       return "ApplyExp[unknownContinuation]";
     return "ApplyExp/"+(args == null?0:args.length)+'['+func+']';
   }
+
+    /* #ifdef use:java.lang.invoke */
+    static final MethodType compilerMethodType =
+        MethodType.methodType(boolean.class,
+                              gnu.expr.ApplyExp.class,
+                              gnu.expr.Compilation.class,
+                              gnu.expr.Target.class,
+                              gnu.mapping.Procedure.class);
+    /* #else */
+    // private static final Class[] compilerMethodType =
+    //     new Class[] { gnu.expr.ApplyExp.class,
+    //                   gnu.expr.Compilation.class,
+    //                   gnu.expr.Target.class,
+    //                   gnu.mapping.Procedure.class };
+    /* #endif */
 }

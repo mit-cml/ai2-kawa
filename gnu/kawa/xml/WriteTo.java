@@ -2,10 +2,12 @@
 // This is free software;  for terms and warranty disclaimer see ./COPYING.
 
 package gnu.kawa.xml;
-import gnu.mapping.*;
+import gnu.kawa.io.OutPort;
+import gnu.kawa.io.Path;
+import gnu.mapping.Procedure2;
+import gnu.mapping.Values;
 import gnu.xml.*;
 import java.io.*;
-import gnu.text.Path;
 
 /** Write a value to a named file. */
 
@@ -61,7 +63,7 @@ public class WriteTo extends Procedure2 // FIXME: implements Inlineable
           }
         ins.close();
       }
-    catch (Throwable ex)
+    catch (Exception ex)
       {
         // fall through
       }

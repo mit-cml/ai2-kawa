@@ -28,7 +28,7 @@ public abstract class ByteVector extends SimpleVector
       }
   }
 
-  protected Object getBuffer() { return data; }
+  public byte[] getBuffer() { return data; }
 
   public final byte byteAt(int index)
   {
@@ -40,15 +40,6 @@ public abstract class ByteVector extends SimpleVector
   public final byte byteAtBuffer(int index)
   {
     return data[index];
-  }
-
-  public boolean consumeNext (int ipos, Consumer out)
-  {
-    int index = ipos >>> 1;
-    if (index >= size)
-      return false;
-    out.writeInt(intAtBuffer(index));
-    return true;
   }
 
   public void consumePosRange (int iposStart, int iposEnd, Consumer out)
@@ -75,11 +66,24 @@ public abstract class ByteVector extends SimpleVector
     data[index] = value;
   }
 
+    public void copyFrom(byte[] src, int soffset, int doffset, int length) {
+        if (doffset + length > size)
+            throw new IndexOutOfBoundsException();
+        System.arraycopy(src, soffset, data, doffset, length);
+    }
+
   protected void clearBuffer(int start, int count)
   {
     while (--count >= 0)
       data[start++] = 0;
   }
+
+    public void copyFrom (int index, ByteVector src, int start, int end) {
+        int count = end-start;
+        if (count < 0 || index+count > size || end > src.size)
+            throw new ArrayIndexOutOfBoundsException();
+        System.arraycopy(src.data, start, data, index, count);
+    }
 
   /**
    * @serialData Write 'size' (using writeInt),
@@ -103,4 +107,19 @@ public abstract class ByteVector extends SimpleVector
     this.data = data;
     this.size = size;
   }
+
+    public InputStream getInputStream() {
+        return new ByteArrayInputStream(data, 0, size);
+    }
+
+    public int readFrom(int start, int count, InputStream in)
+        throws IOException {
+        return in.read(data, start, count);
+    }
+
+    public void writeTo(int start, int count, OutputStream out)
+        throws IOException {
+        out.write(data, start, count);
+    }
+
 }

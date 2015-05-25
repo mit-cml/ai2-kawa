@@ -5,42 +5,63 @@ package gnu.expr;
 import gnu.bytecode.*;
 import gnu.mapping.*;
 import gnu.kawa.lispexpr.LangObjType;
+import gnu.kawa.reflect.CompileArrays;
 import gnu.lists.ConsumerWriter;
+import kawa.SourceMethodType;
 import java.io.Writer;
+import java.lang.reflect.Array;
+import gnu.kawa.functions.MakeSplice;
 
 /** A primitive Procedure implemented by a plain Java method. */
 
-public class PrimProcedure extends MethodProc implements gnu.expr.Inlineable
-{
-  Type retType;
-  /** The types of the method parameters.
-   * If known, the types have been coerced to Language-specific parameters.
-   * Does not include the implicit static link argument of some constructors.
-   */
-  Type[] argTypes;
-  Method method;
-  int op_code;
-  /** 'P' means use invokespecial;
-   * 'V' means expect a target (this) argument, even if method is static;
-   * '\0' means don't expect a target. */
-  char mode;
-  boolean sideEffectFree;
+public class PrimProcedure extends MethodProc {
+    private Type retType;
 
-  /** If non-null, the LambdaExp that this PrimProcedure implements. */
-  LambdaExp source;
+    /** The types of the method parameters.
+     * If known, the types have been coerced to Language-specific parameters.
+     * Does not include the implicit static link argument of some constructors.
+     */
+    private Type[] argTypes;
 
-  java.lang.reflect.Member member;
+    private Method method;
 
-  public final int opcode() { return op_code; }
+    /** Actual method to invoke. Normally same as method.
+     * However, may have declaring class of the actual caller. 
+     * This is similar to what javac does for improved binary compatibility. */
+    private Method methodForInvoke;
 
-  public Type getReturnType () { return retType; }
-  public void setReturnType (Type retType) { this.retType = retType; }
+    private int op_code;
+    /** 'P' means use invokespecial;
+     * 'V' means expect a target (this) argument, even if method is static;
+     * '\0' means don't expect a target. */
+    private char mode;
+    private boolean sideEffectFree;
 
-  public boolean isSpecial() { return mode == 'P'; }
+    /** If non-null, the LambdaExp that this PrimProcedure implements. */
+    private LambdaExp source;
 
-  public Type getReturnType (Expression[] args) { return retType; }
+    private java.lang.reflect.Member member;
 
-  public Method getMethod () { return method; }
+    public final int opcode() { return op_code; }
+
+    public Type getReturnType () { return retType; }
+    public void setReturnType (Type retType) { this.retType = retType; }
+
+    public boolean isSpecial() { return mode == 'P'; }
+
+    public Type getReturnType (Expression[] args) { return retType; }
+
+    public ClassType getDeclaringClass() {
+        return methodForInvoke == null ? null
+            : methodForInvoke.getDeclaringClass();
+    }
+
+    public Method getMethod () { return method; }
+
+    public void setMethodForInvoke(Method m) {
+        methodForInvoke = m;
+        setOpcode(m);
+    }
 
   public boolean isSideEffectFree ()
   {
@@ -52,18 +73,20 @@ public class PrimProcedure extends MethodProc implements gnu.expr.Inlineable
     sideEffectFree = true;
   }
 
-  /** Return true iff the last parameter is a "rest" argument. */
-  public boolean takesVarArgs()
-  {
-    if (method != null)
-      {
-        if ((method.getModifiers() & Access.VARARGS) != 0)
-          return true;
-	String name = method.getName();
-	return name.endsWith("$V") || name.endsWith("$V$X");
-      }
-    return false;
-  }
+    /** Return true iff the last parameter is a "rest" argument. */
+    public boolean takesVarArgs() {
+        return takesVarArgs(method);
+    }
+
+    public static boolean takesVarArgs(Method method) {
+        if (method != null) {
+            if ((method.getModifiers() & Access.VARARGS) != 0)
+                return true;
+            String name = method.getName();
+            return name.endsWith("$V") || name.endsWith("$V$X");
+        }
+        return false;
+    }
 
   public boolean takesContext()
   {
@@ -75,11 +98,25 @@ public class PrimProcedure extends MethodProc implements gnu.expr.Inlineable
     return method.getName().endsWith("$X");
   }
 
-  public int isApplicable(Type[] argTypes)
-  {
-    int app = super.isApplicable(argTypes);
+    /** Support passing an explicit array to a varargs function.
+     * This is a kludge inherited from Java to support backwards
+     * compatibility after various methods were converte to take varargs.
+     * If Java5-style VARARS we allow both a variable-length argument list,
+     * or if the last argument already is an array we can use it as is.
+     * The tricky part is we sometimes have to distinguish these cases
+     * at run-time - see the logic for createVarargsArrayIfNeeded in
+     * compileArgs.
+     * FIXME This is needless and unreliable complexity.  We should by default
+     * create a varargs array - even if the actual argument is an array.
+     * People should now use splices instead.
+     */
+    public static boolean explicitArrayAsVarArgsAllowed = true;
+
+    public int isApplicable(Type[] argTypes, Type restType) {
+        int app = super.isApplicable(argTypes, restType);
     int nargs = argTypes.length;
-    if (app == -1 && method != null
+    if (explicitArrayAsVarArgsAllowed
+        && app == -1 && method != null && restType == null
         && (method.getModifiers() & Access.VARARGS) != 0
         && nargs > 0 && argTypes[nargs-1] instanceof ArrayType)
       {
@@ -88,10 +125,15 @@ public class PrimProcedure extends MethodProc implements gnu.expr.Inlineable
         Type[] tmp = new Type[nargs];
         System.arraycopy(argTypes, 0, tmp, 0, nargs-1);
         tmp[nargs-1] = ((ArrayType) argTypes[nargs-1]).getComponentType();
-        return super.isApplicable(tmp);
+        return super.isApplicable(tmp, null);
       }
     return app;
   }
+
+    public boolean isAbstract() {
+        return method != null 
+            && (method.getModifiers() & Access.ABSTRACT) != 0;
+    }
 
   public final boolean isConstructor()
   {
@@ -157,100 +199,89 @@ public class PrimProcedure extends MethodProc implements gnu.expr.Inlineable
     return matchN(args, ctx);
   }
 
-  public int matchN (Object[] args, CallContext ctx)
-  {
-    int nargs = args.length;
-    boolean takesVarArgs = takesVarArgs();
-    int fixArgs = minArgs();
-    if (nargs < fixArgs)
-      return NO_MATCH_TOO_FEW_ARGS|fixArgs;
-    if (! takesVarArgs && nargs > fixArgs)
-      return NO_MATCH_TOO_MANY_ARGS|fixArgs;
-    int paramCount = argTypes.length;
-    Type elementType = null;
-    Object[] restArray = null;
-    int extraCount = (takesTarget() || isConstructor()) ? 1 : 0;
-    boolean takesContext = takesContext();
-    Object[] rargs = new Object[paramCount];
-    if (takesContext)
-      rargs[--paramCount] = ctx;
-    Object extraArg;
-    if (takesVarArgs)
-      {
-	Type restType = argTypes[paramCount-1];
-        if (restType == Compilation.scmListType || restType == LangObjType.listType)
-	  { // FIXME
-	    rargs[paramCount-1] = gnu.lists.LList.makeList(args, fixArgs);
-	    nargs = fixArgs;
-            elementType = Type.objectType;
-	  }
-	else
-	  {
-	    ArrayType restArrayType = (ArrayType) restType;
-	    elementType = restArrayType.getComponentType();
-	    Class elementClass = elementType.getReflectClass();
-	    restArray = (Object[])
-	      java.lang.reflect.Array.newInstance(elementClass, nargs-fixArgs);
-	    rargs[paramCount-1] = restArray;
-	  }
-      }
-    if (isConstructor())
-      extraArg = args[0];
-    else if (extraCount != 0)
-      {
-	try
-	  {
-            extraArg = method.getDeclaringClass().coerceFromObject(args[0]);
-	  }
-	catch (ClassCastException ex)
-          {
-            return NO_MATCH_BAD_TYPE|1;
-          }
-      }
-    else
-      extraArg = null;
-    for (int i = extraCount;  i < args.length; i++)
-      {
-        Object arg = args[i];
-        Type type = i < fixArgs ? argTypes[i-extraCount] : elementType;
-        if (type != Type.objectType)
-          {
-            try
-              {
-                arg = type.coerceFromObject(arg);
-              }
-            catch (ClassCastException ex)
-              {
-                return NO_MATCH_BAD_TYPE|(i+1);
-              }
-          }
-        if (i < fixArgs)
-          rargs[i-extraCount] = arg;
-        else if (restArray != null) // I.e. using array rather than LList.
-          restArray[i - fixArgs] = arg;
-      }
-    ctx.value1 = extraArg;
-    ctx.values = rargs;
-    ctx.proc = this;
-    return 0;
-  }
+    public int matchN(Object[] args, CallContext ctx) {
+        int nargs = args.length;
+        boolean takesVarArgs = takesVarArgs();
+        int fixArgs = minArgs();
+        if (nargs < fixArgs)
+            return NO_MATCH_TOO_FEW_ARGS|fixArgs;
+        if (! takesVarArgs && nargs > fixArgs)
+            return NO_MATCH_TOO_MANY_ARGS|fixArgs;
+        int paramCount = argTypes.length;
+        Type elementType = null;
+        Object restArray = null;
+        int extraCount = (takesTarget() || isConstructor()) ? 1 : 0;
+        boolean takesContext = takesContext();
+        Object[] rargs = new Object[paramCount];
+        if (takesContext)
+            rargs[--paramCount] = ctx;
+        Object extraArg;
+        if (takesVarArgs) {
+            Type restType = argTypes[paramCount-1];
+            if (restType == Compilation.scmListType || restType == LangObjType.listType) {
+                // FIXME
+                rargs[paramCount-1] = gnu.lists.LList.makeList(args, fixArgs);
+                nargs = fixArgs;
+                elementType = Type.objectType;
+            } else {
+                ArrayType restArrayType = (ArrayType) restType;
+                elementType = restArrayType.getComponentType();
+                Class elementClass = elementType.getReflectClass();
+                restArray = Array.newInstance(elementClass, nargs-fixArgs);
+                rargs[paramCount-1] = restArray;
+            }
+        }
+        if (isConstructor())
+            extraArg = args[0];
+        else if (extraCount != 0) {
+            try {
+                extraArg = getDeclaringClass().coerceFromObject(args[0]);
+            } catch (ClassCastException ex) {
+                return NO_MATCH_BAD_TYPE|1;
+            }
+        } else
+            extraArg = null;
+        for (int i = extraCount;  i < args.length; i++) {
+            Object arg = args[i];
+            Type type = i < fixArgs ? argTypes[i-extraCount]
+                : elementType == null ? null : elementType;
+            if (type != Type.objectType) {
+                try {
+                    arg = type.coerceFromObject(arg);
+                } catch (ClassCastException ex) {
+                    return NO_MATCH_BAD_TYPE|(i+1);
+                }
+            }
+            if (i < fixArgs)
+                rargs[i-extraCount] = arg;
+            else if (restArray != null) { // I.e. using array rather than LList.
+                if (type instanceof PrimType)
+                    arg = ((PrimType) type).convertToRaw(arg);
+                Array.set(restArray, i - fixArgs, arg);
+            }
+        }
+        ctx.value1 = extraArg;
+        ctx.values = rargs;
+        ctx.proc = this;
+        return 0;
+    }
 
   public void apply (CallContext ctx) throws Throwable
   {
     int arg_count = argTypes.length;
     boolean is_constructor = isConstructor();
-    boolean slink = is_constructor && method.getDeclaringClass().hasOuterLink();
+    boolean slink = is_constructor && getDeclaringClass().hasOuterLink();
 
     try
       {
 	if (member == null)
 	  {
-	    Class clas = method.getDeclaringClass().getReflectClass();
+	    Class clas = getDeclaringClass().getReflectClass();
 	    Class[] paramTypes = new Class[arg_count+(slink?1:0)];
 	    for (int i = arg_count; --i >= 0; )
 	      paramTypes[i+(slink?1:0)] = argTypes[i].getReflectClass();
             if (slink)
-              paramTypes[0] = method.getDeclaringClass().getOuterLinkType().getReflectClass();
+              paramTypes[0] = getDeclaringClass().getOuterLinkType().getReflectClass();
 	    if (is_constructor)
 	      member = clas.getConstructor(paramTypes);
 	    else if (method != Type.clone_method)
@@ -313,74 +344,88 @@ public class PrimProcedure extends MethodProc implements gnu.expr.Inlineable
 
   public PrimProcedure(Method method, Language language)
   {
-    this(method, '\0', language);
+    this(method, '\0', language, null);
   }
 
-  public PrimProcedure(Method method, char mode, Language language)
-  {
-    this.mode = mode;
+    public PrimProcedure(Method method, char mode, Language language,
+			 ParameterizedType parameterizedType) {
+        this.mode = mode;
 
-    init(method);
+        init(method);
+        // This stuff deals with that a language may have its own mapping
+        // from Java types to language types, for coercions and other reasons.
+        Type[] pTypes = this.argTypes;
+        int nTypes = pTypes.length;
+        argTypes = null;
+        String[] annotTypes;
+        try {
+            SourceMethodType sourceType = method.getAnnotation(SourceMethodType.class);
+            annotTypes = sourceType == null ? null : sourceType.value();
+        } catch (Throwable ex) {
+            annotTypes = null;
+        }
+        for (int i = nTypes;  --i >= 0; ) {
+            Type javaType = pTypes[i];
+            Type langType = decodeType(javaType, annotTypes, i+1,
+                                       parameterizedType, language);
+            if (javaType != langType) {
+                if (argTypes == null) {
+                    argTypes = new Type[nTypes];
+                    System.arraycopy(pTypes, 0, argTypes, 0, nTypes); 
+                }
+                argTypes[i] = langType;
+            }
+        }
+        if (argTypes == null)
+            argTypes = pTypes;
+        if (isConstructor())
+            retType = getDeclaringClass();
+        else if (method.getName().endsWith("$X"))
+            retType = Type.objectType;
+        else {
+            retType = decodeType(method.getReturnType(),
+                                 annotTypes, 0, parameterizedType, language);
+            // Kludge - toStringType doesn't have methods.
+            // It shouldn't be used as the "type" of anything -
+            // it's just a type with a coercion.  FIXME.
+            if (retType == Type.toStringType)
+                retType = Type.javalangStringType;
+        }
+    }
 
-    // This stuff deals with that a language may have its own mapping
-    // from Java types to language types, for coercions and other reasons.
-    Type[] pTypes = this.argTypes;
-    int nTypes = pTypes.length;
-    argTypes = null;
-    for (int i = nTypes;  --i >= 0; )
-      {
-	Type javaType = pTypes[i];
-	Type langType = language.getLangTypeFor(javaType);
-	if (javaType != langType)
-	  {
-	    if (argTypes == null)
-	      {
-		argTypes = new Type[nTypes];
-		System.arraycopy(pTypes, 0, argTypes, 0, nTypes); 
-	      }
-	    argTypes[i] = langType;
-	  }
-      }
-    if (argTypes == null)
-      argTypes = pTypes;
-    if (isConstructor())
-      retType = method.getDeclaringClass();
-    else if (method.getName().endsWith("$X"))
-      retType = Type.objectType;
-    else
-      {
-        retType = language.getLangTypeFor(method.getReturnType());
+    static Type decodeType(Type javaType, String[] annotTypes, int annotIndex,
+                           ParameterizedType parameterizedType,
+                           Language lang) {
+        String annotType = annotTypes != null && annotTypes.length > annotIndex
+            ? annotTypes[annotIndex] : null;
+        return lang.decodeType(javaType, annotType, parameterizedType);
+    }
 
-        // Kludge - toStringType doesn't have methods.
-        // It shouldn't be used as the "type" of anything -
-        // it's just a type with a coercion.  FIXME.
-        if (retType == Type.toStringType)
-          retType = Type.javalangStringType;
-      }
-  }
-  
+    private void setOpcode(Method m) {
+        int flags = m.getModifiers();
+        if ((flags & Access.STATIC) != 0)
+            this.op_code = 184;  // invokestatic
+        else {
+            ClassType mclass = m.getDeclaringClass();
+            if (mode == 'P')
+                this.op_code = 183;  // invokespecial
+            else {
+                mode = 'V';
+                if ("<init>".equals(m.getName()))
+                    this.op_code = 183;  // invokespecial
+                else if ((mclass.getModifiers() & Access.INTERFACE) != 0)
+                    this.op_code = 185;  // invokeinterface
+                else
+                    this.op_code = 182;  // invokevirtual
+            }
+        }
+    }
+
   private void init(Method method)
   {
     this.method = method;
-    int flags = method.getModifiers();
-    if ((flags & Access.STATIC) != 0)
-      this.op_code = 184;  // invokestatic
-    else
-      {
-	ClassType mclass = method.getDeclaringClass();
-	if (mode == 'P')
-	  this.op_code = 183;  // invokespecial
-        else
-          {
-            mode = 'V';
-            if ("<init>".equals(method.getName()))
-              this.op_code = 183;  // invokespecial
-            else if ((mclass.getModifiers() & Access.INTERFACE) != 0)
-              this.op_code = 185;  // invokeinterface
-            else
-              this.op_code = 182;  // invokevirtual
-          }
-      }
+    this.methodForInvoke = method;
+    setOpcode(method);
     Type[] mtypes = method.getParameterTypes();
     if (isConstructor() && method.getDeclaringClass().hasOuterLink())
       {
@@ -429,6 +474,7 @@ public class PrimProcedure extends MethodProc implements gnu.expr.Inlineable
     this.op_code = op_code;
     method = classtype.addMethod (name, op_code == 184 ? Access.STATIC : 0,
 				  argTypes, retType);
+    methodForInvoke = method;
     this.retType = retType;
     this.argTypes= argTypes;
     mode = op_code == 184 ? '\0' : 'V';
@@ -454,7 +500,7 @@ public class PrimProcedure extends MethodProc implements gnu.expr.Inlineable
    *   pass a link to a closure environment, which was pushed by our caller.)
    *   If thisType==null, no special handling of args[0] or argTypes[0].
    */
-  private void compileArgs(Expression[] args, int startArg, Type thisType, Compilation comp)
+    private void compileArgs(ApplyExp exp, Expression[] args, int startArg, Type thisType, Compilation comp)
  {
     boolean variable = takesVarArgs();
     String name = getName();
@@ -467,25 +513,24 @@ public class PrimProcedure extends MethodProc implements gnu.expr.Inlineable
     int nargs = args.length - startArg;
     boolean is_static = thisType == null || skipArg != 0;
 
-    // If Java5-style VARARS we allow both a variable-length argument list,
-    // or if the last argument already is an array we can use it as is.
-    // The tricky part is we sometimes have to distinguish these cases
-    // at run-time, in which case we set createVarargsArrayIfNeeded.
+    // Do we need to check at runtime whether a final argument to a VARARGS
+    // is an array or need to be wrapped in an array?
+    // See comment at explicitArrayAsVarArgsAllowed.
     boolean createVarargsArrayIfNeeded = false;
-    if (variable && (method.getModifiers() & Access.VARARGS) != 0
+    if (explicitArrayAsVarArgsAllowed
+        && variable && (method.getModifiers() & Access.VARARGS) != 0
+        && exp.firstSpliceArg < 0
         && nargs > 0 && argTypes.length > 0
         && nargs == arg_count + (is_static ? 0 : 1))
       {
         Type lastType = args[args.length-1].getType();
         Type lastParam = argTypes[argTypes.length-1];
-        if (lastType instanceof ObjectType
-            && lastParam instanceof ArrayType // should always be true
-            && ! (((ArrayType) lastParam).getComponentType()
-                  instanceof ArrayType))
+        if (lastParam.isCompatibleWithValue(lastType) >= 0)
           {
-            if (! (lastType instanceof ArrayType))
-              createVarargsArrayIfNeeded = true;
-            variable = false;
+            if (lastParam instanceof ArrayType // should always be true
+                && (((ArrayType) lastParam).getComponentType()).isCompatibleWithValue(lastType) >= 0)
+                createVarargsArrayIfNeeded = true; 
+             variable = false;
           }
       }
     int fix_arg_count = variable ? arg_count - (is_static ? 1 : 0) : args.length - startArg;
@@ -502,9 +547,32 @@ public class PrimProcedure extends MethodProc implements gnu.expr.Inlineable
 		gnu.kawa.functions.MakeList.compile(args, startArg+i, comp);
 		break;
 	      }
-            code.emitPushInt(args.length - startArg - fix_arg_count);
+            if (startArg+i+1== args.length
+                && exp.firstSpliceArg==startArg+i) {
+                // See if final argument is a splice of an array we can re-use.
+                Expression spliceArg = MakeSplice.argIfSplice(args[startArg+i]);
+                Type spliceType = spliceArg.getType();
+                if (spliceType instanceof ArrayType) {
+                    Type spliceElType = ((ArrayType) spliceType).getComponentType();
+                    Type argElType = ((ArrayType) arg_type).getComponentType();
+                    if (spliceElType == argElType
+                        || (argElType == Type.objectType
+                            && spliceElType instanceof ObjectType)
+                        || (argElType instanceof ClassType
+                            && spliceElType instanceof ClassType
+                            && spliceElType.isSubtype(argElType))) {
+                        spliceArg.compileWithPosition(comp, Target.pushObject);
+                        i = nargs;
+                        break;
+                    }
+                }
+            }
+                
             arg_type = ((ArrayType) arg_type).getComponentType();
-            code.emitNewArray(arg_type);
+            CompileArrays.createArray(arg_type, comp,
+                                      args, startArg+i, args.length);
+            i = nargs;
+            break;
           }
         if (i >= nargs)
           break;
@@ -525,7 +593,7 @@ public class PrimProcedure extends MethodProc implements gnu.expr.Inlineable
 	  source == null ? CheckedTarget.getInstance(argTypeForTarget, name, i+1)
 	  : CheckedTarget.getInstance(argTypeForTarget, source, i);
 	args[startArg+i].compileNotePosition(comp, target, args[startArg+i]);
-        if (createVarargsNow)
+        if (createVarargsNow) // Only if explicitArrayAsVarArgsAllowed
           {
             // Wrap final argument in array if not already an array:
             // Emit: (arg instanceof T[] ? (T[]) arg : new T[]{arg})
@@ -542,7 +610,7 @@ public class PrimProcedure extends MethodProc implements gnu.expr.Inlineable
             code.emitPushInt(0); // Stack array array value 0
             code.emitSwap(); // Stack: array array 0 value
             eltype.emitCoerceFromObject(code);
-            code.emitArrayStore(arg_type); // Stack: array
+            code.emitArrayStore(eltype); // Stack: array
             code.emitFi();
           }
         if (i >= fix_arg_count)
@@ -552,10 +620,17 @@ public class PrimProcedure extends MethodProc implements gnu.expr.Inlineable
       }
   }
 
-  public void compile (ApplyExp exp, Compilation comp, Target target)
-  {
+    public boolean compile(ApplyExp exp, Compilation comp, Target target) {
+        if (exp.firstKeywordArgIndex != 0)
+            return false;
+        // We can optimize splice arguments if they're in the "varargs"
+        // section of the argument list.
+        if (exp.firstSpliceArg >= 0
+            && (! takesVarArgs() || minArgs() > exp.firstSpliceArg))
+            return false;
+
     gnu.bytecode.CodeAttr code = comp.getCode();
-    ClassType mclass = method == null ? null : method.getDeclaringClass();
+    ClassType mclass = getDeclaringClass();
     Expression[] args = exp.getArgs();
     if (isConstructor())
       {
@@ -566,10 +641,10 @@ public class PrimProcedure extends MethodProc implements gnu.expr.Inlineable
             // on the operand stack or in a local variable when
             // any backwards branch is taken."
             // Hence re-write:
-            //   (make Foo a1 backward_dump_containing_expression a3 ...)
+            //   (make Foo a1 backward_jump_containing_expression a3 ...)
             // to:
             //   (let ((t1 a1)
-            //         (t2 backward_dump_containing_expression)
+            //         (t2 backward_jump_containing_expression)
             //         (t3 q2) ...)
             //     (make Foo a1 t1 t2 t3 ...))
             int nargs = args.length;
@@ -579,34 +654,47 @@ public class PrimProcedure extends MethodProc implements gnu.expr.Inlineable
             for (int i = 1;  i < nargs;  i++)
               {
                 Expression argi = args[i];
-                Declaration d = comp.letVariable(null, argi.getType(), argi);
-                d.setCanRead(true);
-                xargs[i] = new ReferenceExp(d);
+                // A modest optimzation: Don't generate temporary if not needed.
+                // But this also avoids a possible VerifyError in the case
+                // of LambdaExp, since if we set the latter's nameDecl to the
+                // new temporary, loading the temporary can get confused.
+                if (! (argi instanceof QuoteExp
+                       || argi instanceof LambdaExp
+                       || argi instanceof ReferenceExp))
+                  {
+                    Declaration d = comp.letVariable(null, argi.getType(), argi);
+                    d.setCanRead(true);
+                    argi = new ReferenceExp(d);
+                  }
+                xargs[i] = argi;
               }
             comp.letEnter();
             LetExp let = comp.letDone(new ApplyExp(exp.func, xargs));
             let.compile(comp, target);
-            return;
+            return true;
           }
         code.emitNew(mclass);
         code.emitDup(mclass);
       }
-    String arg_error = WrongArguments.checkArgCount(this, args.length);
+    int spliceCount = exp.spliceCount();
+    String arg_error = WrongArguments.checkArgCount(this,
+                                                    args.length-spliceCount,
+                                                    spliceCount>0);
     if (arg_error != null)
       comp.error('e', arg_error);
 
     compile(getStaticFlag() ? null : mclass, exp, comp, target);
+    return true;
   }
 
   void compile (Type thisType, ApplyExp exp, Compilation comp, Target target)
   {
     Expression[] args = exp.getArgs();
     gnu.bytecode.CodeAttr code = comp.getCode();
-    Type stackType = retType;
     int startArg = 0;
     if (isConstructor())
       {
-        ClassType mclass = method == null ? null :  method.getDeclaringClass();
+        ClassType mclass = getDeclaringClass();
         if (mclass.hasOuterLink())
           {
             ClassExp.loadSuperStaticLink(args[0], mclass, comp);
@@ -619,7 +707,7 @@ public class PrimProcedure extends MethodProc implements gnu.expr.Inlineable
     else if (opcode() == 183 && mode == 'P' && "<init>".equals(method.getName()))
       {
         // Specifically handle passing a static-link.
-        ClassType mclass = method == null ? null :  method.getDeclaringClass();
+        ClassType mclass = getDeclaringClass();
         if (mclass.hasOuterLink())
           {
             code.emitPushThis();
@@ -631,18 +719,17 @@ public class PrimProcedure extends MethodProc implements gnu.expr.Inlineable
       }
     else if (takesTarget() && method.getStaticFlag())
       startArg = 1;
-
-    compileArgs(args, startArg, thisType, comp);
+    compileArgs(exp, args, startArg, thisType, comp);
 
     if (method == null)
       {
         code.emitPrimop (opcode(), args.length, retType);
-        target.compileFromStack(comp, stackType);
+        target.compileFromStack(comp, retType);
       }
     else
       {
-        compileInvoke(comp, method, target,
-                      exp.isTailCall(), op_code, stackType);
+        compileInvoke(comp, methodForInvoke, target,
+                      exp.isTailCall(), op_code, retType);
       }
   }
 
@@ -652,7 +739,7 @@ public class PrimProcedure extends MethodProc implements gnu.expr.Inlineable
    */
   public static void
   compileInvoke (Compilation comp, Method method, Target target,
-                 boolean isTailCall, int op_code, Type stackType)
+                 boolean isTailCall, int op_code, Type returnType)
   {
     CodeAttr code = comp.getCode();
     comp.usedClass(method.getDeclaringClass());
@@ -705,7 +792,7 @@ public class PrimProcedure extends MethodProc implements gnu.expr.Inlineable
     else
       {
         comp.loadCallContext();
-        stackType = Type.objectType;
+        returnType = Type.objectType;
         code.pushScope();
         Variable saveIndex = code.addLocal(Type.intType);
         comp.loadCallContext();
@@ -726,8 +813,39 @@ public class PrimProcedure extends MethodProc implements gnu.expr.Inlineable
                                getDeclaredMethod("getFromContext", 1));
         code.popScope();
       }
-    target.compileFromStack(comp, stackType);
+    if (method.getReturnType() == Type.neverReturnsType)
+      { 
+        // Currently only go here if !takesContext(method).  FIXME: We should
+        // use annotations or something to figure out return type of methods
+        // that take a context (and whose return type is thus void).
+        compileReachedUnexpected(code);
+      }
+    else {
+        if (method.getReturnType() instanceof TypeVariable) {
+            if (returnType instanceof ClassType) {
+                // This avoids an unneeded exception handler (if the
+                // target is a CheckedTarget), and a needless call to
+                // Promise.force.  Also, if the target.getType() is
+                // different from the returnType, it's probably better
+                // to convert to returnType first - it might make it
+                // easier to find the right conversion, or emit a more
+                // accurate error message.
+                code.emitCheckcast(returnType);
+            } else
+                returnType = method.getReturnType().getRawType();
+        }
+
+      target.compileFromStack(comp, returnType);
+    }
   }
+
+    public static void compileReachedUnexpected(CodeAttr code) {
+        if (code.reachableHere()) {
+            code.emitGetStatic(ClassType.make("gnu.expr.Special")
+                               .getDeclaredField("reachedUnexpected"));
+            code.emitThrow();
+        }
+    }
 
   public Type getParameterType(int index)
   {
@@ -735,7 +853,7 @@ public class PrimProcedure extends MethodProc implements gnu.expr.Inlineable
       {
         if (index == 0)
           return isConstructor() ? Type.objectType
-            : method.getDeclaringClass();
+            : getDeclaringClass();
         index--;
       }
     int lenTypes = argTypes.length;
@@ -744,7 +862,6 @@ public class PrimProcedure extends MethodProc implements gnu.expr.Inlineable
     boolean varArgs = takesVarArgs();
     if (index < lenTypes && ! varArgs)
       return argTypes[index];
-    // if (! varArgs) ERROR;
     Type restType = argTypes[lenTypes - 1];
     if (restType instanceof ArrayType)
       return ((ArrayType) restType).getComponentType();
@@ -755,6 +872,72 @@ public class PrimProcedure extends MethodProc implements gnu.expr.Inlineable
   // This is null in JDK 1.1 and something else in JDK 1.2.
   private static ClassLoader systemClassLoader
   = PrimProcedure.class.getClassLoader();
+
+    /** Return the index of the most specific method.
+     * An approximation of the algorithm in JLS3
+     * 15.12.2.5 "Choosing the Most Specific Method." */
+    public static int mostSpecific(PrimProcedure[] procs, int length) {
+        if (length <= 1) // Handles length==0 and length==1.
+            return length - 1;
+        // best is non-negative if there is a single most specific method.
+        int best = 0;
+        // This array (which is allocated lazily) is used if there is is a
+        // set of bestn methods none of which are more specific
+        // than the others.
+        int[] bests = null;
+        // The active length of the bests array.
+        int bestn = 0;
+        outer:
+        for (int i = 1;  i < length;  i++) {
+            PrimProcedure method = procs[i];
+            if (best >= 0) {
+                PrimProcedure winner
+                    = (PrimProcedure) mostSpecific(procs[best], method);
+                if (winner == null) {
+                    if (bests == null)
+                        bests = new int[length];
+                    bests[0] = best;
+                    bests[1] = i;
+                    bestn = 2;
+                    best = -1;
+                } else if (winner == method) {
+                    best = i;
+                    bestn = i;
+                }
+            } else {
+                for (int j = 0;  j < bestn;  j++) {
+                    PrimProcedure old = procs[bests[j]];
+                    PrimProcedure winner
+                        = (PrimProcedure) mostSpecific(old, method);
+                    if (winner == old)
+                        continue outer;
+                    if (winner == null) {
+                        bests[bestn++] = i;
+                        continue outer;
+                    }
+                }
+                // At this point method is more specific than bests[0..bestn-1].
+                best = i;
+                bestn = i;
+            }
+        }
+        if (best < 0 && bestn > 1) {
+            PrimProcedure first = procs[bests[0]];
+            for (int j = 0;  j < bestn;  j++) {
+                int m = bests[j];
+                PrimProcedure method = procs[m];
+                if (j > 0 && ! overrideEquivalent(first, method))
+                    return -1;
+                if (! method.isAbstract()) {
+                    if (best >= 0)
+                        return -1;
+                    best = m;
+                }
+            }
+            return best >= 0 ? best : bests[0];
+        }
+        return best;
+    }
 
   public static PrimProcedure getMethodFor (Procedure pproc, Expression[] args)
   {
@@ -783,7 +966,7 @@ public class PrimProcedure extends MethodProc implements gnu.expr.Inlineable
 	pproc = null;
 	for (int i = gproc.count;  --i >= 0; )
 	  {
-	    int applic = methods[i].isApplicable(atypes);
+              int applic = methods[i].isApplicable(atypes, null/*FIXME*/);
 	    if (applic < 0)
 	      continue;
 	    if (pproc != null)
@@ -796,7 +979,7 @@ public class PrimProcedure extends MethodProc implements gnu.expr.Inlineable
     if (pproc instanceof PrimProcedure)
       {
 	PrimProcedure prproc = (PrimProcedure) pproc;
-	if (prproc.isApplicable(atypes) >= 0)
+	if (prproc.isApplicable(atypes, null/*FIXME*/) >= 0)
 	  return prproc;
       }
     Class pclass = getProcedureClass(pproc);
@@ -846,7 +1029,7 @@ public class PrimProcedure extends MethodProc implements gnu.expr.Inlineable
       cl = ((ModuleMethod) proc).module.getClass();
     else if (proc instanceof PrimProcedure)
       {
-        Method pmethod = ((PrimProcedure) proc).method;
+        Method pmethod = ((PrimProcedure) proc).methodForInvoke;
         if (pmethod != null)
           {
             cl = pmethod.getDeclaringClass().getReflectClass();
@@ -854,6 +1037,7 @@ public class PrimProcedure extends MethodProc implements gnu.expr.Inlineable
           }
       }
     ClassLoader loader = cl.getClassLoader();
+    if (loader == null) loader = ClassLoader.getSystemClassLoader();
     String cname = cl.getName();
     String rname = cname.replace('.', '/') + ".class";
     ClassType ctype = new ClassType();
@@ -984,7 +1168,7 @@ public class PrimProcedure extends MethodProc implements gnu.expr.Inlineable
 	      }
 	    PrimProcedure prproc = new PrimProcedure(meth, language);
 	    prproc.setName(name);
-	    int code = prproc.isApplicable(atypes);
+	    int code = prproc.isApplicable(atypes, null/*FIXME*/);
 	    if (code < 0 || code < bestCode)
 	      continue;
 	    if (code > bestCode)
@@ -1031,7 +1215,7 @@ public class PrimProcedure extends MethodProc implements gnu.expr.Inlineable
       }
     else
       {
-	buf.append(method.getDeclaringClass().getName());
+	buf.append(getDeclaringClass().getName());
 	buf.append('.');
 	buf.append(method.getName());
       }
@@ -1045,7 +1229,6 @@ public class PrimProcedure extends MethodProc implements gnu.expr.Inlineable
     buf.append(')');
     return buf.toString();
   }
-
 
   public String toString()
   {

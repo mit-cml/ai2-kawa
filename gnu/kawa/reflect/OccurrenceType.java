@@ -36,6 +36,13 @@ public class OccurrenceType extends ObjectType
     if (minOccurs == 0 && maxOccurs < 0
         && (base == SingletonType.instance || base == Type.pointer_type))
       return Type.pointer_type;
+    if (base instanceof OccurrenceType) {
+        OccurrenceType occ = (OccurrenceType) base;
+        minOccurs *= occ.minOccurs;
+        maxOccurs = maxOccurs < 0 || occ.maxOccurs < 0 ? -1
+            : maxOccurs * occ.maxOccurs;
+        base = occ.base;
+    }
     return new OccurrenceType(base, minOccurs, maxOccurs);
   }
 
@@ -49,6 +56,8 @@ public class OccurrenceType extends ObjectType
 
   public int compare(Type other)
   {
+    if (other instanceof LazyType)
+      other = ((LazyType) other).getValueType();
     if (other instanceof OccurrenceType)
       {
         OccurrenceType occOther = (OccurrenceType) other;
@@ -165,7 +174,7 @@ public class OccurrenceType extends ObjectType
     return null;
   }
 
-  /** Return a conservative estimage on the min/max number of items of a type.
+  /** Return a conservative estimate on the min/max number of items of a type.
    * @return {@code maxCount << 12 | minCount & 0xFFF},
    * where a {@code maxCount} of -1 means unbounded.
    */
@@ -301,6 +310,10 @@ public class OccurrenceType extends ObjectType
     minOccurs = in.readInt();
     maxOccurs = in.readInt();
   }
+
+    /* #ifndef JAVA8 */
+    public String encodeType(Language language) { return null; }
+    /* #endif */
 
   public static final ClassType typeOccurrenceType
     = ClassType.make("gnu.kawa.reflect.OccurrenceType");

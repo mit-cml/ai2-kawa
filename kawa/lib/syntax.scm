@@ -1,7 +1,17 @@
+(module-export defmacro define-macro define-syntax-case
+	       begin-for-syntax define-for-syntax
+               when unless try-finally synchronized
+               let-values let*-values case-lambda define-values
+               receive define-alias-parameter
+               $string$ $string-with-default-format$ $format$ $sprintf$
+               $string-with-delimiter-marks$ define-simple-constructor)
+
 (require <kawa.lib.prim_syntax>)
 (require <kawa.lib.std_syntax>)
 (require <kawa.lib.reflection>)
 (require <kawa.lib.lists>)
+(require <kawa.lib.scheme.eval>)
+(require <kawa.lib.prim_imports>)
 
 (define-syntax defmacro
   (syntax-rules ()
@@ -20,7 +30,7 @@
      ((define-syntax-case name literals . parts)
       (define-syntax name
         (lambda (form)
-      (syntax-case form literals . parts))))))
+          (syntax-case form literals . parts))))))
 
 (define-syntax when (syntax-rules ()
 				  ((when cond exp ...)
@@ -30,88 +40,35 @@
 				  ((when cond exp ...)
 				   (if (not cond) (begin exp ...)))))
 
-(define-syntax (try-finally x)
-  (syntax-case x ()
-	       ((_ try-part finally-part)
-		(make <gnu.expr.TryExp>
-		  (syntax->expression (syntax try-part))
-		  (syntax->expression (syntax finally-part))))))
+(define-rewrite-syntax try-finally
+  (lambda (x)
+    (syntax-case x ()
+      ((_ try-part finally-part)
+       (make <gnu.expr.TryExp>
+         (syntax->expression (syntax try-part))
+         (syntax->expression (syntax finally-part)))))))
 
-(define-syntax (synchronized x)
-  (syntax-case x ()
-	       ((_ object . body)
-		(make <gnu.expr.SynchronizedExp>
-		  (syntax->expression (syntax object))
-		  (syntax-body->expression (syntax body))))))
+(define-rewrite-syntax synchronized
+  (lambda (x)
+    (syntax-case x ()
+      ((_ object . body)
+       (make <gnu.expr.SynchronizedExp>
+         (syntax->expression (syntax object))
+         (syntax-body->expression (syntax body)))))))
 
-(define (identifier-list? obj) ::boolean
-  (and (>= (kawa.lang.Translator:listLength obj) 0)
-       (let loop ((obj obj))
-	 (syntax-case obj ()
-	   ((x . y)
-	    (and (identifier? #'x) (loop #'y)))
-	   (() #t)
-	   (_ #f)))))
 
-(define (identifier-pair-list? obj) ::boolean
-  (and (>= (kawa.lang.Translator:listLength obj) 0)
-       (let loop ((obj obj))
-	 (syntax-case obj ()
-	   (((from to) . y)
-	    (and (identifier? #'from) (identifier? #'to) (loop #'y)))
-	   (() #t)
-	   (_ #f)))))
+(define-syntax begin-for-syntax
+  (lambda (form)
+    (syntax-case form ()
+      ((begin-for-syntax . body)
+       (eval (syntax-object->datum (gnu.lists.Pair 'begin (syntax body))))
+       (syntax #!void)))))
 
-(define (import-handle-only name list)
-  ;; FIXME handle if list element is a syntax object
-  (if (memq name list) name #!null))
-(define (import-handle-except name list)
-  ;; FIXME handle if list element is a syntax object
-  (if (memq name list) #!null name))
-(define (import-handle-prefix name prefix)
-  ;; FIXME handle if list element is a syntax object
-  (if (eq? name #!null) #!null
-      #!null))
-;;      (string->symbol (string-append (prefix:toString) (name:toString)))))
-(define (import-handle-rename name rename-pairs)
-  (if (pair? rename-pairs)
-      (if (eq? name (caar rename-pairs))
-	  (cadar rename-pairs)
-	  (import-handle-rename name (cdr rename-pairs)))
-      name))
-(define (import-mapper list)
-  (lambda (name)
-    (let loop ((l list) (n name))
-      (if (or (eq? n #!null) (null? l))
-	  n
-	  (loop (cdr l) ((caar l) n (cdar l)))))))
-
-(define-syntax import
+(define-syntax define-for-syntax
   (syntax-rules ()
-    ((import import-spec ...)
-     (begin (%import import-spec ()) ...))))
-
-(define-syntax-case %import (library only except prefix rename)
-  ((_ (rename import-set . pairs) mapper)
-   (if (identifier-pair-list? #'pairs)
-       #`(%import import-set ,(cons (cons import-handle-rename #`pairs) #`mapper))
-       (syntax-error (syntax rest) "invalid 'rename' clause in import")))
-  ((_ (only import-set . ids) mapper)
-   (if (identifier-list? #'ids)
-       #`(%import import-set ,(cons (cons import-handle-only #`ids) #`mapper))
-       (syntax-error (syntax ids) "invalid 'only' identifier list")))
-  ((_ (except import-set . ids) mapper)
-   (if (identifier-list? #'ids)
-       #`(%import import-set ,(cons (cons import-handle-except #`ids) #`mapper))
-       (syntax-error (syntax ids) "invalid 'except' identifier list")))
-  ((_ (prefix import-set pfix) mapper)
-   #`(%import import-set ,(cons (cons import-handle-prefix #`pfix) #`mapper)))
-  ((_ (prefix import-set . rest) mapper)
-   (syntax-error (syntax rest) "invalid prefix clause in import"))
-  ((_ (library libref) mapper)
-   #`(kawa.standard.ImportFromLibrary:instance libref ,(import-mapper (syntax-object->datum (syntax mapper)))))
-  ((_ libref mapper)
-   #`(kawa.standard.ImportFromLibrary:instance libref ,(import-mapper (syntax-object->datum (syntax mapper))))))
+    ((define-for-syntax . rest)
+     (begin-for-syntax
+      (define . rest)))))
 
 ;; LET-VALUES implementation from SRFI-11, by Lars T Hansen.
 ;; http://srfi.schemers.org/srfi-11/srfi-11.html
@@ -122,7 +79,6 @@
   (syntax-rules ()
     ((let-values (?binding ...) ?body0 ?body1 ...)
      (let-values "bind" (?binding ...) () (begin ?body0 ?body1 ...)))
-    
     ((let-values "bind" () ?tmps ?body)
      (let ?tmps ?body))
     
@@ -157,80 +113,55 @@
   (syntax-case form ()
     ((_ . cl)
      #`(gnu.expr.GenericProc:makeWithoutSorting
-	. ,(let loop ((clauses #'cl))
+	. #,(let loop ((clauses #'cl))
 	     (syntax-case clauses ()
 	       (((formals . body) . rest)
-		#`((lambda formals . body) . ,(loop #'rest)))
+		#`((lambda formals . body) . #,(loop #'rest)))
 	       (()
 		'())
 	       (rest
-		(list (syntax-error (syntax rest)
+		(list (report-syntax-error (syntax rest)
 				    "invalid case-lambda clause")))))))))
 
-;; COND-EXPAND implementation from http://srfi.schemers.org/srfi-0/srfi-0.html
-;; Copyright (C) Marc Feeley (1999). All Rights Reserved.
-;; This document and translations of it may be copied and furnished to
-;; others, and derivative works that comment on or otherwise explain
-;; it or assist in its implementation may be prepared, copied,
-;; published and distributed, in whole or in part, without restriction
-;; of any kind, provided that the above copyright notice and this
-;; paragraph are included on all such copies and derivative
-;; works. However, this document itself may not be modified in any
-;; way, such as by removing the copyright notice or references to the
-;; Scheme Request For Implementation process or editors, except as
-;; needed for the purpose of developing SRFIs in which case the
-;; procedures for copyrights defined in the SRFI process must be
-;; followed, or as required to translate it into languages other than
-;; English.
-;; The limited permissions granted above are perpetual and will not be
-;; revoked by the authors or their successors or assigns.
-;; This document and the information contained herein is provided on
-;; an "AS IS" basis and THE AUTHOR AND THE SRFI EDITORS DISCLAIM ALL
-;; WARRANTIES, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY
-;; WARRANTY THAT THE USE OF THE INFORMATION HEREIN WILL NOT INFRINGE
-;; ANY RIGHTS OR ANY IMPLIED WARRANTIES OF MERCHANTABILITY OR FITNESS
-;; FOR A PARTICULAR PURPOSE.
-
-(define-syntax cond-expand
-  (syntax-rules (and or not else)
-    ((cond-expand) (%syntax-error "Unfulfilled cond-expand"))
-    ((cond-expand (else body ...))
-     (begin body ...))
-    ((cond-expand ((and) body ...) more-clauses ...)
-     (begin body ...))
-    ((cond-expand ((and req1 req2 ...) body ...) more-clauses ...)
-     (cond-expand
-       (req1
-         (cond-expand
-           ((and req2 ...) body ...)
-           more-clauses ...))
-       more-clauses ...))
-    ((cond-expand ((or) body ...) more-clauses ...)
-     (cond-expand more-clauses ...))
-    ((cond-expand ((or req1 req2 ...) body ...) more-clauses ...)
-     (cond-expand
-       (req1
-        (begin body ...))
-       (else
-        (cond-expand
-           ((or req2 ...) body ...)
-           more-clauses ...))))
-    ((cond-expand ((not req) body ...) more-clauses ...)
-     (cond-expand
-       (req
-         (cond-expand more-clauses ...))
-       (else body ...)))
-    ((cond-expand (feature-id . body) . more-clauses)
-     (%cond-expand (feature-id . body) . more-clauses))))
-
-(define-syntax %cond-expand
-  (lambda (x)
-    (syntax-case x ()
-		 ((_ (test . then) . more-clauses)
-		  (if (invoke-static <kawa.standard.IfFeature> 'testFeature
-				     (syntax test))
-		      (syntax (begin . then))
-		      (syntax (cond-expand . more-clauses)))))))
+;; Implementation copied from R7RS.
+(define-syntax define-values
+  (syntax-rules ()
+    ((define-values () expr)
+     (define dummy
+       (call-with-values (lambda () expr)
+         (lambda args #f))))
+    ((define-values (var) expr)
+     (define var expr))
+    ((define-values (var0 var1 ... varn) expr)
+     (begin
+       (define var0
+         (call-with-values (lambda () expr)
+           list))
+       (define var1
+         (let ((v (cadr var0)))
+           (set-cdr! var0 (cddr var0))
+           v)) ...
+           (define varn
+             (let ((v (cadr var0)))
+               (set! var0 (car var0))
+               v))))
+    ((define-values (var0 var1 ... . varn) expr)
+     (begin
+       (define var0
+         (call-with-values (lambda () expr)
+           list))
+       (define var1
+         (let ((v (cadr var0)))
+           (set-cdr! var0 (cddr var0))
+           v)) ...
+           (define varn
+             (let ((v (cdr var0)))
+               (set! var0 (car var0))
+               v))))
+    ((define-values var expr)
+     (define var
+       (call-with-values (lambda () expr)
+         list)))))
 
 ;; RECEIVE implementation from http://srfi.schemers.org/srfi-8/srfi-8.html
 ;; Copyright (C) John David Stone (1999). All Rights Reserved.
@@ -269,3 +200,129 @@
 						     (as <int> 1) arg)))
 		 (set! (field wt 'expectedType) type)
 		 (primitive-throw wt))))))))))
+
+;; Helper macros for $string$:
+;; Collect format string (assuming we're *not* inside $<<$ ... $>>$)
+;; Returns list of format string fragments, to be concatenated.
+(define (%string-format-format default-format forms)
+  (syntax-case forms ($format$ $<<$ $>>$)
+    (() '())
+    (($<<$ . rest)
+     (%string-format-enclosed-format default-format #'rest))
+    ((($format$ fstr . args) . rest)
+     (cons #'fstr (%string-format-format default-format #'rest)))
+    (((x . y) . rest)
+      (cons default-format (%string-format-format default-format #'rest)))
+    ((x . rest)
+     (cons #'(constant-fold invoke (constant-fold invoke x 'toString)
+                            'replace "~" "~~")
+           (%string-format-format default-format #'rest)))))
+
+;; Collect format string, assuming we're inside $<<$ ... $>>$
+;; Returns list of format string fragments, to be concatenated.
+(define (%string-format-enclosed-format default-format forms)
+  (syntax-case forms ($<<$ $>>$ $splice$)
+    (() '())
+    (($>>$ . rest)
+     (%string-format-format default-format #'rest))
+    ((($splice$ seq) . rest)
+     (cons #`(constant-fold string-append "~{" #,default-format "~}")
+           (%string-format-enclosed-format default-format #'rest)))
+    ((arg1 . rest)
+     (cons default-format (%string-format-enclosed-format default-format #'rest)))))
+
+;; Collect format arguments (assuming we're *not* inside $<<$ ... $>>$)
+(define (%string-format-args forms)
+  (syntax-case forms ($format$ $<<$ $>>$)
+    (() '())
+    (($<<$ . rest)
+     (%string-format-enclosed-args #'rest))
+    ((($format$ fstr arg ...) . rest)
+     #`(arg ... . #,(%string-format-args #'rest)))
+    (((x . y) . rest)
+     #`((x . y) . #,(%string-format-args #'rest)))
+    ((x . rest)
+     (%string-format-args #'rest))))
+                         
+;; Collect format arguments, assuming we're inside $<<$ ... $>>$
+(define (%string-format-enclosed-args forms)
+  (syntax-case forms ($format$ $splice$ $<<$ $>>$)
+    (() '())
+    (($>>$ . rest)
+     (%string-format-args #'rest))
+    ((($splice$ seq) . rest)
+     #`(seq . #,(%string-format-enclosed-args #'rest)))
+    ((arg . rest)
+     #`(arg . #,(%string-format-enclosed-args #'rest)))))
+
+(define-syntax $string-with-default-format$
+  (lambda (form)
+    (syntax-case form ()
+      (($string$ default-format . forms)
+       #`($format$ (constant-fold invoke
+                                  (constant-fold string-append
+                                                 . #,(%string-format-format
+                                                      #'default-format
+                                                      #'forms))
+                                  'toString)
+                   . #,(%string-format-args #'forms))))))
+
+(define-syntax $string$
+  (syntax-rules ()
+    ((_ . args)
+     ($string-with-default-format$ "~a" . args))))
+
+(define-syntax $string-with-delimiter-marks$
+  (syntax-rules ()
+    ((_ . args)
+     ($string-with-default-format$ "~Q" . args))))
+
+(define-syntax $format$
+  (syntax-rules ()
+    ((_ . args)
+     (gnu.kawa.functions.Format:formatToString 0 . args))))
+
+(define-syntax $sprintf$
+  (syntax-rules ()
+    ((_ fmt . args)
+     (gnu.kawa.functions.Format:sprintfToString fmt . args))))
+
+(cond-expand
+ (kawa
+  ;; (%symbol->construct 'sym) returns '$construct$:sym
+  ;; In Kawa we lookup sym in the $construct$ package.
+  (define-syntax %symbol->construct
+    (syntax-rules ()
+      ((%symbol->construct sym)
+       (symbol sym $construct$)))))
+ (else
+  ;; In a Scheme without namespaces (i.e. colon not special)
+  ;; construct a regular symbol.
+  (define-syntax %symbol->construct
+    (syntax-rules ()
+      ((%symbol->construct sym)
+       (string->symbol (string-append "$construct$:"
+                                      (symbol->string sym))))))))
+
+(define-syntax define-simple-constructor
+  (lambda (form)
+    (syntax-case form ($construct$)
+      ((_ name constructor text-collector)
+       (let ((cname (datum->syntax #'name (%symbol->construct (syntax->datum #'name)))))
+         #`(define-syntax #,cname
+             (syntax-rules ()
+               ((#,cname . args)
+                (%simple-construct-builder constructor text-collector () . args))))))
+      ((_ name constructor)
+       #`(define-simple-constructor name constructor $string$)))))
+
+(define-syntax %simple-construct-builder
+  (syntax-rules ($<<$ $>>$)
+    ((%simple-construct-builder fun mkstr (seen ...) $<<$ . rest)
+     (fun (mkstr seen ... $<<$ . rest)))
+    ((%simple-construct-builder fun mkstr (seen ...) $>>$ . rest)
+     (fun seen ... (mkstr . rest)))
+    ((%simple-construct-builder fun mkstr (seen ...) x . rest)
+     (%simple-construct-builder fun mkstr (seen ... x) . rest))
+    ((%simple-construct-builder fun mkstr (seen ...))
+     (fun (mkstr seen ... )))))

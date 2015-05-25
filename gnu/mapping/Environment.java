@@ -11,7 +11,7 @@ import java.util.Hashtable;
 
 public abstract class Environment
   extends PropertySet
-  // implements java.util.map.Map<EnvironmentKey, Object>
+  // implements java.util.Map<EnvironmentKey, Object>
 {
   static Environment global;
 
@@ -375,6 +375,8 @@ public abstract class Environment
     Environment env = curEnvironment.get();
     if (env == null)
       {
+        if (Environment.global == null)
+          throw new Error("Environment.global not set - need to do Scheme.registerEnvironment() or similar");
 	env = Environment.make(Thread.currentThread().getName(), Environment.global);
         env.flags |= Environment.THREAD_SAFE;
         curEnvironment.set(env);

@@ -2,7 +2,13 @@ package gnu.expr;
 import javax.script.*;
 import java.io.*;
 import gnu.mapping.*;
-import gnu.text.*;
+import gnu.kawa.io.CharArrayInPort;
+import gnu.kawa.io.InPort;
+import gnu.kawa.io.OutPort;
+import gnu.kawa.io.Path;
+import gnu.text.SourceError;
+import gnu.text.SourceMessages;
+import gnu.text.SyntaxException;
 
 public class KawaScriptEngine extends AbstractScriptEngine
   implements Compilable //, Invocable
@@ -25,9 +31,8 @@ public class KawaScriptEngine extends AbstractScriptEngine
 
   public Bindings createBindings()
   {
-    SimpleEnvironment env = (SimpleEnvironment) factory.language.getNewEnvironment();
+    SimpleEnvironment env = new SimpleEnvironment();
     Bindings bindings = new KawaScriptBindings(env);
-    factory.setEnvironment(bindings, env);
     return bindings;
   }
 
@@ -96,14 +101,23 @@ public class KawaScriptEngine extends AbstractScriptEngine
     Environment saveEnv = Environment.setSaveCurrent(env);
     try
       {
-        Compilation comp = factory.language.parse(port, messages, Language.PARSE_IMMEDIATE);
+        Compilation comp =
+            factory.language.parse(port, messages,
+                                   Language.PARSE_IMMEDIATE|Language.PARSE_INTERACTIVE_MODULE);
         if (messages.seenErrors())
           throw new SyntaxException(messages);
         ModuleExp mexp = comp.getModule();
-        mexp.setName("atInteractiveLevel$"
-                     + (++ModuleExp.interactiveCounter));
         String filename = (String) get(ScriptEngine.FILENAME);
-        java.net.URL url = port.getPath().toURL();
+        java.net.URL url;
+        if (filename != null)
+          url = Path.toURL(filename);
+        else if (port instanceof CharArrayInPort)
+          url = null;
+        else
+          {
+            Path portpath = port.getPath();
+            url = portpath == null ? null : portpath.toURL();
+          }
         Writer errorWriter = context.getErrorWriter();
         OutPort errorPort
           = (errorWriter instanceof OutPort ? (OutPort) errorWriter

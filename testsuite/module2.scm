@@ -1,15 +1,22 @@
 ;; The next line is just to test the case that we don't extend ModuleBody.
 (module-extends <pair>)
-(module-implements java.io.Closeable)
+(define-alias Closeable java.io.Closeable)
+(module-implements Closeable)
 (module-export list-length-1 list-length-3 classify list1234 <A8711>
 	       length-diff1 length-diff2 length-diff3 make-literal make-pair
-	       my-array-7 mod2-v5 close)
+	       my-array-7 mod2-v5 close abc-returner
+               (rename fun1 fun2) (rename fun2 fun1) fun1fun2
+               (rename list-length-3 list-length-5))
 (require <module1>)
 (require <module1a>)
 (define (list-length-1 x) :: <integer>
   (list-length-2 x))
 (define list-length-3 #t)
 (set! list-length-3 list-length-2)
+
+(define (fun1) "fun1")
+(define (fun2) "fun2")
+(define (fun1fun2) (list (fun1) (fun2)))
 
 (define list1234 (deldup (call-to-first '((1 1 2 3 4 4)))))
 
@@ -24,7 +31,7 @@
 	 classes)))
 
 ;; Based on a bug report from Walter C. Pelissero <walter@pelissero.org>:
-(define (length-diff1 (str1 :: <java.lang.String>)
+(define (length-diff1 (str1 :: jlString)
 		      (str2 :: <java.lang.String>))
   (let ((diff (- (invoke str1 'length) (invoke str2 'length))))
     diff))

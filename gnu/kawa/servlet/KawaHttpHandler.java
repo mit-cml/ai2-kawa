@@ -5,10 +5,10 @@ package gnu.kawa.servlet;
 import java.io.*;
 import java.net.*;
 import java.util.*;
+import gnu.expr.ModuleBody;
 import gnu.mapping.*;
 import gnu.lists.Consumer;
-import gnu.text.Path;
-import gnu.expr.ModuleBody;
+import gnu.kawa.io.Path;
 import com.sun.net.httpserver.*;
 
 /** Web server support glue built on JDK 6's built-in HttpServer.
@@ -60,6 +60,10 @@ public class KawaHttpHandler
 
         KawaAutoHandler.run(hctx, ctx);
       }
+    catch (Error ex)
+      {
+        throw ex;
+      }
     catch (Throwable ex)
       {
         hctx.log("Caught an exception: ", ex);
@@ -94,6 +98,8 @@ public class KawaHttpHandler
     int rlen = resourceRoot.length();
     if (rlen > 0 && resourceRoot.charAt(rlen-1) != '/')
       resourceRoot = resourceRoot + "/";
+    if (uriRoot.length() == 0 || uriRoot.charAt(0) != '/')
+      uriRoot = "/" + uriRoot;
     server.createContext(uriRoot, new KawaHttpHandler(resourceRoot));
   }
   public static void startServer(int port) throws IOException
@@ -133,7 +139,7 @@ public class KawaHttpHandler
     {
       try
         {
-      String p = path;
+          String p = path;
           Path root = httpHandler.resourceRoot;
           path = normalizeToContext(path);
           if (path == null)

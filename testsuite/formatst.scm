@@ -28,7 +28,7 @@
 ;      (newline)
 ;      (format:abort)))
 
-(test-begin "format" 423)
+(test-begin "format" 425)
 (define-syntax test 
   (syntax-rules ()
     ((test format-args out-str)
@@ -163,8 +163,8 @@
 (test '("~c" #\a) "a")
 (test '("~@c" #\a) "#\\a")
 (test `("~@c" ,(integer->char 32)) "#\\space")
-(test `("~@c" ,(integer->char 0)) "#\\nul")
-(test `("~@c" ,(integer->char 27)) "#\\esc")
+(test `("~@c" ,(integer->char 0)) "#\\null")
+(test `("~@c" ,(integer->char 27)) "#\\escape")
 (test `("~@c" ,(integer->char 127)) "#\\delete")
 (test `("~@c" ,(integer->char 128)) "#\\x80")
 (test `("~@c" ,(integer->char 255)) "#\\xff")
@@ -593,17 +593,17 @@ def")
 	  3.14E120 3.14E120 3.14E120 3.14E120)
 	"*********|?????????|%%%%%%%%%|3.14E+120")
   
-  (test '("~g" 0.0) "0.0")		; further ~g tests 
+  (test '("~g" 0.0) "0.0    ")		; further ~g tests 
   (test '("~8g" 0.1) " 0.1    ")
-  (test '("~g" 0.1) "0.1")
+  (test '("~g" 0.1) "0.1    ")
   (test '("~g" 0.01) "1.0E-2")
-  (test '("~g" 123.456) "123.456")
-  (test '("~g" 123456.7) "123456.7")
-  (test '("~g" 123456.78) "123456.78")
-  (test '("~g" 0.9282) "0.9282")
+  (test '("~g" 123.456) "123.456    ")
+  (test '("~g" 123456.7) "123456.7    ")
+  (test '("~g" 123456.78) "123456.78    ")
+  (test '("~g" 0.9282) "0.9282    ")
   (test '("~g" 0.09282) "9.282E-2")
-  (test '("~g" 1) "1.0")
-  (test '("~g" 12) "12.0")
+  (test '("~g" 1) "1.0    ")
+  (test '("~g" 12) "12.0    ")
   ))
 
 ; dollar floating point
@@ -718,6 +718,9 @@ Does not match implementation - or Common Lisp.
 (test '("~10,3F" 1.002) "     1.002")
 (test '("~10,3F" 1.0025) "     1.002")
 (test '("~10,3F" 1.00256) "     1.003")
+
+(test '("<~a~a>" 3 4) "<34>")
+(test `("<~a>" ,(values 3 4)) "<3 4>")
 
 ; inquiry test
 

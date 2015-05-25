@@ -1,6 +1,6 @@
 package gnu.expr;
 import gnu.bytecode.*;
-import gnu.mapping.OutPort;
+import gnu.kawa.io.OutPort;
 import gnu.mapping.CallContext;
 
 /** A "catch" clause of a "try-catch" form.
@@ -12,24 +12,27 @@ public class CatchClause extends LetExp
 
   public CatchClause ()
   {
-    super(new Expression[] { QuoteExp.voidExp });
   }
 
-  public CatchClause (Object name, ClassType type)
-  {
-    this();
-    addDeclaration (name, type);
-  }
+    public CatchClause(Declaration decl, Expression body) {
+        decl.setInitValue(QuoteExp.undefined_exp);
+        add(decl);
+        this.body = body;
+    }  
 
-  /** "Convert" a <code>LambdaExp</code> to a <code>CatchClause</code>. */
-  public CatchClause (LambdaExp lexp)
-  {
-    this();
-    Declaration decl = lexp.firstDecl();
-    lexp.remove(null, decl);
-    add(decl);
-    body = lexp.body;
-  }
+    public CatchClause(Object name, Type type, Expression body) {
+        this(new Declaration(name, type), body);
+    }  
+
+    /** "Convert" a <code>LambdaExp</code> to a <code>CatchClause</code>. */
+    public CatchClause (LambdaExp lexp) {
+        this();
+        Declaration decl = lexp.firstDecl();
+        decl.setInitValue(QuoteExp.undefined_exp);
+        lexp.remove(null, decl);
+        add(decl);
+        body = lexp.body;
+    }
 
   public final CatchClause getNext() { return next; }
   public final void setNext (CatchClause next) { this.next = next; }
@@ -39,7 +42,8 @@ public class CatchClause extends LetExp
 
   protected boolean mustCompile () { return false; }
 
-  protected Object evalVariable (int i, CallContext ctx) throws Throwable
+  protected Object evalVariable (Declaration decl, CallContext ctx)
+    throws Throwable
   {
     // This is the Throwable caught and set by TryExpr.apply.
     return ctx.value1;

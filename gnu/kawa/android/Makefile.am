@@ -4,11 +4,9 @@ include $(top_srcdir)/Make-rules
 
 java_sources=
 
-java_SCM = defs.scm
+java_SCM = defs.scm utils.scm ViewBuilder.scm 
 
-EXTRA_DIST = defs.scm
-GCJ_INPUTS = defs*.class
-EXTRA_GCJ_DEPS = scm-classes.stamp
 PACKAGE_FNAME = gnu-kawa-android
+SCM_COMPILE_FLAGS = --warn-undefined-variable --warn-unknown-member --warn-as-error
 
-all: Makefile scm-classes.stamp $(@GCJ_COMPILED_SELECTED@)
+all: Makefile scm-classes.stamp

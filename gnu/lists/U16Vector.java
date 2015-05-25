@@ -95,11 +95,10 @@ public class U16Vector extends SimpleVector
     return Convert.toObjectUnsigned(data[index]);
   }
 
-  public Object setBuffer(int index, Object value)
+  @Override
+  public void setBuffer(int index, Object value)
   {
-    short old = data[index];
     data[index] = Convert.toShortUnsigned(value);
-    return Convert.toObjectUnsigned(old);
   }
 
   public final void setShortAt(int index, short value)
@@ -126,15 +125,6 @@ public class U16Vector extends SimpleVector
   }
 
   public String getTag() { return "u16"; }
-
-  public boolean consumeNext (int ipos, Consumer out)
-  {
-    int index = ipos >>> 1;
-    if (index >= size)
-      return false;
-    out.writeInt(data[index] & 0xffff);
-    return true;
-  }
 
   public void consumePosRange (int iposStart, int iposEnd, Consumer out)
   {

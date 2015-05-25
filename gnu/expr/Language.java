@@ -1,4 +1,4 @@
-// Copyright (c) 2002, 2003, 2004, 2005  Per M.A. Bothner.
+// Copyright (c) 2002, 2003, 2004, 2005, 2012  Per M.A. Bothner.
 // This is free software;  for terms and warranty disclaimer see ./COPYING.
 
 package gnu.expr;
@@ -8,10 +8,17 @@ import gnu.mapping.Location;
 import gnu.lists.*;
 import gnu.text.Lexer;
 import gnu.text.SourceMessages;
+import gnu.kawa.io.CharArrayInPort;
+import gnu.kawa.io.InPort;
+import gnu.kawa.io.OutPort;
 import gnu.kawa.reflect.*;
-import java.io.*;
+import gnu.kawa.functions.GetNamedPart;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import gnu.kawa.lispexpr.ClassNamespace; // FIXME
+import java.io.*;
+import java.util.*;
+import kawa.SourceType;
 
 /**
  * Contains various language-dependent methods.
@@ -61,7 +68,10 @@ public abstract class Language
 
   static String[][] languages =
   {
-    { "scheme", ".scm", ".sc", "kawa.standard.Scheme" },
+    { "scheme", ".scm", ".sc", ".sld", "kawa.standard.Scheme" },
+    { "r5rs", ".scm", "kawa.standard.Scheme" },
+    { "r6rs", ".scm", "kawa.standard.Scheme" },
+    { "r7rs", ".scm", "kawa.standard.Scheme" },
     { "krl", ".krl", "gnu.kawa.brl.BRL" },
     { "brl", ".brl", "gnu.kawa.brl.BRL" },
     { "emacs", "elisp", "emacs-lisp", ".el", "gnu.jemacs.lang.ELisp" },
@@ -166,10 +176,9 @@ public abstract class Language
         || str.indexOf("-*- lisp -*-") >= 0)
       return getInstance("common-lisp");
     // Does it start with an XQuery comment or XQuery version statement?
-    if ((str.charAt(0) == '(' && str.charAt(1) == ':')
-        || (str.length() >= 7 && str.substring(0, 7).equals("xquery ")))
+    if (str.startsWith("(:") || str.startsWith("xquery"))
       return getInstance("xquery");
-    if (str.charAt(0) == ';' && str.charAt(1) == ';')
+    if (str.startsWith(";;"))
       return getInstance("scheme");
     return null;
   }
@@ -319,6 +328,24 @@ public abstract class Language
     environ.define(s, null, p);
   }
 
+  /**
+   * Get the corresponding {@link Type} for a given name.
+   * 
+   * This is currently used as a hook in the conversion of type designators to
+   * types. {@link gnu.kawa.lispexpr.LispLanguage} uses it to check for package
+   * style type designators such as {@code emacs:buffer},
+   * and CommonLisp uses it to check for a type designator "boolean",
+   * so that is can return the appropriate boolean type.
+   * This is a bit over-specialised, but it beats actually
+   * overriding getTypeFor(String) in LispLanguage, CommonLisp just for these minor
+   * changes... FIXME!
+   *
+   * @param name The name of a type to search for.
+   * @return The corresponding {@link Type} if a suitable one can be found,
+   *   otherwise {@code null}.
+   */
+  public Type getNamedType (String name) { return null; }
+
   /** Declare in the current Environment a variable aliased to a static field.
    */
   protected void defAliasStFld(String name, String cname, String fname)
@@ -334,9 +361,13 @@ public abstract class Language
    */
   protected void defProcStFld(String name, String cname, String fname)
   {
+    defProcStFld(getSymbol(name), cname, fname);
+  }
+
+  protected void defProcStFld(Symbol sym, String cname, String fname)
+  {
     Object property = (hasSeparateFunctionNamespace() ? EnvironmentKey.FUNCTION
 		       : null);
-    Symbol sym = getSymbol(name);
     StaticFieldLocation loc
       = StaticFieldLocation.define(environ, sym, property, cname, fname);
     loc.setProcedure();
@@ -349,7 +380,18 @@ public abstract class Language
    */
   protected void defProcStFld(String name, String cname)
   {
-    defProcStFld(name, cname, Compilation.mangleNameIfNeeded(name));
+    defProcStFld(name, cname, mangleNameIfNeeded(name));
+  }
+  
+  /**
+   * Declare by name in the current environment a procedure bound to a static field.
+   * 
+   * @param asName The procedure's source-level name.
+   * @param cname The name of the class containing the field.
+   * @param mname The name of the (mangled) field in {@code cname}
+   */
+  protected void defProcStFldAs(String asName, String cname, String mname) {
+    defProcStFld(asName, cname, mangleNameIfNeeded(mname));
   }
 
   /** Enter a named function into the current environment. */
@@ -447,11 +489,183 @@ public abstract class Language
     return name;
   }
 
+    private List<String> extensions;
+
+    public List<String> getExtensions() {
+        if (extensions == null) {
+            ArrayList<String> exts = new ArrayList<String>(1);
+            String thisClassName = this.getClass().getName();
+            String[][] langs = Language.getLanguages();
+            for (int i = 0; i < langs.length;  i++) {
+                String[] lang = langs[i];
+                if (lang == null)
+                    continue;
+                int n = lang.length - 1;
+                String langClass = lang[n];
+                if (! thisClassName.equals(langClass))
+                    continue;
+                for (int j = 1; j < n;  j++) {
+                    String ext = lang[j];
+                    if (ext != null && ext.charAt(0) == '.') {
+                        ext = ext.substring(1);
+                        if (! exts.contains(ext))
+                            exts.add(ext);
+                    }
+                }
+            }
+            extensions = Collections.unmodifiableList(exts);
+        }
+        return extensions;
+    }
+
+  public static String mangleNameIfNeeded (String name)
+  {
+    if (name == null || isValidJavaName(name))
+      return name;
+    else
+      return mangleName(name, 0);
+  }
+
+  public static boolean isValidJavaName(String name)
+  {
+    int len = name.length();
+    if (len == 0 || ! Character.isJavaIdentifierStart(name.charAt(0)))
+      return false;
+    for (int i = len;  --i > 0; )
+      if (! Character.isJavaIdentifierPart(name.charAt(i)))
+	return false;
+    return true;
+  }
+
+  /** Convert a string to a safe Java identifier.
+   * @param kind -1 - non-reversible;
+   *  0: reversible, except that '$' is not mapped;
+   *  1: reversible
+   */
+  public static String mangleName (String name, int kind)
+  {
+    boolean reversible = kind >= 0;
+    int len = name.length ();
+    if (len == 6 && name.equals("*init*")) // Constructor methods.
+      return "<init>";
+    StringBuffer mangled = new StringBuffer (len);
+    boolean upcaseNext = false;
+    for (int i = 0;  i < len;  i++)
+      {
+	char ch = name.charAt(i);
+	if (upcaseNext)
+	  {
+	    ch = Character.toTitleCase(ch);
+	    upcaseNext = false;
+	  }
+	if (Character.isDigit(ch))
+	  {
+	    if (i == 0)
+	      mangled.append("$N");
+	    mangled.append(ch);
+	  }
+	else if (Character.isLetter(ch) || ch == '_')
+	  mangled.append(ch);
+	else if (ch == '$')
+	  mangled.append(kind > 1 ? "$$" : "$");
+	else
+	  {
+	    switch (ch)
+	      {
+	      case '+':  mangled.append("$Pl");  break;
+	      case '-':
+		if (reversible)
+		  mangled.append("$Mn");
+		else
+		  {
+		    char next = i + 1 < len ? name.charAt(i+1) : '\0';
+		    if (next == '>')
+		      {
+			mangled.append("$To$");
+			i++;
+		      }
+		    else if (! Character.isLowerCase(next))
+		      mangled.append("$Mn");
+		  }
+		break;
+	      case '*':  mangled.append("$St");  break;
+	      case '/':  mangled.append("$Sl");  break;
+	      case '=':  mangled.append("$Eq");  break;
+	      case '<':  mangled.append("$Ls");  break;
+	      case '>':  mangled.append("$Gr");  break;
+	      case '@':  mangled.append("$At");  break;
+	      case '~':  mangled.append("$Tl");  break;
+	      case '%':  mangled.append("$Pc");  break;
+	      case '.':  mangled.append("$Dt");  break;
+	      case ',':  mangled.append("$Cm");  break;
+	      case '(':  mangled.append("$LP");  break;
+	      case ')':  mangled.append("$RP");  break;
+	      case '[':  mangled.append("$LB");  break;
+	      case ']':  mangled.append("$RB");  break;
+	      case '{':  mangled.append("$LC");  break;
+	      case '}':  mangled.append("$RC");  break;
+	      case '\'': mangled.append("$Sq");  break;
+	      case '"':  mangled.append("$Dq");  break;
+	      case '&':  mangled.append("$Am");  break;
+	      case '#':  mangled.append("$Nm");  break;
+	      case '?':
+		char first = mangled.length() > 0 ? mangled.charAt(0) : '\0';
+		if (! reversible
+		    && i + 1 == len && Character.isLowerCase(first))
+		  {
+		    mangled.setCharAt(0, Character.toTitleCase(first));
+		    mangled.insert(0, "is");
+		  }
+		else
+		  mangled.append("$Qu");
+		break;
+	      case '!':  mangled.append("$Ex");  break;
+	      case ':':  mangled.append("$Cl");  break;
+	      case ';':  mangled.append("$SC");  break;
+	      case '^':  mangled.append("$Up");  break;
+	      case '|':  mangled.append("$VB");  break;
+	      default:
+		mangled.append('$');
+		mangled.append(Character.forDigit ((ch >> 12) & 15, 16));
+		mangled.append(Character.forDigit ((ch >>  8) & 15, 16));
+		mangled.append(Character.forDigit ((ch >>  4) & 15, 16));
+		mangled.append(Character.forDigit ((ch      ) & 15, 16));
+	      }
+	    if (! reversible)
+	      upcaseNext = true;
+	  }
+      }
+    String mname = mangled.toString ();
+    return mname.equals(name) ? name : mname;
+  }
+
   public abstract Lexer getLexer(InPort inp, SourceMessages messages);
 
-  public Compilation getCompilation (Lexer lexer, SourceMessages messages, NameLookup lexical)
+  public String getCompilationClass () { return "gnu.expr.Compilation"; }
+
+  private Constructor<Compilation> compilationClassConstructor;
+
+  public final Compilation getCompilation (SourceMessages messages, NameLookup lexical)
   {
-    return new Compilation(this, messages, lexical);
+    // Use reflection on the class named by getCompilationClass, rather than
+    // just allocation the instance directly in our subclasses. The reason is
+    // improved separability between compile-time code and run-time code.
+    try
+      {
+        if (compilationClassConstructor == null)
+          {
+            Class<Compilation> compilationClass = (Class<Compilation>)
+              Class.forName(getCompilationClass(), true,
+                            getClass().getClassLoader());
+            compilationClassConstructor = compilationClass.getConstructor
+              (Language.class, SourceMessages.class, NameLookup.class);
+          }
+        return compilationClassConstructor.newInstance(this, messages, lexical);
+      }
+    catch (Exception ex)
+      {
+        throw WrappedException.wrapIfNeeded(ex);
+      }
   }
 
   /** Flag to tell parse that expression will be evaluated immediately.
@@ -472,6 +686,8 @@ public abstract class Language
   public static final int PARSE_FOR_SERVLET = 32;
   /** Compilation explicitly requested, not just because of an import. */
   public static final int PARSE_EXPLICIT = 64;
+  public static final int PARSE_INTERACTIVE_MODULE = 128;
+  public static final int PARSE_EMIT_MAIN = 256;
 
   public static boolean requirePedantic;
 
@@ -515,24 +731,33 @@ public abstract class Language
                           ? NameLookup.getInstance(getEnvironment(), this)
                           : new NameLookup(this));
     boolean immediate = (options & PARSE_IMMEDIATE) != 0;
-    Compilation tr = getCompilation(lexer, messages, lexical);
+    Compilation tr = getCompilation(messages, lexical);
     if (requirePedantic)
-      tr.pedantic = true;
+      tr.setPedantic(true);
     if (! immediate)
       tr.mustCompile = true;
     tr.immediate = immediate;
     tr.langOptions = options;
+    if ((options & PARSE_EMIT_MAIN) != 0)
+      tr.currentOptions.set("main", null);
     if ((options & PARSE_EXPLICIT) != 0)
       tr.explicit = true;
     if ((options & PARSE_PROLOG) != 0)
       tr.setState(Compilation.PROLOG_PARSING);
-    tr.pushNewModule(lexer);
+    ModuleExp module = tr.pushNewModule(lexer);
+    if ((options & PARSE_INTERACTIVE_MODULE) != 0)
+      {
+        tr.setInteractiveName();
+        module.setFlag(ModuleExp.INTERACTIVE);
+      }
     if (info != null)
       info.setCompilation(tr);
     if (! parse(tr, options))
       return null;
     if (tr.getState() == Compilation.PROLOG_PARSING)
       tr.setState(Compilation.PROLOG_PARSED);
+    else
+      module.classFor(tr);
     return tr;
   }
 
@@ -546,48 +771,56 @@ public abstract class Language
   {
   }
 
-  public Type getTypeFor(Class clas)
-  {
-    return Type.make(clas);
-  }
+    // FIXME: Would be better and little fuss to use a perfect hash
+    // function for this.
+    public Type getTypeFor(Class clas) {
+        return Type.make(clas);
+    }
 
-  public final Type getLangTypeFor (Type type)
-  {
-    if (type.isExisting())
-      {
-        Class clas = type.getReflectClass();
-        if (clas != null)
-          return getTypeFor(clas);
-      }
-    return type;
-  }
+    public final Type getLangTypeFor (Type type) {
+	if (type instanceof ParameterizedType) {
+            ParameterizedType ptype = (ParameterizedType) type;
+            Type[] pargs = ptype.getTypeArgumentTypes();
+            if (ptype.getRawType() == LazyType.lazyType && pargs.length == 1) {
+		return LazyType.getInstance(LazyType.lazyType, getLangTypeFor(pargs[0]));
+            }
+	}
+	if (type instanceof TypeVariable) {
+            return getLangTypeFor(((TypeVariable) type).getRawType());
+	}
+	if (type.isExisting()) {
+            Class clas = type.getReflectClass();
+            if (clas != null)
+		return getTypeFor(clas);
+	}
+	return type;
+    }
 
   public String formatType (Type type)
   {
-    return type.getName();
+    String s = type.getName();
+    if (s == null)
+      s = type.toString();
+    return s;
   }
 
-  public static Type string2Type (String name)
-  {
-    Type t;
-    if (name.endsWith("[]"))
-      {
-	t = string2Type(name.substring(0, name.length()-2));
-	if (t == null)
-	  return null;
-	t = gnu.bytecode.ArrayType.make(t);
-      }
-    else if (gnu.bytecode.Type.isValidJavaTypeName(name))
-      t = gnu.bytecode.Type.getType(name);
-    else
-      return null;
-    return t;
-  }
-
-  public Type getTypeFor (String name)
-  {
-    return string2Type(name);
-  }
+    public Type getTypeFor (String name) {
+        Type t;
+        if (name.endsWith("[]")) {
+            t = getTypeFor(name.substring(0, name.length() - 2));
+            if (t != null)
+                t = ArrayType.make(t);
+        }
+        else {
+            t = getNamedType(name);
+        }
+        if (t != null)
+            return t;
+        else if (Type.isValidJavaTypeName(name)) {
+            t = Type.getType(name);
+        }
+        return t;
+    }
 
   public final Type getTypeFor (Object spec, boolean lenient)
   {
@@ -605,10 +838,75 @@ public abstract class Language
       {
         String uri = ((Namespace) spec).getName();
         if (uri != null && uri.startsWith("class:"))
-          return getLangTypeFor(string2Type(uri.substring(6)));
+          return getLangTypeFor(getTypeFor(uri.substring(6)));
       }
     return null;
   }
+
+    /** Encode this type as a parseable string.
+     * Stored in SourceType or SourceMethodType annotations.
+     * @return A string suitable for {@link #decodeType},
+     * or null if the type is "uninteresting" in the sense we can
+     * infer it from the Java typing.
+     */
+    public String encodeType(Type type) {
+        if (type instanceof TypeValue)
+            return ((TypeValue) type).encodeType(this);
+        if (type instanceof ArrayType) {
+            String el = encodeType(((ArrayType) type).getComponentType());
+            if (el != null)
+                return el+"[]";
+        }
+        return null;
+    }
+
+    public Type decodeType(Type javaType, String annotType,
+                           ParameterizedType parameterizedType) {
+        if (annotType != null && annotType.length() > 0)
+            return getTypeFor(annotType);
+        return getLangTypeFor
+            (resolveTypeVariables(javaType, parameterizedType));
+    }
+
+    static Type resolveTypeVariables(Type langType, ParameterizedType parameterizedType) {
+        if (langType instanceof TypeVariable)
+            return resolveTypeVariable((TypeVariable) langType, parameterizedType);
+        if (langType instanceof ParameterizedType) {
+            ParameterizedType ptype = (ParameterizedType) langType;
+            Type[] paramTypes = ptype.getTypeArgumentTypes();
+            int nparams = paramTypes.length;
+            Type[] resolvedTypes = new Type[nparams];
+            boolean changed = false;
+            for (int i = 0; i < nparams;  i++) {
+                Type t0 = paramTypes[i];
+                char bound = ptype.getTypeArgumentBound(i);
+                // FIXME Don't support wildcards here yet.
+                if (bound != '\0')
+                    return langType.getRawType();
+                Type t1 = resolveTypeVariables(t0, parameterizedType);
+                resolvedTypes[i] = t1;
+                if (t0 != t1)
+                    changed = true;
+            }
+            if (changed) {
+                return new ParameterizedType(ptype.getRawType(), resolvedTypes);
+            }
+        }
+        return langType;
+    }
+
+    static Type resolveTypeVariable(TypeVariable tvar, ParameterizedType parameterizedType) {
+	if (parameterizedType != null) {
+	    TypeVariable[] tparams = parameterizedType.getRawType().getTypeParameters();
+	    int nparams = tparams.length;
+	    for (int i = 0;  i < nparams;  i++) {
+		if (tvar.getName().equals(tparams[i].getName())) {
+		    return parameterizedType.getTypeArgumentType(i);
+		}
+	    }
+	}
+	return tvar.getRawType();
+    }
 
   /** "Coerce" a language-specific "type specifier" object to a Type. */
   public final Type asType(Object spec)
@@ -622,6 +920,9 @@ public abstract class Language
     return getTypeFor(exp, true);
   }
 
+  /** Interpreting exp as a type specifier, get the actual type.
+   * (Does not get the type "of" but exp treats/casts exp "to" ("as") a type).
+   */
   public Type getTypeFor (Expression exp, boolean lenient)
   {
     if (exp instanceof QuoteExp)
@@ -648,7 +949,9 @@ public abstract class Language
 		Object val = ((QuoteExp) exp).getValue();
                 return getTypeFor(val, lenient);
               }
-            else if (exp instanceof ClassExp || exp instanceof ModuleExp)
+            else if ((exp instanceof ClassExp
+                      && ! (exp instanceof ObjectExp))
+                     || exp instanceof ModuleExp)
               {
                 decl.setCanRead(true);
                 return ((LambdaExp) exp).getClassType();
@@ -667,6 +970,19 @@ public abstract class Language
 		    name = ((Named) loc).getName();
 		  }
 	      }
+            else if (exp instanceof ApplyExp) {
+                ApplyExp aexp = (ApplyExp) exp;
+                Expression afunc = aexp.getFunction();
+                Object func = afunc.valueIfConstant();
+                Expression[] args = aexp.getArgs();
+                int start = 0;
+                if (decl.isAlias()
+                    && func == kawa.standard.location.getMakeProcLocProc()) {
+                    afunc = args[0];
+                    start = 1;
+                }
+                return getTypeFor(afunc, args, start);
+            }
 	    else if (! decl.getFlag(Declaration.IS_UNKNOWN))
 	      return getTypeFor(exp, lenient);
 	  }
@@ -680,107 +996,146 @@ public abstract class Language
             && name.charAt(len-1) == '>')
           return getTypeFor(name.substring(1, len-1));
       }
-    else if (exp instanceof ClassExp || exp instanceof ModuleExp)
+    else if (exp instanceof ApplyExp) {
+        ApplyExp aexp = (ApplyExp) exp;
+        return getTypeFor(aexp.getFunction(), aexp.getArgs(), 0);
+    }
+    else if ((exp instanceof ClassExp && ! (exp instanceof ObjectExp))
+             || exp instanceof ModuleExp)
       {
 	return ((LambdaExp) exp).getClassType();
       }
     return null;
   }
 
+    private Type getTypeFor(Expression afunc, Expression[] args, int start) {
+        Object func = afunc.valueIfConstant();
+        try {
+            if (func == SlotGet.staticField
+                && args.length == 2+start) {
+                Object arg1 = args[start+0].valueIfConstant();
+                Object arg2 = args[start+1].valueIfConstant();
+                if (arg1 != null && arg2 != null) {
+                    Object fld = SlotGet.staticField.apply2(arg1, arg2);
+                    if (fld instanceof Type)
+                        return (Type) fld;
+                }
+            }
+            if (func == GetNamedPart.getNamedPart
+                && args.length == 2+start) {
+                Object arg1 = args[start+0].valueIfConstant();
+                Object arg2 = args[start+1].valueIfConstant();
+                if (arg2 instanceof Symbol) {
+                    Object comb = GetNamedPart.getNamedPart(arg1, (Symbol) arg2);
+                    if (comb instanceof Class)
+                        return Type.make((Class) comb);
+                    if (comb instanceof Type)
+                        return (Type) comb;
+                }
+            }
+        } catch (Exception ex) {
+            ;
+        }
+        return null;
+    }
+
   public static/* for now */ Type unionType (Type t1, Type t2)
   {
+    if (t1 == Type.neverReturnsType)
+      return t2;
+    if (t2 == Type.neverReturnsType)
+      return t1;
     if (t1 == Type.toStringType)
       t1 = Type.javalangStringType;
     if (t2 == Type.toStringType)
       t2 = Type.javalangStringType;
     if (t1 == t2)
       return t1;
-    if (t1 instanceof PrimType && t2 instanceof PrimType)
-      {
-        char sig1 = t1.getSignature().charAt(0);
-        char sig2 = t2.getSignature().charAt(0);
-        if (sig1 == sig2)
-          return t1;
-        if ((sig1 == 'B' || sig1 == 'S' || sig1 == 'I') && (sig2 == 'I' || sig2 == 'J'))
-          return t2;
-        if ((sig2 == 'B' || sig2 == 'S' || sig2 == 'I') && (sig1 == 'I' || sig1 == 'J'))
-          return t1;
-        if (sig1 == 'F' && sig2 == 'D')
-          return t2;
-        if (sig2 == 'F' && sig1 == 'D')
-          return t1;
+    if (t1.isVoid() || t2.isVoid())
         return Type.objectType;
-      }
-    // FIXME handle class types better:
-    // Type.lowestCommonSuperType(t1, t2);
+    if (t1.isSubtype(t2))
+        return t2;
+    if (t2.isSubtype(t1))
+        return t1;
     return Type.objectType;
   }
 
-  public Declaration declFromField (ModuleExp mod, Object fvalue, Field fld)
-  {
-    String fname = fld.getName();
-    Type ftype = fld.getType();
-    boolean isAlias = ftype.isSubtype(Compilation.typeLocation);
-    Object fdname;
-    // FIXME if fvalue is FieldLocation, and field is final,
-    // get name from value of field.
-    boolean isImportedInstance;
-    boolean externalAccess = false;
-    boolean isFinal = (fld.getModifiers() & Access.FINAL) != 0;
-    if ((isImportedInstance = fname.endsWith("$instance")))
-      fdname = fname;
-    else if (isFinal && fvalue instanceof Named) // && ! isAlias
-      fdname = ((Named) fvalue).getSymbol();
-    else
-      {
-	// FIXME move this to demangleName
-	if (fname.startsWith(Declaration.PRIVATE_PREFIX))
-          {
-            externalAccess = true;
-            fname = fname.substring(Declaration.PRIVATE_PREFIX.length());
-          }
-	fdname = Compilation.demangleName(fname, true).intern();
-      }
-    if (fdname instanceof String)
-      {
-        String uri = mod.getNamespaceUri();
-        String sname = (String) fdname;
-        Symbol sym;
-        if (uri == null)
-          fdname = SimpleSymbol.valueOf(sname);
-        else
-          fdname = Symbol.make(uri, sname);
-      }
-    Type dtype = isAlias ? Type.objectType
-      : getTypeFor(ftype.getReflectClass());
-    Declaration fdecl = mod.addDeclaration(fdname, dtype);
-    boolean isStatic = (fld.getModifiers() & Access.STATIC) != 0;
-    if (isAlias)
-      {
-        fdecl.setIndirectBinding(true);
-        if (ftype instanceof ClassType
-            && ((ClassType) ftype).isSubclass("gnu.mapping.ThreadLocation"))
-          fdecl.setFlag(Declaration.IS_DYNAMIC);
-      }
-    else if (isFinal && ftype instanceof ClassType)
-      {
-        if (ftype.isSubtype(Compilation.typeProcedure))
-          fdecl.setProcedureDecl(true);
-        else if (((ClassType) ftype).isSubclass("gnu.mapping.Namespace"))
-          fdecl.setFlag(Declaration.IS_NAMESPACE_PREFIX);
-      }
-    if (isStatic)
-      fdecl.setFlag(Declaration.STATIC_SPECIFIED);
-    fdecl.field = fld; 
-    if (isFinal && ! isAlias) // FIXME? ok for location?
-      fdecl.setFlag(Declaration.IS_CONSTANT);
-    if (isImportedInstance)
-      fdecl.setFlag(Declaration.MODULE_REFERENCE);
-    fdecl.setSimple(false);
-    if (externalAccess)
-      fdecl.setFlag(Declaration.EXTERNAL_ACCESS|Declaration.PRIVATE);
-    return fdecl;
-  }
+    public Declaration declFromField(ModuleExp mod, Object fvalue, Field fld) {
+        String fname = fld.getName();
+        Type ftype = fld.getType();
+        boolean isAlias = ftype.isSubtype(Compilation.typeLocation);
+        Object fdname;
+        // FIXME if fvalue is FieldLocation, and field is final,
+        // get name from value of field.
+        boolean isImportedInstance;
+        boolean externalAccess = fname.startsWith(Declaration.PRIVATE_PREFIX);
+        boolean isFinal = (fld.getModifiers() & Access.FINAL) != 0;
+        if ((isImportedInstance = fname.endsWith("$instance")))
+            fdname = fname;
+        else if (isFinal && ftype == Compilation.typeModuleMethod
+                 && fvalue instanceof Named /* should always be true */)
+            fdname = ((Named) fvalue).getSymbol();
+        else {
+            // FIXME move this to demangleName
+            if (externalAccess)
+                fname = fname.substring(Declaration.PRIVATE_PREFIX.length());
+            fdname = Compilation.demangleName(fname, true).intern();
+        }
+        try {
+            SourceName sourceName = fld.getAnnotation(SourceName.class);
+            if (sourceName != null) {
+                fdname = Symbol.valueOf(sourceName.name(), sourceName.uri(), sourceName.prefix());
+            }
+        } catch (Exception ex) {
+        }
+        if (fdname instanceof String)  {
+            String uri = mod.getNamespaceUri();
+            String sname = (String) fdname;
+            Symbol sym;
+            if (uri == null)
+                fdname = SimpleSymbol.valueOf(sname);
+            else
+                fdname = Symbol.make(uri, sname);
+        }
+        Type dtype;
+        if (isAlias)
+            dtype = Type.objectType;
+        else {
+            String annotType = null;
+            try {
+                SourceType sourceType = fld.getAnnotation(SourceType.class);
+                if (sourceType != null)
+                    annotType = sourceType.value();
+            } catch (Throwable ex) {
+            }
+            dtype = decodeType(ftype, annotType, null);
+        }
+        Declaration fdecl = mod.addDeclaration(fdname, dtype);
+        boolean isStatic = (fld.getModifiers() & Access.STATIC) != 0;
+        if (isAlias) {
+            fdecl.setIndirectBinding(true);
+            if (ftype instanceof ClassType
+                && ((ClassType) ftype).isSubclass("gnu.mapping.DynamicLocation"))
+                fdecl.setFlag(Declaration.IS_DYNAMIC);
+        }
+        else if (isFinal && ftype instanceof ClassType) {
+            if (ftype.isSubtype(Compilation.typeProcedure))
+                fdecl.setProcedureDecl(true);
+            else if (((ClassType) ftype).isSubclass("gnu.mapping.Namespace"))
+                fdecl.setFlag(Declaration.IS_NAMESPACE_PREFIX);
+        }
+        if (isStatic)
+            fdecl.setFlag(Declaration.STATIC_SPECIFIED);
+        fdecl.field = fld; 
+        if (isFinal && ! isAlias) // FIXME? ok for location?
+            fdecl.setFlag(Declaration.IS_CONSTANT);
+        if (isImportedInstance)
+            fdecl.setFlag(Declaration.MODULE_REFERENCE);
+        fdecl.setSimple(false);
+        if (externalAccess)
+            fdecl.setFlag(Declaration.EXTERNAL_ACCESS|Declaration.PRIVATE);
+        return fdecl;
+    }
 
   public static final int VALUE_NAMESPACE = 1<<0;
   public static final int FUNCTION_NAMESPACE = 1<<1;
@@ -804,25 +1159,6 @@ public abstract class Language
   public boolean hasNamespace (Declaration decl, int namespace)
   {
     return (getNamespaceOf(decl) & namespace) != 0;
-  }
-
-  public void emitPushBoolean(boolean value, CodeAttr code)
-  {
-    code.emitGetStatic(value ? Compilation.trueConstant
-		       : Compilation.falseConstant);
-  }
-
-  /** Generate code to test if an object is considered true.
-   * Assume the object has been pushed on the JVM stack.
-   * Generate code to push true or false as appropriate. */
-  public void emitCoerceToBoolean(CodeAttr code)
-  {
-    emitPushBoolean(false, code);
-    code.emitIfNEq();
-    code.emitPushInt(1);
-    code.emitElse();
-    code.emitPushInt(0);
-    code.emitFi();
   }
 
   public Object coerceFromObject(Class clas, Object obj)
@@ -940,6 +1276,7 @@ public abstract class Language
     try
       {
 	Compilation comp = parse(port, messages, PARSE_FOR_EVAL);
+        comp.setEvalName();
 	ModuleExp.evalModule(getEnvironment(), ctx, comp, null, null);
       }
     finally
@@ -950,8 +1287,6 @@ public abstract class Language
       throw new RuntimeException("invalid syntax in eval form:\n"
 				 + messages.toString(20));
   }
-
-  static protected int env_counter = 0;
 
   public void runAsApplication (String[] args)
   {

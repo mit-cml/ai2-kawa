@@ -1,5 +1,0 @@
-2006-01-11  Per Bothner  <per@bothner.com>
-
-	New package.
-	* SwtDisplay.java: New class, extends gnu.kawa.models.Display.
-	* Makefile.am: Nwe file.

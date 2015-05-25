@@ -1,3 +1,89 @@
+2014-11-17  Jamison Hope  <jrh@theptrgroup.com>
+
+	Implemented quaternions.
+	* Quaternion.java, CQuaternion.java, DQuaternion.java: New files.
+	* Makefile.am: Update accordingly.
+	* Quantity.java: Change number() type to Quaternion, add accessors
+	for "j" and "k" parts.
+	* CQuantity.java (<init>, number, readExternal): Update
+	accordingly.
+	* DQuantity.java (number): Likewise.
+	* Complex.java: Change superclass from Quantity to Quaternion.
+	(complexPart, vectorPart, unitVector, unitQuaternion, conjugate,
+	colatitude, longitude, sin, cos, tan): New methods.
+	(doubleValue, doubleImagValue, doubleRealValue, longValue): Move
+	to Quaternion.java.
+	* DComplex.java (sin, cos, tan, unitQuaternion): New methods.
+	* RealNum.java (vectorPart, unitVector, unitQuaternion, cos, tan):
+	New methods.
+	(sin): Change return type from Complex to RealNum.
+
+2014-11-12  Jamison Hope  <jrh@theptrgroup.com>
+
+	* IntNum.java (compare): Cast argument to Numeric instead of
+	RealNum if using compareReversed.
+	This fixes (= an-IntNum a-Complex).
+	* Complex.java (equals): Fix bug in imaginary part check.
+
+2014-02-20  Jamison Hope  <jrh@theptrgroup.com>
+
+	* RealNum.java (angle): The angle of a negative real is pi.
+
+2014-02-16  Per Bothner  <per@bothner.com>
+
+	* RealNum.java (isReal): New static method.
+	* DFloNum.java: Use RealNum.isReal.
+	* RealNum.java (asRealNumOrNull): Don't throw Error.
+	* DateTime.java: Likewise.
+	* Duration.java: Likewise.
+	* ExponentialFormat.java: Likewise.
+	* FixedRealFormat.java: Likewise.
+	* IntNum.java: Likewise.
+
+2013-09-03  Per Bothner  <per@bothner.com>
+
+	* RealNum.java (angle): New method - return exact zero.
+
+2013-09-01  Per Bothner  <per@bothner.com>
+
+	* DFloNum.java (compare): Use compareReversed when needed.
+	This fixes (= a-DFloNum a-Complex).
+
+2013-08-30  Per Bothner  <per@bothner.com>
+
+	* Complex.java (classifyFinite): New method.
+	* RealNum.java (classifyFinite): New override.
+	* RatNum.java (classifyFinite): New override.
+
+2013-03-18  Per Bothner  <per@bothner.com>
+
+	* ExponentialFormat.java (style): New flag.
+	(format): Use it to control handling of '~g' format.
+	(format):  Allow general Number, not just RealNum.
+
+2012-11-09  Per Bothner  <per@bothner.com>
+
+	* RatNum.java (compare): Fix bug when comparing two infinites,
+	where both denominators are zero.  Bug reported by John Cowan.
+
+2011-09-24  Per Bothner  <per@bothner.com>
+
+	* IntNum.java (shift(long,int)): Fix serious copy-and-paste errors.
+	This caused JEmacs's point-at-eol to break.
+
+2010-12-27  Per Bothner  <per@bothner.com>
+
+	* RealNum.java (sqrt): If the argument is negative, return a CComplex,
+	with exact real part and inexact imaginary part.  This also uses
+	a simpler and faster algorothm, but it does need an extra object.
+	* DFloNum.java (toString(String)): New static method.
+	* Complex.java (make): Return real part of only if imaginary part
+	is exact zero, not any zero.
+	Also only return a DComplex if both parts are inexact.
+	(toString): Don't add '+' before imaginary part if it starts with '='.
+	* DComplex.java (toString): General re-write.
+	Use new R6RS syntax for inexact non-finite reals.
+
 2010-10-04  Per Bothner  <per@bothner.com>
 
 	* IntNum.java (inRange): New method.  Previously a static method

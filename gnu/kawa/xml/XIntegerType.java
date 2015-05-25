@@ -117,7 +117,10 @@ public class XIntegerType extends XDataType
 
  public Object coerceFromObject (Object obj)
   {
-    return valueOf((IntNum) obj);
+    IntNum ival = IntNum.asIntNumOrNull(obj);
+    if (ival == null)
+      throw new ClassCastException("cannot cast "+obj+" to "+name);
+    return valueOf(ival);
   }
 
   public IntNum valueOf (IntNum value)
@@ -143,7 +146,7 @@ public class XIntegerType extends XDataType
       return valueOf(Arithmetic.asIntNum((BigDecimal) value));
     if (value instanceof RealNum)
       return valueOf(((RealNum) value).toExactInt(RealNum.TRUNCATE));
-    if (value instanceof Number)
+    if (RealNum.isReal(value))
       return valueOf(RealNum.toExactInt(((Number) value).doubleValue(), RealNum.TRUNCATE));
     return super.cast(value);
   }

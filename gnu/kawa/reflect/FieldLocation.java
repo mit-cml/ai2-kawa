@@ -4,7 +4,7 @@ import gnu.mapping.*;
 import gnu.mapping.Location;  // As opposed to gnu.bytecode.Location.
 import gnu.expr.*;
 
-public class FieldLocation extends ClassMemberLocation
+public class FieldLocation<T> extends ClassMemberLocation<T>
 {
   Declaration decl;
   /** The cached location of the field, if final.
@@ -52,6 +52,7 @@ public class FieldLocation extends ClassMemberLocation
   {
     String fname = getMemberName();
     gnu.bytecode.Field fld = getDeclaringClass().getDeclaredField(fname);
+    if (fld == null) throw new RuntimeException("No field found for "+this);
     int fflags = fld.getModifiers();
     Type ftype = fld.getType();
     if (ftype.isSubtype(Compilation.typeLocation))
@@ -72,7 +73,7 @@ public class FieldLocation extends ClassMemberLocation
             Location loc = (Location) getFieldValue();
             if (loc instanceof FieldLocation)
               {
-                FieldLocation floc = (FieldLocation) loc;
+                FieldLocation<T> floc = (FieldLocation<T>) loc;
                 if ((floc.flags & KIND_FLAGS_SET) == 0)
                   floc.setKindFlags();
                 flags |= (floc.flags & (SYNTAX|PROCEDURE|CONSTANT));
@@ -184,14 +185,19 @@ public class FieldLocation extends ClassMemberLocation
       }
   }
 
-  public Object get (Object defaultValue)
+  public T get () { return get(null, true); }
+
+  public T get (T defaultValue) { return get(defaultValue, false); }
+
+  T get (T defaultValue, boolean throwIfUnbound)
   {
     try
       {
         setup();
       }
-    catch (Throwable ex)
+    catch (Exception ex)
       {
+        if (throwIfUnbound) throw new UnboundLocationException(this); 
         return defaultValue;
       }
     Object v;
@@ -199,7 +205,7 @@ public class FieldLocation extends ClassMemberLocation
       {
         v = value;
         if ((flags & CONSTANT) != 0)
-          return v;
+          return (T) v;
       }
     else
       {
@@ -214,30 +220,30 @@ public class FieldLocation extends ClassMemberLocation
       }
     if ((flags & INDIRECT_LOCATION) != 0)
       {
-	Object unb = Location.UNBOUND;
 	Location loc = (Location) v;
-	v = loc.get(unb);
-	if (v == unb)
-	  return defaultValue;
+        if (throwIfUnbound)
+          v = loc.get();
+        else if (! loc.isBound())
+          return defaultValue;
 	if (loc.isConstant())
 	  {
 	    flags |= CONSTANT;
 	    value = v;
 	  }
       }
-    return v;
+    return (T) v;
   }
 
-  private Object getFieldValue ()
+  private T getFieldValue ()
   {
     super.setup(); // Set rfield, if needed.
     try
       {
-	return rfield.get(instance);
+        return (T) rfield.get(instance);
       }
-    catch (Throwable ex)
+    catch (Exception ex)
       {
-	throw WrappedException.wrapIfNeeded(ex);
+	throw WrappedException.rethrow(ex);
       }
   }
 
@@ -250,7 +256,7 @@ public class FieldLocation extends ClassMemberLocation
 	  {
 	    rfield.set(instance, newValue);
 	  }
-	catch (Throwable ex)
+	catch (Exception ex)
 	  {
 	    throw WrappedException.wrapIfNeeded(ex);
 	  }
@@ -270,7 +276,7 @@ public class FieldLocation extends ClassMemberLocation
       }
   }
 
-  public Object setWithSave (Object newValue)
+  public Object setWithSave (T newValue)
   {
     if ((flags & KIND_FLAGS_SET) == 0)
       setKindFlags();
@@ -316,7 +322,7 @@ public class FieldLocation extends ClassMemberLocation
               {
                 setup();
               }
-            catch (Throwable ex)
+            catch (Exception ex)
               {
                 return false;
               }
@@ -344,7 +350,7 @@ public class FieldLocation extends ClassMemberLocation
           {
             setup();
           }
-        catch (Throwable ex)
+        catch (Exception ex)
           {
             return false;
           }

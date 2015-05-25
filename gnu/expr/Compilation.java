@@ -7,10 +7,20 @@ import gnu.mapping.*;
 import java.util.*;
 import java.io.*;
 import kawa.Shell;
-import gnu.text.*;
 import java.util.zip.*;
 import java.util.Stack;
 import gnu.kawa.functions.Convert;
+import gnu.kawa.io.OutPort;
+import gnu.kawa.io.Path;
+import gnu.kawa.lispexpr.LangPrimType;
+import gnu.kawa.reflect.LazyType;
+import gnu.lists.Pair;
+import gnu.text.Char;
+import gnu.text.Lexer;
+import gnu.text.Options;
+import gnu.text.SourceLocator;
+import gnu.text.SourceMessages;
+import kawa.lang.Translator.FormStack;
 
 /** State for a single expression or module.
  * For each top-level thing (expression or file) we compile or evaluate
@@ -57,21 +67,23 @@ public class Compilation implements SourceLocator
   public static final int BODY_PARSED = 4;
   /** State code for lexical bindings having been resolved. */ 
   public static final int RESOLVED = 6;
+  /** State code when initial tree-walking (PushApply) are done. */
+  public static final int PRE_WALKED = 8;
   /** State code when various inlining and optimization passes are done. */
-  public static final int WALKED = 8;
+  public static final int WALKED = 10;
   /** State code that various compile-only data has been determined. */
-  public static final int COMPILE_SETUP = 10;
+  public static final int COMPILE_SETUP = 12;
   /** State code indicating the bytecode has been generated. */
-  public static final int COMPILED = 12;
+  public static final int COMPILED = 14;
   /** State code indicating that bytecode has been written to its target. */
-  public static final int CLASS_WRITTEN = 14;
+  public static final int CLASS_WRITTEN = 16;
   public static final int ERROR_SEEN = 100;
 
-  public ModuleInfo minfo;
   public Lexer lexer;
 
-  boolean pedantic;
-  public boolean isPedantic() { return pedantic; }
+    private boolean pedantic;
+    public boolean isPedantic() { return pedantic; }
+    public void setPedantic(boolean value) { pedantic = value; }
 
   /** Used to access the "main" instance.
    * This is used for two different purposes, which may be confusing:
@@ -91,7 +103,7 @@ public class Compilation implements SourceLocator
   /** Stack of quads of (ModuleInfo, ScopeExp, position, formSize). */
   public java.util.Stack<Object> pendingImports;
 
-  public void pushPendingImport (ModuleInfo info, ScopeExp defs, int formSize)
+  public void pushPendingImport(ModuleInfo info, ScopeExp defs, FormStack forms)
   {
     if (pendingImports == null)
       pendingImports = new java.util.Stack<Object>();
@@ -100,9 +112,16 @@ public class Compilation implements SourceLocator
     Expression posExp = new ReferenceExp((Object) null);
     posExp.setLine(this);
     pendingImports.push(posExp);
-    pendingImports.push(Integer.valueOf(formSize));
+    pendingImports.push(forms.lastPair());
   }
 
+    public Map<String,ModuleInfo> subModuleMap;
+
+    /* Write out implicitly-compiled classes.
+     * Compare javac's -implicit:class flag.  Current not set.
+     */
+    public static boolean writeImplicitClasses = false;
+    
   /** If true, print out expressions after parsing and before optimizations. */
   public static boolean debugPrintExpr = false;
 
@@ -110,6 +129,22 @@ public class Compilation implements SourceLocator
   public static boolean debugPrintFinalExpr;
 
   public static Options options = new Options();
+  public static Options.OptionInfo fullTailCallsVariable =
+    options.add("full-tailcalls",
+                Options.BOOLEAN_OPTION, Boolean.TRUE,
+		"support full tailcalls");
+  public static Options.OptionInfo mainMethodVariable =
+    options.add("main",
+                Options.BOOLEAN_OPTION, Boolean.FALSE,
+                "generate an application, with a main method");
+  public static Options.OptionInfo warnUnreachable =
+    options.add("warn-unreachable",
+                Options.BOOLEAN_OPTION, Boolean.TRUE,
+		"warn if this code can never be executed");
+  public static Options.OptionInfo warnVoidUsed =
+    options.add("warn-void-used",
+                Options.BOOLEAN_OPTION, Boolean.TRUE,
+		"warn if void-valued expression is used");
   public static Options.OptionInfo warnUndefinedVariable =
     options.add("warn-undefined-variable",
                 Options.BOOLEAN_OPTION, Boolean.TRUE,
@@ -122,12 +157,25 @@ public class Compilation implements SourceLocator
     options.add("warn-invoke-unknown-method",
                 Options.BOOLEAN_OPTION, warnUnknownMember,
 		"warn if invoke calls an unknown method (subsumed by warn-unknown-member)");
+  public static Options.OptionInfo warnUnused =
+    options.add("warn-unused",
+                Options.BOOLEAN_OPTION, Boolean.TRUE,
+                "warn if a variable is usused or code never executed");
   public static Options.OptionInfo warnAsError =
     options.add("warn-as-error", Options.BOOLEAN_OPTION, Boolean.FALSE,
 		"Make all warnings into errors");
 
   public Options currentOptions = new Options(options);
 
+  public boolean generateMainMethod ()
+  {
+    return currentOptions.getBoolean(mainMethodVariable);
+  }
+  
+  public boolean warnUnreachable ()
+  {
+    return currentOptions.getBoolean(warnUnreachable);
+  }
   public boolean warnUndefinedVariable ()
   {
     return currentOptions.getBoolean(warnUndefinedVariable);
@@ -139,6 +187,14 @@ public class Compilation implements SourceLocator
   public boolean warnInvokeUnknownMethod ()
   {
     return currentOptions.getBoolean(warnInvokeUnknownMethod);
+  }
+  public boolean warnUnused()
+  {
+    return currentOptions.getBoolean(warnUnused);
+  }
+  public boolean warnVoidUsed()
+  {
+    return currentOptions.getBoolean(warnVoidUsed);
   }
   public boolean warnAsError ()
   {
@@ -158,11 +214,14 @@ public class Compilation implements SourceLocator
   }
 
   public static int defaultClassFileVersion =
+    /* #ifdef JAVA8 */
+    // ClassType.JDK_1_8_VERSION
+    /* #else */
     /* #ifdef JAVA7 */
-    // ClassType.JDK_1_7_VERSION
+    ClassType.JDK_1_7_VERSION
     /* #else */
     /* #ifdef JAVA6 */
-    ClassType.JDK_1_6_VERSION
+    // ClassType.JDK_1_6_VERSION
     /* #else */
     /* #ifdef JAVA5 */
     // ClassType.JDK_1_5_VERSION
@@ -171,10 +230,11 @@ public class Compilation implements SourceLocator
     /* #endif */
     /* #endif */
     /* #endif */
+    /* #endif */
     ;
 
   /** The default calling convention.
-   * One of the following CALL_WITHG_xxx values. */
+   * One of the following CALL_WITH_xxx values. */
   public static int defaultCallConvention;
   public static final int CALL_WITH_UNSPECIFIED = 0;
   /** Plain calling convention, using regular Java parameters and returns. */
@@ -186,10 +246,21 @@ public class Compilation implements SourceLocator
   /** Support for full continuations.  Not implemented. */
   public static final int CALL_WITH_CONTINUATIONS = 4;
 
+    public int currentCallConvention() {
+        Object ft = currentOptions.getLocal("full-tailcalls");
+        if (ft instanceof Boolean)
+            return ((Boolean) ft).booleanValue()
+                ? Compilation.CALL_WITH_TAILCALLS
+                : Compilation.CALL_WITH_RETURN;
+        return defaultCallConvention;
+    }
+
   public boolean usingCPStyle()
-  { return defaultCallConvention == CALL_WITH_CONTINUATIONS; }
+  { return currentCallConvention() == CALL_WITH_CONTINUATIONS; }
   public boolean usingTailCalls()
-  { return defaultCallConvention >= CALL_WITH_TAILCALLS; }
+  { return currentCallConvention() >= CALL_WITH_TAILCALLS; }
+  public boolean usingCallContext()
+  { return currentCallConvention() >= CALL_WITH_CONSUMER; }
 
   public static final int MODULE_NONSTATIC = -1;
   public static final int MODULE_STATIC_DEFAULT = 0;
@@ -235,10 +306,13 @@ public class Compilation implements SourceLocator
   static public ClassType javaStringType = typeString;
   static public ClassType scmKeywordType = ClassType.make("gnu.expr.Keyword");
   static public ClassType scmSequenceType = ClassType.make("gnu.lists.Sequence");
+  public static final ClassType typeList = ClassType.make("java.util.List");
   static public ClassType scmListType = ClassType.make("gnu.lists.LList");
   static public ClassType typePair = ClassType.make("gnu.lists.Pair");
+  public static final ClassType typeConstVector = ClassType.make("gnu.lists.ConstVector");
   public static final ArrayType objArrayType = ArrayType.make(typeObject);
   static public ClassType typeRunnable = ClassType.make("java.lang.Runnable");
+  static public ClassType typeRunnableModule = ClassType.make("gnu.expr.RunnableModule");
   public static ClassType typeType = ClassType.make("gnu.bytecode.Type");
   public static ClassType typeObjectType
     = ClassType.make("gnu.bytecode.ObjectType");
@@ -252,40 +326,22 @@ public class Compilation implements SourceLocator
     = ClassType.make("gnu.mapping.Environment");
   static public ClassType typeLocation
     = ClassType.make("gnu.mapping.Location");
+  static public ClassType typeFieldLocation
+    = ClassType.make("gnu.kawa.reflect.FieldLocation");
+  static public ClassType typeStaticFieldLocation
+    = ClassType.make("gnu.kawa.reflect.StaticFieldLocation");
   static public ClassType typeSymbol
     = ClassType.make("gnu.mapping.Symbol");
-  static public final Method getSymbolValueMethod
-    = typeLanguage.getDeclaredMethod("getSymbolValue", 1);
-  static public final Method getSymbolProcedureMethod
-    = typeLanguage.getDeclaredMethod("getSymbolProcedure", 1);
-  static public final Method getLocationMethod
-    = typeLocation.addMethod("get", Type.typeArray0,
-			    Type.objectType, Access.PUBLIC);
-  static public final Method getProcedureBindingMethod
-    = typeSymbol.addMethod("getProcedure", Type.typeArray0,
-			    typeProcedure, Access.PUBLIC);
   static public final Field trueConstant
     = scmBooleanType.getDeclaredField("TRUE"); 
   static public final Field falseConstant
     = scmBooleanType.getDeclaredField("FALSE");
 
-  static final Method setNameMethod
-    = typeProcedure.getDeclaredMethod("setName", 1);
   static Method makeListMethod;
   
   public static final Type[] int1Args = { Type.intType  };
   public static final Type[] string1Arg = { javaStringType };
   public static final Type[] sym1Arg = string1Arg;
-
-  static public final Method getLocation1EnvironmentMethod
-  = typeEnvironment.getDeclaredMethod("getLocation", 1);
-  static public final Method getLocation2EnvironmentMethod;
-  static {
-    Type[] args = { typeSymbol, Type.objectType    };
-    getLocation2EnvironmentMethod
-      = typeEnvironment.addMethod("getLocation", args,
-				  typeLocation, Access.PUBLIC|Access.FINAL);
-  }
 
   static {
     Type[] makeListArgs = { objArrayType, Type.intType  };
@@ -354,8 +410,6 @@ public class Compilation implements SourceLocator
     = ClassType.make("gnu.mapping.ProcedureN");
   public static ClassType typeModuleBody
     = ClassType.make("gnu.expr.ModuleBody");
-  public static ClassType typeModuleWithContext
-    = ClassType.make("gnu.expr.ModuleWithContext");
   public static ClassType typeApplet = ClassType.make("java.applet.Applet");
   public static ClassType typeServlet = ClassType.make("gnu.kawa.servlet.KawaServlet");
 
@@ -376,6 +430,8 @@ public class Compilation implements SourceLocator
   = ClassType.make("gnu.mapping.MethodProc");
   public static ClassType typeModuleMethod
   = ClassType.make("gnu.expr.ModuleMethod");
+  public static ClassType typeModuleMethodWithContext
+  = ClassType.make("gnu.expr.ModuleMethodWithContext");
   //  public static Field numArgsCallFrameField = typeCallFrame.getDeclaredField("numArgs");
   public static Field argsCallContextField
     = typeCallContext.getDeclaredField("values");
@@ -392,10 +448,6 @@ public class Compilation implements SourceLocator
 
   /** Rembembers stuff to do in <clinit> of main class. */
   Initializer clinitChain;
-
-  public static boolean generateMainDefault = false;
-  /** True if we should generate a main(String[]) method. */
-  public boolean generateMain = generateMainDefault;
 
   LitTable litTable;
 
@@ -428,33 +480,27 @@ public class Compilation implements SourceLocator
 
   public final ClassType getModuleType()
   {
-    return (defaultCallConvention >= Compilation.CALL_WITH_CONSUMER
-	    ? typeModuleWithContext
-	    : typeModuleBody);
+    return typeModuleBody;
   }
 
-  /** Emit code to "evaluate" a compile-time constant.
-   * This is the normal external interface.
-   * @param value the value to be compiled
-   */
-  public void compileConstant (Object value)
-  {
-    gnu.bytecode.CodeAttr code = getCode();
-    if (value == null)
-      code.emitPushNull();
-    else if (value instanceof String && ! immediate)
-      code.emitPushString((String) value);
-    else
-      code.emitGetStatic(compileConstantToField(value));
-  }
-
-  public Field compileConstantToField (Object value)
-  {
-    Literal literal = litTable.findLiteral(value);
-    if (literal.field == null)
-      literal.assign(litTable);
-    return literal.field;
-  }
+    /** Emit code to "evaluate" a compile-time constant.
+     * This is the normal external interface.
+     * @param value the value to be compiled
+     */
+    public void compileConstant (Object value) {
+        gnu.bytecode.CodeAttr code = getCode();
+        if (value == null)
+            code.emitPushNull();
+        else if (value instanceof String && ! immediate)
+            code.emitPushString((String) value);
+        else {
+            Literal literal = litTable.findLiteral(value);
+            // if (immediate) maybe we want to use a differnet approach.
+            if (literal.field == null)
+                literal.assign(litTable);
+            code.emitGetStatic(literal.field);
+        }
+    }
 
   public static boolean inlineOk = true;
 
@@ -486,22 +532,42 @@ public class Compilation implements SourceLocator
     return inlineOk;
   }
 
+    /** Should this inlineable method by inlined?
+     * Usually it's best to not inline a module-level function, since that
+     * makes stack traces less helpful, and increases the risk of
+     * methods getting too big.
+     */
+    static boolean avoidInline(LambdaExp proc) {
+        return proc.getOuter() instanceof ModuleExp && proc.nameDecl != null;
+    }
+
+  public boolean isApplyFunction (Expression exp)
+  {
+    return false;
+  }
+
+  /** A simple apply function maps actual arguments to formals directly.
+   * E.g. no distribution of multiple values.
+   */
+  public boolean isSimpleApplyFunction (Expression exp)
+  {
+    return false;
+  }
+
   public void compileConstant (Object value, Target target)
   {
     if (target instanceof IgnoreTarget)
       return;
-    if (value instanceof Values)
+    if (value instanceof Values && target instanceof ConsumerTarget)
       {
-	Object[] values = ((Values) value).getValues();
+        Object[] values = ((Values) value).getValues();
         int len = values.length;
-        if (target instanceof ConsumerTarget)
+        for (int i = 0;  i < len;  i++)
           {
-            for (int i = 0;  i < len;  i++)
-              {
-                compileConstant(values[i], target);
-              } 
-            return;
-          }
+            compileConstant(values[i],
+                            ((ConsumerTarget) target).getSingleTarget());
+          } 
+        return;
       }
     if (target instanceof ConditionalTarget)
       {
@@ -513,6 +579,8 @@ public class Compilation implements SourceLocator
     if (target instanceof StackTarget)
       {
 	Type type = ((StackTarget) target).getType();
+	if (type instanceof LazyType)
+	  type = ((LazyType) type).getValueType();
 	if (type instanceof PrimType)
 	  {
 	    try
@@ -526,6 +594,7 @@ public class Compilation implements SourceLocator
 		    Number num = (Number) value;
 		    switch (sig1)
 		      {
+                      case 'C':
 		      case 'I':
 			code.emitPushInt(num.intValue());
 			return;
@@ -546,6 +615,28 @@ public class Compilation implements SourceLocator
 			return;
 		      }
 		  }
+                // FIXME we should move this into a new method
+                // PrimType#pushValue(Object value), with LangPrimType override.
+                if (type == LangPrimType.characterType
+                    || type == LangPrimType.characterOrEofType)
+                  {
+                    if (value instanceof Char)
+                      {
+                        code.emitPushInt(((Char) value).intValue());
+                        return;
+                      }
+                    if (value instanceof Character)
+                      {
+                        code.emitPushInt(((Character) value).charValue());
+                        return;
+                      }
+                    if (value == gnu.lists.Sequence.eofValue
+                        && type == LangPrimType.characterOrEofType)
+                      {
+                        code.emitPushInt(-1);
+                        return;
+                     }
+                  }
 		if (sig1 == 'C')
 		  {
 		    code.emitPushInt((int) ((PrimType) type).charValue(value));
@@ -553,7 +644,7 @@ public class Compilation implements SourceLocator
 		  }
 		if (sig1 == 'Z')
 		  {
-		    boolean val = PrimType.booleanValue(value);
+		    boolean val = getLanguage().isTrue(value);
 		    code.emitPushInt(val ? 1 : 0);
 		    return;
 		  }
@@ -586,7 +677,7 @@ public class Compilation implements SourceLocator
                   sbuf.append(value.getClass().getName());
 		sbuf.append(") to ");
 	      }
-	    sbuf.append(type.getName());
+	    sbuf.append(type);
             error('w', sbuf.toString());
          }
       }
@@ -596,13 +687,35 @@ public class Compilation implements SourceLocator
                             : Type.make(value.getClass()));
   }
 
-
-  private void dumpInitializers (Initializer inits)
+  public void emitPushBoolean(boolean value)
   {
-    for (Initializer init = Initializer.reverse(inits);
-         init != null;  init = init.next)
-      init.emit(this);
+    getCode().emitGetStatic(value ? Compilation.trueConstant
+                            : Compilation.falseConstant);
   }
+
+  /** Generate code to test if an object is considered true.
+   * Assume the object has been pushed on the JVM stack.
+   * Generate code to push true or false as appropriate. */
+  public void emitCoerceToBoolean()
+  {
+    CodeAttr code = getCode();
+    emitPushBoolean(false);
+    code.emitIfNEq();
+    code.emitPushInt(1);
+    code.emitElse();
+    code.emitPushInt(0);
+    code.emitFi();
+  }
+
+    boolean dumpingInitializers;
+
+    private void dumpInitializers(Initializer inits) {
+        dumpingInitializers = true;
+        for (Initializer init = Initializer.reverse(inits);
+             init != null;  init = init.next)
+            init.emit(this);
+        dumpingInitializers = false;
+    }
 
   /** Search this Compilation for a ClassType with a given name.
    * @param name the name of the class desired
@@ -704,26 +817,7 @@ public class Compilation implements SourceLocator
 
   public static String mangleName (String name)
   {
-    return mangleName(name, -1);
-  }
-
-  public static String mangleNameIfNeeded (String name)
-  {
-    if (name == null || isValidJavaName(name))
-      return name;
-    else
-      return mangleName(name, 0);
-  }
-
-  public static boolean isValidJavaName(String name)
-  {
-    int len = name.length();
-    if (len == 0 || ! Character.isJavaIdentifierStart(name.charAt(0)))
-      return false;
-    for (int i = len;  --i > 0; )
-      if (! Character.isJavaIdentifierPart(name.charAt(i)))
-	return false;
-    return true;
+    return Language.mangleName(name, -1);
   }
 
   /** Convert a string to a safe Java identifier.
@@ -731,109 +825,12 @@ public class Compilation implements SourceLocator
    */
   public static String mangleName (String name, boolean reversible)
   {
-    return mangleName(name, reversible ? 1 : -1);
+    return Language.mangleName(name, reversible ? 1 : -1);
   }
 
-  /** Convert a string to a safe Java identifier.
-   * @param kind -1 - non-reversible;
-   *  0: reversible, except that '$' is not mapped;
-   *  1: reversible
-   */
-  public static String mangleName (String name, int kind)
+  public static String mangleNameIfNeeded (String name)
   {
-    boolean reversible = kind >= 0;
-    int len = name.length ();
-    if (len == 6 && name.equals("*init*")) // Constructor methods.
-      return "<init>";
-    StringBuffer mangled = new StringBuffer (len);
-    boolean upcaseNext = false;
-    for (int i = 0;  i < len;  i++)
-      {
-	char ch = name.charAt(i);
-	if (upcaseNext)
-	  {
-	    ch = Character.toTitleCase(ch);
-	    upcaseNext = false;
-	  }
-	if (Character.isDigit(ch))
-	  {
-	    if (i == 0)
-	      mangled.append("$N");
-	    mangled.append(ch);
-	  }
-	else if (Character.isLetter(ch) || ch == '_')
-	  mangled.append(ch);
-	else if (ch == '$')
-	  mangled.append(kind > 1 ? "$$" : "$");
-	else
-	  {
-	    switch (ch)
-	      {
-	      case '+':  mangled.append("$Pl");  break;
-	      case '-':
-		if (reversible)
-		  mangled.append("$Mn");
-		else
-		  {
-		    char next = i + 1 < len ? name.charAt(i+1) : '\0';
-		    if (next == '>')
-		      {
-			mangled.append("$To$");
-			i++;
-		      }
-		    else if (! Character.isLowerCase(next))
-		      mangled.append("$Mn");
-		  }
-		break;
-	      case '*':  mangled.append("$St");  break;
-	      case '/':  mangled.append("$Sl");  break;
-	      case '=':  mangled.append("$Eq");  break;
-	      case '<':  mangled.append("$Ls");  break;
-	      case '>':  mangled.append("$Gr");  break;
-	      case '@':  mangled.append("$At");  break;
-	      case '~':  mangled.append("$Tl");  break;
-	      case '%':  mangled.append("$Pc");  break;
-	      case '.':  mangled.append("$Dt");  break;
-	      case ',':  mangled.append("$Cm");  break;
-	      case '(':  mangled.append("$LP");  break;
-	      case ')':  mangled.append("$RP");  break;
-	      case '[':  mangled.append("$LB");  break;
-	      case ']':  mangled.append("$RB");  break;
-	      case '{':  mangled.append("$LC");  break;
-	      case '}':  mangled.append("$RC");  break;
-	      case '\'': mangled.append("$Sq");  break;
-	      case '"':  mangled.append("$Dq");  break;
-	      case '&':  mangled.append("$Am");  break;
-	      case '#':  mangled.append("$Nm");  break;
-	      case '?':
-		char first = mangled.length() > 0 ? mangled.charAt(0) : '\0';
-		if (! reversible
-		    && i + 1 == len && Character.isLowerCase(first))
-		  {
-		    mangled.setCharAt(0, Character.toTitleCase(first));
-		    mangled.insert(0, "is");
-		  }
-		else
-		  mangled.append("$Qu");
-		break;
-	      case '!':  mangled.append("$Ex");  break;
-	      case ':':  mangled.append("$Cl");  break;
-	      case ';':  mangled.append("$SC");  break;
-	      case '^':  mangled.append("$Up");  break;
-	      case '|':  mangled.append("$VB");  break;
-	      default:
-		mangled.append('$');
-		mangled.append(Character.forDigit ((ch >> 12) & 15, 16));
-		mangled.append(Character.forDigit ((ch >>  8) & 15, 16));
-		mangled.append(Character.forDigit ((ch >>  4) & 15, 16));
-		mangled.append(Character.forDigit ((ch      ) & 15, 16));
-	      }
-	    if (! reversible)
-	      upcaseNext = true;
-	  }
-      }
-    String mname = mangled.toString ();
-    return mname.equals(name) ? name : mname;
+    return Language.mangleNameIfNeeded(name);
   }
 
   /** Demangle a three-character mangling starting with '$'.
@@ -891,6 +888,12 @@ public class Compilation implements SourceLocator
     for (int i = 0;  i < len;  i++)
       {
 	char ch = name.charAt(i);
+        if (i == 0 && ch == '$' && len >= 3 && name.charAt(1) == 'N')
+          {
+            i = 1;
+            mangled = true;
+            continue;
+          }
 	if (downCaseNext && ! reversible)
 	  {
 	    ch = Character.toLowerCase(ch);
@@ -979,24 +982,6 @@ public class Compilation implements SourceLocator
     this.lexical = lexical;
   }
 
-  /** Shared processing for both compiling/eval. */
-  public void walkModule (ModuleExp mexp)
-  {
-    if (debugPrintExpr)
-      {
-	OutPort dout = OutPort.errDefault();
-	dout.println("[Module:" + mexp.getName());
-	mexp.print(dout);
-	dout.println(']');
-	dout.flush();
-      }
-
-    InlineCalls.inlineCalls(mexp, this);
-    PushApply.pushApply(mexp);
-    ChainLambdas.chainLambdas(mexp, this);
-    FindTailCalls.findTailCalls(mexp, this);
-  }
-
   public void outputClass (String directory) throws IOException
   {
     char dirSep = File.separatorChar;
@@ -1011,7 +996,7 @@ public class Compilation implements SourceLocator
 	  new File(parent).mkdirs();
 	clas.writeToFile(out_name);
       }
-    minfo.cleanupAfterCompilation();
+    getMinfo().cleanupAfterCompilation();
   }
 
   public void cleanupAfterCompilation ()
@@ -1019,7 +1004,9 @@ public class Compilation implements SourceLocator
     for (int iClass = 0;  iClass < numClasses;  iClass++)
       classes[iClass].cleanupAfterCompilation();
     classes = null;
-    minfo.comp = null;
+    ModuleInfo minfo = getMinfo();
+    minfo.className = mainClass.getName(); // In case it hasn't been set yet.
+    minfo.setCompilation(null);
     // We don't clear minfo.exp itself, since it might be re-required.
     if (minfo.exp != null)
       minfo.exp.body = null;
@@ -1102,11 +1089,12 @@ public class Compilation implements SourceLocator
 
   public void addClass (ClassType new_class)
   {
-    if (mainLambda.filename != null)
+    String fname = getModule().filename;
+    if (fname != null)
       {
 	if (emitSourceDebugExtAttr)
 	  new_class.setStratum(getLanguage().getName());
-	new_class.setSourceFile(mainLambda.filename);
+	new_class.setSourceFile(fname);
       }
     registerClass(new_class);
     new_class.setClassfileVersion(defaultClassFileVersion);
@@ -1115,7 +1103,8 @@ public class Compilation implements SourceLocator
   public boolean makeRunnable ()
   {
     return ! generatingServlet() && ! generatingApplet()
-      && ! getModule().staticInitRun();
+      && ! getModule().staticInitRun()
+      && ! getModule().getFlag(ModuleExp.USE_DEFINED_CLASS);
   }
 
   public void addMainClass (ModuleExp module)
@@ -1132,16 +1121,18 @@ public class Compilation implements SourceLocator
 	  sup = typeApplet;
 	else if (generatingServlet())
 	  sup = typeServlet;
+        else if (module.getFlag(ModuleExp.USE_DEFINED_CLASS))
+          sup = Type.objectType;
 	else
 	  sup = getModuleType();
       }
     if (makeRunnable())
       type.addInterface(typeRunnable);
+    type.addInterface(typeRunnableModule);
     type.setSuper(sup);
 
-    module.type = type;
+    module.compiledType = type;
     addClass(type);
-    getConstructor(mainClass, module);
   }
 
   public final Method getConstructor (LambdaExp lexp)
@@ -1194,7 +1185,8 @@ public class Compilation implements SourceLocator
     if (curClass == mainClass
         // Optimization: No point in calling ModuleInfo.register if we aren't
         // compiling a named module.
-        && minfo != null && minfo.sourcePath != null)
+        && getMinfo() != null && getMinfo().sourcePath != null
+        && ! getModule().getFlag(ModuleExp.USE_DEFINED_CLASS))
       {
 	code.emitPushThis();
 	code.emitInvokeStatic(ClassType.make("gnu.expr.ModuleInfo")
@@ -1208,7 +1200,7 @@ public class Compilation implements SourceLocator
 	LambdaExp save = curLambda;
 	curLambda = new LambdaExp();
 	curLambda.closureEnv = code.getArg(0);
-	curLambda.outer = save;
+	curLambda.setOuter(save);
         Initializer init;
 	while ((init = lexp.initChain) != null)
 	  {
@@ -1221,7 +1213,8 @@ public class Compilation implements SourceLocator
     if (lexp instanceof ClassExp)
       {
 	ClassExp cexp = (ClassExp) lexp;
-	callInitMethods(cexp.getCompiledClassType(this), new Vector<ClassType>(10));
+	callInitMethods(cexp.getCompiledClassType(this),
+                        new ArrayList<ClassType>(10));
       }
 
     code.emitReturn();
@@ -1235,7 +1228,7 @@ public class Compilation implements SourceLocator
    * @param clas Class to search for $finit$, and to search supertypes.
    * @param seen array of seen classes, to avoid duplicate $finit$ calls.
    */
-  void callInitMethods (ClassType clas, Vector<ClassType> seen)
+  void callInitMethods (ClassType clas, ArrayList<ClassType> seen)
   {
     if (clas == null)
       return;
@@ -1245,9 +1238,9 @@ public class Compilation implements SourceLocator
       return;
     // Check for duplicates.
     for (int i = seen.size();  --i >= 0; )
-      if (((ClassType) seen.elementAt(i)).getName() == name)
+      if (seen.get(i).getName() == name)
 	return;
-    seen.addElement(clas);
+    seen.add(clas);
 
     // Recusive call to emit $finit$ of super-types.  However, don't do that
     // for clas.getSuperclass(), because our <init> will automatically call
@@ -1272,7 +1265,7 @@ public class Compilation implements SourceLocator
                 clas = ((ClassType)
                         Type.make(Class.forName(clas.getName() + "$class")));
               }
-            catch (Throwable ex)
+            catch (Exception ex)
               {
                 return;
               }
@@ -1310,7 +1303,7 @@ public class Compilation implements SourceLocator
 	Type[] matchArgs = null;
 	for (int j = numApplyMethods;  --j >= 0; )
 	  {
-	    LambdaExp source = (LambdaExp) lexp.applyMethods.elementAt(j);
+	    LambdaExp source = lexp.applyMethods.get(j);
 	    // Select the subset of source.primMethods[*] that are suitable
 	    // for the current apply method.
 	    Method[] primMethods = source.primMethods;
@@ -1382,6 +1375,7 @@ public class Compilation implements SourceLocator
 		    Type ptype = var.getType();
 		    if (ptype != Type.objectType)
 		      {
+                        StackTarget.forceLazyIfNeeded(this, Type.objectType, ptype);
 			if (ptype instanceof TypeValue)
 			  {
 			    Label trueLabel = new Label(code),
@@ -1421,13 +1415,14 @@ public class Compilation implements SourceLocator
 		code.emitPutField(typeCallContext.getField("values"));
 	      }
 	    code.emitLoad(ctxVar);
-	    if (defaultCallConvention < Compilation.CALL_WITH_CONSUMER)
-	      code.emitLoad(code.getArg(1)); // proc
-	    else
+            boolean usingCallContext = usingCallContext();
+            if (usingCallContext)
 	      code.emitLoad(code.getArg(0)); // this (module)
+	    else
+	      code.emitLoad(code.getArg(1)); // proc
 	    code.emitPutField(procCallContextField);
 	    code.emitLoad(ctxVar);
-	    if (defaultCallConvention >= CALL_WITH_CONSUMER)
+	    if (usingCallContext)
 	      code.emitPushInt(source.getSelectorValue(this)+methodIndex);
 	    else
 	      code.emitPushInt(i);
@@ -1464,7 +1459,7 @@ public class Compilation implements SourceLocator
       return;
     ClassType save_class = curClass;
     curClass = lexp.getHeapFrameType();
-    if (! (curClass.getSuperclass().isSubtype(typeModuleWithContext)))
+    if (! (curClass.getSuperclass().isSubtype(typeModuleBody)))
       curClass = moduleClass;
     ClassType procType = typeModuleMethod;
     Method save_method = method;
@@ -1484,7 +1479,9 @@ public class Compilation implements SourceLocator
 
     for (int j = 0;  j < numApplyMethods;  ++j)
       {
-	LambdaExp source = (LambdaExp) lexp.applyMethods.elementAt(j);
+	LambdaExp source = lexp.applyMethods.get(j);
+        if (! source.usingCallContext())
+          continue;
 	Method[] primMethods = source.primMethods;
 	int numMethods = primMethods.length;
 
@@ -1565,8 +1562,9 @@ public class Compilation implements SourceLocator
 		if (ptype != Type.objectType)
                   {
                     SourceLocator saveLoc2 = messages.swapSourceLocator(var);
-                    CheckedTarget.emitCheckedCoerce(this, source,
-                                                    k+1, ptype);
+                    CheckedTarget.emitCheckedCoerce(this, source, k+1,
+                                                    Type.objectType, ptype,
+                                                    null);
                     messages.swapSourceLocator(saveLoc2);
                   }
 		var = var.nextDecl();
@@ -1593,7 +1591,7 @@ public class Compilation implements SourceLocator
 	    code.emitInvoke(primMethod);
 	    while (--pendingIfEnds >= 0)
 	      code.emitFi();
-	    if (defaultCallConvention < Compilation.CALL_WITH_CONSUMER)
+	    if (! usingCallContext())
 	      Target.pushObject.compileFromStack(this,
 						 source.getReturnType());
             messages.swapSourceLocator(saveLoc1);
@@ -1626,9 +1624,7 @@ public class Compilation implements SourceLocator
       curClass = moduleClass;
     Method save_method = method;
     CodeAttr code = null;
-    for (int i = defaultCallConvention >= Compilation.CALL_WITH_CONSUMER
-	   ? 5 : 0;
-	 i < 6; i++)
+    for (int i = usingCallContext() ? 5 : 0; i < 6; i++)
       {
 	// If i < 5, generate the method named ("apply"+i);
 	// else generate "applyN".
@@ -1639,7 +1635,9 @@ public class Compilation implements SourceLocator
 
 	for (int j = 0;  j < numApplyMethods;  j++)
 	  {
-	    LambdaExp source = (LambdaExp) lexp.applyMethods.elementAt(j);
+	    LambdaExp source = lexp.applyMethods.get(j);
+            if (source.usingCallContext())
+              continue;
 	    // Select the subset of source.primMethods[*] that are suitable
 	    // for the current apply method.
 	    Method[] primMethods = source.primMethods;
@@ -1684,7 +1682,7 @@ public class Compilation implements SourceLocator
 		  }
 		applyArgs[0] = procType;
 		method = curClass.addMethod (mname, applyArgs,
-					     defaultCallConvention >= Compilation.CALL_WITH_CONSUMER ? (Type) Type.voidType : (Type) Type.objectType,
+					     usingCallContext() ? (Type) Type.voidType : (Type) Type.objectType,
 					     Access.PUBLIC);
 		code = method.startCode();
 
@@ -1763,8 +1761,9 @@ public class Compilation implements SourceLocator
 		if (ptype != Type.objectType)
                   {
                     SourceLocator saveLoc2 = messages.swapSourceLocator(var);
-                    CheckedTarget.emitCheckedCoerce(this, source,
-                                                    k+1, ptype, pvar);
+                    CheckedTarget.emitCheckedCoerce(this, source, k+1,
+                                                    Type.objectType, ptype,
+                                                    pvar);
                     messages.swapSourceLocator(saveLoc2);
                   }
 		var = var.nextDecl();
@@ -1790,7 +1789,7 @@ public class Compilation implements SourceLocator
 	    code.emitInvoke(primMethod);
 	    while (--pendingIfEnds >= 0)
 	      code.emitFi();
-	    if (defaultCallConvention < Compilation.CALL_WITH_CONSUMER)
+	    if (! usingCallContext())
 	      Target.pushObject.compileFromStack(this,
 						 source.getReturnType());
             messages.swapSourceLocator(saveLoc1);
@@ -1799,7 +1798,7 @@ public class Compilation implements SourceLocator
 	if (needThisApply)
 	  {
 	    aswitch.addDefault(code);
-	    if (defaultCallConvention >= Compilation.CALL_WITH_CONSUMER)
+	    if (usingCallContext())
 	      {
 		Method errMethod
 		  = typeModuleMethod.getDeclaredMethod("applyError", 0);
@@ -1907,7 +1906,7 @@ public class Compilation implements SourceLocator
 
     CodeAttr code = method.startCode();
 
-    if (generateMain || generatingApplet() || generatingServlet())
+    if (generateMainMethod() || generatingApplet() || generatingServlet())
       {
 	ClassType languageType
 	  = (ClassType) Type.make(getLanguage().getClass());
@@ -1934,7 +1933,9 @@ public class Compilation implements SourceLocator
           {
             setState(BODY_PARSED-1);
             language.parse(this, 0);
-            lexer.close();
+            mexp.classFor(this);
+            if (lexer != null)
+                lexer.close();
             lexer = null;
             setState(messages.seenErrors() ? ERROR_SEEN : BODY_PARSED);
             if (pendingImports != null)
@@ -1942,29 +1943,45 @@ public class Compilation implements SourceLocator
           }
         if (wantedState >= RESOLVED && getState() < RESOLVED)
           {
+            language.resolve(this);
             // Doing addMainClass is a bit flakey in the case that
             // ModuleExp.alwaysCompile is false.  We don't want to
             // call addMainClass *unless* we're compiling, but when
             // dealing with eval, mutually recursive modules, etc
             // it doesn't quite work.
             addMainClass(mexp);
-            language.resolve(this);
             setState(messages.seenErrors() ? ERROR_SEEN : RESOLVED);
           }
 
         // Avoid writing class needlessly.
         if (! explicit && ! immediate
-            && minfo.checkCurrent(ModuleManager.getInstance(), System.currentTimeMillis()))
+            && getMinfo().checkCurrent(ModuleManager.getInstance(), System.currentTimeMillis()))
           {
-            minfo.cleanupAfterCompilation();
+            getMinfo().cleanupAfterCompilation();
             setState(CLASS_WRITTEN);
+          }
+
+        if (wantedState >= PRE_WALKED && getState() < PRE_WALKED)
+          {
+            if (debugPrintExpr) {
+                OutPort dout = OutPort.errDefault();
+                dout.println("[Module:" + mexp.getName());
+                mexp.print(dout);
+                dout.println(']');
+                dout.flush();
+            }
+            PushApply.pushApply(mexp, this);  
+            setState(messages.seenErrors() ? ERROR_SEEN : PRE_WALKED);
           }
 
         if (wantedState >= WALKED && getState() < WALKED)
           {
-            walkModule(mexp);
+            InlineCalls.inlineCalls(mexp, this);
+            ChainLambdas.chainLambdas(mexp, this);
+            FindTailCalls.findTailCalls(mexp, this);
             setState(messages.seenErrors() ? ERROR_SEEN : WALKED);
           }
+
         if (wantedState >= COMPILE_SETUP && getState() < COMPILE_SETUP)
           {
             litTable = new LitTable(this);
@@ -1985,9 +2002,10 @@ public class Compilation implements SourceLocator
             setState(messages.seenErrors() ? ERROR_SEEN : COMPILED);
           }
         if (wantedState >= CLASS_WRITTEN && getState() < CLASS_WRITTEN)
-          { 
-            ModuleManager manager = ModuleManager.getInstance();
-            outputClass(manager.getCompilationDirectory());
+          {
+            if (! (mexp.getFlag(ModuleExp.HAS_SUB_MODULE)
+                   && mexp.body == QuoteExp.voidExp && mexp.firstDecl() == null))
+                outputClass(ModuleManager.getInstance().getCompilationDirectory());
             setState(CLASS_WRITTEN);
           }
       }
@@ -2027,7 +2045,8 @@ public class Compilation implements SourceLocator
       }
 
     ClassType neededSuper = getModuleType();
-    if (mainClass.getSuperclass().isSubtype(neededSuper))
+    if (mainClass.getSuperclass().isSubtype(neededSuper)
+        && ! module.getFlag(ModuleExp.USE_DEFINED_CLASS))
       moduleClass = mainClass;
     else
       {
@@ -2037,25 +2056,25 @@ public class Compilation implements SourceLocator
 	generateConstructor(moduleClass, null);
       }
 
-    curClass = module.type;
+    curClass = module.compiledType;
     int arg_count;
     LambdaExp saveLambda = curLambda;
     curLambda = module;
     Type[] arg_types;
-    if (module.isHandlingTailCalls())
+    if (module.isHandlingTailCalls()) // Is this ever false?
       {
 	arg_count = 1;
 	arg_types = new Type[1];
 	arg_types[0] = typeCallContext;
       }
     else if (module.min_args != module.max_args || module.min_args > 4)
-      {
+      { // Likely dead code.
 	arg_count = 1;
 	arg_types = new Type[1];
 	arg_types[0] = new ArrayType (typeObject);
       }
     else
-      {
+      { // Likely dead code.
 	arg_count = module.min_args;
 	arg_types = new Type[arg_count];
 	for (int i = arg_count;  --i >= 0; )
@@ -2078,7 +2097,7 @@ public class Compilation implements SourceLocator
     code = getCode();
     // if (usingCPStyle())   code.addParamLocals();
 
-    thisDecl = method.getStaticFlag() ? null : module.declareThis(module.type);
+    thisDecl = method.getStaticFlag() ? null : module.declareThis(module.compiledType);
     module.closureEnv = module.thisVariable;
     module.heapFrame = module.isStatic() ? null : module.thisVariable;
     module.allocChildClasses(this);
@@ -2127,14 +2146,20 @@ public class Compilation implements SourceLocator
 
 	if (staticModule)
 	  {
-	    generateConstructor (module);
+            if (! module.getFlag(ModuleExp.USE_DEFINED_CLASS))
+              generateConstructor(module);
 
 	    code.emitNew(moduleClass);
 	    code.emitDup(moduleClass);
 	    code.emitInvokeSpecial(moduleClass.constructor);
+            // The $instance field needs to be public so
+            // ModuleContext.findInstance can find it.
+            // It needs to be non-final in case moduleClass!=mainClass.
+            // (The latter should probably be fixed by moving this code
+            // to moduleClass's <clinit>.)
 	    moduleInstanceMainField
 	      = moduleClass.addField("$instance", moduleClass,
-				     Access.STATIC|Access.PUBLIC|Access.FINAL);
+				     Access.STATIC|Access.PUBLIC);
 	    code.emitPutStatic(moduleInstanceMainField);
 	  }
         Initializer init;
@@ -2151,8 +2176,8 @@ public class Compilation implements SourceLocator
 	  }
 	code.emitReturn();
 
-	if (moduleClass != mainClass
-	    && ! staticModule && ! generateMain && ! immediate)
+	if (moduleClass != mainClass && ! staticModule
+            && curClass.getSuperclass().getDeclaredMethod("run", 0) == null)
 	  {
 	    // Compare the run methods in ModuleBody.
 	    method = curClass.addMethod("run", Access.PUBLIC,
@@ -2237,14 +2262,14 @@ public class Compilation implements SourceLocator
             else
               litTable.emit();
 	  }
-	catch (Throwable ex)
+	catch (Exception ex)
 	  {
 	    error('e', "Literals: Internal error:" + ex);
 	  }
 	code.fixupChain(endLiterals, afterLiterals);
       }
 
-    if (generateMain && curClass == mainClass)
+    if (generateMainMethod() && curClass == mainClass)
       {
 	Type[] args = { new ArrayType(javaStringType) };
 	method = curClass.addMethod("main", Access.PUBLIC|Access.STATIC,
@@ -2269,12 +2294,18 @@ public class Compilation implements SourceLocator
 	    code.emitDup(curClass);
 	    code.emitInvokeSpecial(curClass.constructor);
 	  }
-	code.emitInvokeVirtual(typeModuleBody.getDeclaredMethod("runAsMain", 0));
+        Method runAsMainMethod = null;
+        ClassType superClass = curClass.getSuperclass();
+        if (superClass != typeModuleBody)
+           runAsMainMethod = superClass.getDeclaredMethod("runAsMain", 0);
+        if (runAsMainMethod == null)
+            runAsMainMethod = typeModuleBody.getDeclaredMethod("runAsMain", 1);
+        code.emitInvoke(runAsMainMethod);
 	code.emitReturn();
       }
 
     String uri;
-    if (minfo != null && (uri = minfo.getNamespaceUri()) != null)
+    if (getMinfo() != null && (uri = getMinfo().getNamespaceUri()) != null)
       {
         // Need to generate a ModuleSet for this class, so XQuery can find
         // this module and other modules in the same namespace.
@@ -2296,7 +2327,7 @@ public class Compilation implements SourceLocator
               {
                 // Do nothing.
               }
-            catch (Throwable ex)
+            catch (Exception ex)
               {
                 error('e', "error loading map for "+mainPackage+" - "+ex);
               }
@@ -2340,18 +2371,17 @@ public class Compilation implements SourceLocator
                 {
                   // If the source path was relative, emit it as relative.
                   // But make it relative to the compilation directory,
-                  // to allows sources to be moved along with binaries.
-                  char sep = File.separatorChar;
-                  String path = manager.getCompilationDirectory();
-                  path = path + mainPrefix.replace('.', sep);
-                  path = Path.toURL(path).toString();
+                  // to allow sources to be moved along with binaries.
+                  String path = Path.toURL(manager.getCompilationDirectory())
+                      + mainPrefix.replace('.', '/');
                   int plen = path.length();
-                  if (plen > 0 && path.charAt(plen-1) != sep)
-                    path = path + sep;
-                  moduleSource
-                    = Path.relativize(mi.getSourceAbsPathname(), path);
+                  if (plen > 0 && path.charAt(plen-1) != '/')
+                    path = path + '/';
+                  String sourcePath =
+                      Path.toURL(mi.getSourceAbsPathname()).toString();
+                  moduleSource = Path.relativize(sourcePath, path);
                 }
-              catch (Throwable ex)
+              catch (Exception ex)
                 {
                   throw new WrappedException("exception while fixing up '"
                                              +moduleSource+'\'',
@@ -2441,7 +2471,7 @@ public class Compilation implements SourceLocator
    */
   public void mustCompileHere ()
   {
-    if (! mustCompile && ! ModuleExp.compilerAvailable)
+    if (! mustCompile && ! ModuleExp.compilerAvailable())
       error('e', "this expression must be compiled, but compiler is unavailable");
     mustCompile = true;
   }
@@ -2463,22 +2493,34 @@ public class Compilation implements SourceLocator
     ScopeExp sc = scope;
     while (scope_nesting > current_nesting)
       {
-	sc = sc.outer;
+	sc = sc.getOuter();
 	scope_nesting--;
       }
     while (sc != current_scope)
       {
 	pop(current_scope);
-	sc = sc.outer;
+        sc = sc.getOuter();
       }
     pushChain(scope, sc);
   }
+
+    public ScopeExp setPushCurrentScope (ScopeExp scope) {
+        ScopeExp old = currentScope();
+        lexical.pushSaveTopLevelRedefs();
+        setCurrentScope(scope);
+        return old;
+    }
+
+    public void setPopCurrentScope (ScopeExp old) {
+        setCurrentScope(old);
+        lexical.popSaveTopLevelRedefs();
+    }
 
   void pushChain (ScopeExp scope, ScopeExp limit)
   {
     if (scope != limit)
       {
-	pushChain(scope.outer, limit);
+        pushChain(scope.getOuter(), limit);
         pushScope(scope);
         lexical.push(scope);
       }
@@ -2497,12 +2539,12 @@ public class Compilation implements SourceLocator
       module.setFile(filename);
     if (generatingApplet() || generatingServlet())
       module.setFlag(ModuleExp.SUPERTYPE_SPECIFIED);
+    mainLambda = module;
     if (immediate)
       {
         module.setFlag(ModuleExp.IMMEDIATE);
         new ModuleInfo().setCompilation(this);
       }
-    mainLambda = module;
     push(module);
     return module;
   }
@@ -2517,20 +2559,20 @@ public class Compilation implements SourceLocator
   {
     if (! mustCompile
         && (scope.mustCompile()
-            || (ModuleExp.compilerAvailable
+            || (ModuleExp.compilerAvailable()
                 // We set mustCompile if we see a LambdaExp - not because
                 // we must but because it is usually desirable.
                 && scope instanceof LambdaExp
                 && ! (scope instanceof ModuleExp))))
       mustCompileHere();
-    scope.outer = current_scope;
+    scope.setOuter(current_scope);
     current_scope = scope;
   }
 
   public void pop (ScopeExp scope)
   {
     lexical.pop(scope);
-    current_scope = scope.outer;
+    current_scope = scope.getOuter();
   }
 
   public final void pop ()
@@ -2554,13 +2596,35 @@ public class Compilation implements SourceLocator
    * It is used to ensure that we can inherit from classes defined when in
    * immediate mode (in Scheme using define-class or similar).
    */
-  public void usedClass (Type type)
-  {
-    while (type instanceof ArrayType)
-      type = ((ArrayType) type).getComponentType();
-    if (immediate && type instanceof ClassType)
-      loader.addClass((ClassType) type);
-  }
+    public void usedClass(Type type) {
+        while (type instanceof ArrayType)
+            type = ((ArrayType) type).getComponentType();
+        if (immediate && type instanceof ClassType) {
+            ClassType cl = (ClassType) type;
+            for (;;) {
+                loader.addClass(cl);
+                ClassType enc = cl.getDeclaringClass();
+                if (enc == null)
+                    break;
+                cl = enc;
+            }
+        }
+    }
+
+    /** Set module name - which sets name of generated class. */
+    public void setModuleName(String name) {
+        getModule().setName(name);
+    }
+
+    /** Generate and set unique module name suitable for an interactive session. */
+    public void setInteractiveName() {
+        setModuleName(ModuleManager.getInstance().getNewInteractiveName());
+    }
+
+    /** Generate and set unique module name suitable for a call to eval. */
+    public void setEvalName() {
+        setModuleName(ModuleManager.getInstance().getNewEvalName());
+    }
 
   public SourceMessages getMessages() { return messages; }
   public void setMessages (SourceMessages messages)
@@ -2597,7 +2661,7 @@ public class Compilation implements SourceLocator
   }
 
   public void error(char severity, String message,
-                    String code, Declaration decl)
+                    String code, SourceLocator decl)
   {
     if (severity == 'w' && warnAsError())
       severity = 'e';
@@ -2620,7 +2684,7 @@ public class Compilation implements SourceLocator
    * @param message an error message to print out
    * @return an ErrorExp
    */
-  public Expression syntaxError (String message)
+  public ErrorExp syntaxError (String message)
   {
     error('e', message);
     return new ErrorExp (message);
@@ -2656,123 +2720,149 @@ public class Compilation implements SourceLocator
 
   public void letStart ()
   {
-    pushScope(new LetExp(null));
+    pushScope(new LetExp());
   }
 
   public Declaration letVariable (Object name, Type type, Expression init)
   {
-    LetExp let = (LetExp) current_scope;
-    Declaration decl = let.addDeclaration(name, type);
-    decl.noteValue(init);
+    Declaration decl = new Declaration(name, type);
+    letVariable(decl, init);
     return decl;
+  }
+
+  public void letVariable (Declaration decl, Expression init)
+  {
+    LetExp let = (LetExp) current_scope;
+    let.add(decl);
+    decl.setInitValue(init);
   }
 
   public void letEnter ()
   {
     LetExp let = (LetExp) current_scope;
-    int ndecls = let.countDecls();
-    Expression[] inits = new Expression[ndecls];
-    int i = 0;
+    // Set a flag which letDone uses to check if letEnter has been called.
+    let.setFlag(Expression.VALIDATED);
     for (Declaration decl = let.firstDecl();
-	 decl != null;
-	 decl = decl.nextDecl())
-      inits[i++] = decl.getValue();
-    let.inits = inits;
+	 decl != null;  decl = decl.nextDecl())
+      {
+        Expression init = decl.getInitValue();
+        if (init != QuoteExp.undefined_exp)
+          decl.noteValueFromLet(let);
+      }
     lexical.push(let);
   }
 
   public LetExp letDone (Expression body)
   {
     LetExp let = (LetExp) current_scope;
+    // Check if letEnter has been called.
+    if (! let.getFlag(Expression.VALIDATED))
+      letEnter();
+    let.setFlag(false, Expression.VALIDATED);
     let.body = body;
     pop(let);
     return let;
   }
 
-  private void checkLoop()
-  {
-    if (((LambdaExp) current_scope).getName() != "%do%loop")
-      throw new Error("internal error - bad loop state");
-  }
+    private void checkLoop() {
+        if (((LambdaExp) current_scope).getName() != "%do%loop")
+            throw new Error("internal error - bad loop state");
+    }
 
-  /** Start a new loop.
-   * (We could make this implied by the first loopVaribale call ???) */
-  public void loopStart()
-  {
-    LambdaExp loopLambda = new LambdaExp();
-    Expression[] inits = { loopLambda };
-    LetExp let = new LetExp(inits);
-    String fname = "%do%loop";
-    Declaration fdecl = let.addDeclaration(fname);
-    fdecl.noteValue(loopLambda);
-    loopLambda.setName(fname);
-    let.outer = current_scope;
-    loopLambda.outer = let;
-    current_scope = loopLambda;
-  }
+    /** Start a new loop.
+     * This provides the functionality of Scheme 'named let'. 
+     */
+    public LambdaExp loopStart() {
+        if (exprStack == null)
+            exprStack = new Stack<Expression>();
+        LambdaExp loopLambda = new LambdaExp();
+        LetExp let = new LetExp();
+        String fname = "%do%loop";
+        Declaration fdecl = let.addDeclaration(fname);
+        fdecl.setInitValue(loopLambda);
+        fdecl.noteValueFromLet(let);
+        loopLambda.setName(fname);
+        let.setOuter(current_scope);
+        loopLambda.setOuter(let);
+        current_scope = loopLambda;
+        return loopLambda;
+    }
 
-  public Declaration loopVariable(Object name, Type type, Expression init)
-  {
-    checkLoop();
-    LambdaExp loopLambda = (LambdaExp) current_scope;
-    Declaration decl = loopLambda.addDeclaration(name, type);
-    if (exprStack == null)
-      exprStack = new Stack<Expression>();
-    exprStack.push(init);
-    loopLambda.min_args++;
-    return decl;
-  }
+    /** Add a new loop variable, with initializer. */
+    public Declaration loopVariable(Object name, Type type, Expression init) {
+        checkLoop();
+        LambdaExp loopLambda = (LambdaExp) current_scope;
+        Declaration decl = loopLambda.addDeclaration(name, type);
+        exprStack.push(init);
+        loopLambda.min_args++;
+        return decl;
+    }
 
-  /** Done handling loop variables, and pushes them into the lexical scope.
-   * Ready to parse the loop condition. */ 
-  public void loopEnter ()
-  {
-    checkLoop();
-    LambdaExp loopLambda = (LambdaExp) current_scope;
-    int ninits = loopLambda.min_args;
-    loopLambda.max_args = ninits;
-    Expression[] inits = new Expression[ninits];
-    for (int i = ninits;  --i >= 0; )
-      inits[i] = (Expression) exprStack.pop();
-    LetExp let = (LetExp) loopLambda.outer;
-    Declaration fdecl = let.firstDecl();  // The decls for loopLambda.
-    let.setBody(new ApplyExp(new ReferenceExp(fdecl), inits));
-    lexical.push(loopLambda);
-  }
-  public void loopCond(Expression cond)
-  {
-    checkLoop();
-    exprStack.push(cond);
-  }
-  public void loopBody(Expression body)
-  {
-    LambdaExp loopLambda = (LambdaExp) current_scope;
-    loopLambda.body = body;
-  }
-  public Expression loopRepeat(Expression[] exps)
-  {
-    LambdaExp loopLambda = (LambdaExp) current_scope;
-    ScopeExp let = loopLambda.outer;
-    Declaration fdecl = let.firstDecl();  // The decls for loopLambda.
-    Expression cond = (Expression) exprStack.pop();
-    Expression recurse = new ApplyExp(new ReferenceExp(fdecl), exps);
-    loopLambda.body = new IfExp(cond,
-				new BeginExp(loopLambda.body, recurse),
-				QuoteExp.voidExp);
-    lexical.pop(loopLambda);
-    current_scope = let.outer;
-    return let;
-  }
+    /** Done handling loop variables, and pushes them into the lexical scope.
+     * Ready to parse the loop condition.
+     */ 
+    public void loopEnter() {
+        checkLoop();
+        LambdaExp loopLambda = (LambdaExp) current_scope;
+        int ninits = loopLambda.min_args;
+        loopLambda.max_args = ninits;
+        Expression[] inits = new Expression[ninits];
+        for (int i = ninits;  --i >= 0; )
+            inits[i] = (Expression) exprStack.pop();
+        LetExp let = (LetExp) loopLambda.getOuter();
+        Declaration fdecl = let.firstDecl();  // The decls for loopLambda.
+        let.setBody(new ApplyExp(new ReferenceExp(fdecl), inits));
+        lexical.push(loopLambda);
+    }
 
-  public Expression loopRepeat ()
-  {
-    return loopRepeat(Expression.noExpressions);
-  }
+    @Deprecated
+    public void loopCond(Expression cond) {
+        checkLoop();
+        exprStack.push(cond);
+    }
 
-  public Expression loopRepeat (Expression exp)
+    @Deprecated
+    public void loopBody(Expression body) {
+        LambdaExp loopLambda = (LambdaExp) current_scope;
+        loopLambda.body = body;
+    }
+
+    /** Recurse to next iteration of specified loop. */
+    public Expression loopRepeat(LambdaExp loop, Expression... exps) {
+        ScopeExp let = loop.getOuter();
+        Declaration fdecl = let.firstDecl();  // The decls for loopLambda.
+        return new ApplyExp(new ReferenceExp(fdecl), exps);
+    }
+
+    /** Finish building a loop and return resulting expression. */
+    public Expression loopDone(Expression body) {
+        LambdaExp loopLambda = (LambdaExp) current_scope;
+        ScopeExp let = loopLambda.getOuter();
+        loopLambda.body = body;
+        lexical.pop(loopLambda);
+        current_scope = let.getOuter();
+        return let;
+    }
+
+    /** Combine loopRepeat and loopDone.
+     * Assume loopCond and loopBody have been called.
+     */
+    public Expression loopRepeatDone(Expression... exps) {
+        LambdaExp loopLambda = (LambdaExp) current_scope;
+        ScopeExp let = loopLambda.getOuter();
+        Expression cond = (Expression) exprStack.pop();
+        Expression recurse = loopRepeat(loopLambda, exps);
+        loopLambda.body = new IfExp(cond,
+                                    new BeginExp(loopLambda.body, recurse),
+                                    QuoteExp.voidExp);
+        lexical.pop(loopLambda);
+        current_scope = let.getOuter();
+        return let;
+    }
+
+  public QuoteExp makeQuoteExp (Object value)
   {
-    Expression[] args = { exp };
-    return loopRepeat(args);
+    return QuoteExp.getInstance(value, this);
   }
 
   /**
@@ -2786,20 +2876,19 @@ public class Compilation implements SourceLocator
     Expression[] exps = new Expression[2];
     exps[0] = type;
     exps[1] = value;
-    QuoteExp c = new QuoteExp(Convert.getInstance());
+    QuoteExp c = new QuoteExp(Convert.cast);
     return new ApplyExp(c, exps);
   }
 
-  /**
-   * Convenience method to make an Expression that coerces a value.
-   * @param value to be coerced
-   * @param type to coerce value to
-   * @return expression that coerces value to type
-   */
-  public static Expression makeCoercion(Expression value, Type type)
-  {
-    return makeCoercion(value, new QuoteExp(type));
-  }
+    /**
+     * Convenience method to make an Expression that coerces a value.
+     * @param value to be coerced
+     * @param type to coerce value to
+     * @return expression that coerces value to type
+     */
+    public static ApplyExp makeCoercion(Expression value, Type type) {
+        return makeCoercion(value, new QuoteExp(type));
+    }
 
   /** If non-null, a helper method generated by getForNameHelper. */
   Method forNameHelper;
@@ -2863,9 +2952,11 @@ public class Compilation implements SourceLocator
     return forNameHelper;
   }
 
+    public Environment getGlobalEnvironment() { return Environment.getCurrent(); }
+
   public Object resolve(Object name, boolean function)
   {
-    Environment env = Environment.getCurrent();
+    Environment env = getGlobalEnvironment();
     Symbol symbol;
     if (name instanceof String)
       symbol = env.defaultNamespace().lookup((String) name);
@@ -2920,7 +3011,7 @@ public class Compilation implements SourceLocator
       }
     catch (Throwable ex)
       {
-        throw new WrappedException("internal error", ex);
+        WrappedException.rethrow(ex);
       }
   }
 
@@ -2995,4 +3086,8 @@ public class Compilation implements SourceLocator
   {
     return "<compilation "+mainLambda+">";
   }
+
+    public ModuleInfo getMinfo() {
+        return mainLambda.info;
+    }
 }

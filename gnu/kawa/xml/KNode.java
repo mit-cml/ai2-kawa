@@ -2,15 +2,16 @@
 // This is free software;  for terms and warranty disclaimer see ./COPYING.
 
 package gnu.kawa.xml;
+import gnu.kawa.io.CharArrayOutPort;
+import gnu.kawa.io.Path;
 import gnu.lists.*;
 import gnu.xml.*;
 /* #ifdef use:org.w3c.dom.Node */
 import org.w3c.dom.*;
 /* #endif */
 import gnu.mapping.*;
-import gnu.text.Path;
 
-public abstract class KNode extends SeqPosition
+public abstract class KNode extends SeqPosition<Object,NodeTree>
   implements
   /* #ifdef use:org.w3c.dom.Node */
   org.w3c.dom.Node,
@@ -62,9 +63,9 @@ public abstract class KNode extends SeqPosition
         index += TreeList.BEGIN_ENTITY_SIZE;
         if (index == seq.gapStart)
           index = seq.gapEnd;
-        ipos = index << 1;
       }
-    int kind = seq.getNextKindI(seq.posToDataIndex(ipos));
+    ipos = index << 1;
+    int kind = seq.getNextKindI(index);
     switch (kind)
       {
       case Sequence.ELEMENT_VALUE:
@@ -444,7 +445,7 @@ public abstract class KNode extends SeqPosition
   public void consume(Consumer out)
   {
     if (out instanceof PositionConsumer)
-      ((PositionConsumer) out).consume(this);
+      ((PositionConsumer) out).writePosition(this);
     else
       ((NodeTree) sequence).consumeNext(ipos, out);
   }

@@ -1,13 +1,50 @@
-(require <kawa.lib.prim_syntax>)
-
 ;;; Definitions for some standard syntax.
 
-(module-export cond case and or let let* do delay
-	       syntax-object->datum datum->syntax-object with-syntax
-	       begin-for-syntax define-for-syntax
+(module-export cond and or let let* do delay lazy delay-force
+               else ... => _ else unquote unquote-splicing
+               syntax->datum datum->syntax with-syntax
+	       syntax-object->datum datum->syntax-object ; deprecated
 	       generate-temporaries define-procedure
-	       identifier? free-identifier=?
+	       identifier? free-identifier=? bound-identifier=?
 	       syntax-source syntax-line syntax-column)
+
+(require <kawa.lib.prim_syntax>)
+
+(import (rename (only (kawa standard let) let) (let %let)))
+(import (rename (only (kawa standard define) defineRaw) (defineRaw %define)))
+(import (only (kawa standard SchemeCompilation) lambda))
+(import (only (kawa standard Scheme) not))
+(import (only (kawa standard begin) begin))
+
+(define-syntax =>
+  (syntax-rules ()
+    ((_ . rest)
+     (syntax-error "invalid use of '=>"))))
+
+(define-syntax ...
+  (syntax-rules ()
+    ((_ . rest)
+     (syntax-error "invalid use of '..."))))
+
+(define-syntax _
+  (syntax-rules ()
+    ((_ . rest)
+     (syntax-error "invalid use of '_"))))
+
+(define-syntax else
+  (syntax-rules ()
+    ((_ . rest)
+     (syntax-error "invalid use of 'else"))))
+
+(define-syntax unquote
+  (syntax-rules ()
+    ((_ . rest)
+     (syntax-error "invalid use of 'unquote"))))
+
+(define-syntax unquote-splicing
+  (syntax-rules ()
+    ((_ . rest)
+     (syntax-error "invalid use of 'unquote-splicing"))))
 
 ;;; COND
 
@@ -18,7 +55,7 @@
 		 (begin result1 result2 ...))
 
 		((cond (else result1 result2 ...) clause1 ...)
-		 (%syntax-error "else clause must be last clause of cond"))
+		 (syntax-error "else clause must be last clause of cond"))
 
 		((cond (test => result))
 		 (%let ((temp test))
@@ -44,37 +81,6 @@
 		     (begin result1 result2 ...)
 		     (cond clause1 clause2 ...)))))
 
-;;; CASE
-
-(define-syntax case (syntax-rules ()
-				  ((case key clauses ...)
-				   (%let ((tmp key))
-				     (%case tmp clauses ...)))))
-
-(define-syntax %case (syntax-rules (else)
-				   ((%case key (else expression ...))
-				    (begin expression ...))
-				   ((%case key (else expression ...) . junk)
-				    (%syntax-error
-				     "junk following else (in case)"))
-				   ((%case key
-					   ((datum ...) expression ...))
-				    (if (%case-match key datum ...)
-					(begin expression ...)))
-				   ((%case key
-					   ((datum ...) expression ...)
-					   clause more ...)
-				    (if (%case-match key datum ...)
-					(begin expression ...)
-					(%case key clause more ...)))))
-					  
-(define-syntax %case-match (syntax-rules ()
-					 ((%case-match key datum)
-					  (eqv? key (quote datum)))
-					 ((%case-match key datum more ...)
-					  (or (eqv? key 'datum)
-					      (%case-match key more ...)))))
-
 (define-syntax %lang-boolean
   (syntax-rules ()
     ((%lang-boolean value)
@@ -87,18 +93,18 @@
 
 (define-syntax (and f)
   (syntax-case f ()
-	       ((and) (%lang-boolean #t))
-	       ((and test) (syntax test))
-	       ((and test1 test2 ...)
-		(syntax (%let ((x test1))
-			  (if x (and test2 ...) x))))))
+	       ((_) (%lang-boolean #t))
+	       ((_ test) (syntax test))
+	       ((_ test1 . test2)
+		#`(%let ((x test1))
+			  (if x (and . test2) x)))))
 ;;; OR
 
 (define-syntax (or f)
   (syntax-case f ()
-	       ((or) (%lang-boolean #f))
-	       ((or test) (syntax test))
-	       ((or test1 test2 ...)
+	       ((_) (%lang-boolean #f))
+	       ((_ test) (syntax test))
+	       ((_ test1 test2 ...)
 		(syntax (%let ((x test1))
 			  (if x x (or test2 ...)))))))
 
@@ -132,9 +138,9 @@
 		((%let-init (var type init))
 		 init)
 		((%let-init (var))
-		 (%syntax-error "let binding with no value"))
+		 (syntax-error "let binding with no value"))
 		((%let-init (var a b c))
-		 (%syntax-error
+		 (syntax-error
 		  "let binding must have syntax: (var [type] init)"))))
 
 (define-syntax let
@@ -162,10 +168,10 @@
      (%let (var-init)
 	   (let* bindings . body)))
     ((let* bindings . body)
-     (%syntax-error
+     (syntax-error
       "invalid bindings list in let*"))
     ((let* . body)
-     (%syntax-error
+     (syntax-error
       "missing bindings list in let*"))))
 
 ;;; DO
@@ -191,9 +197,9 @@
 		((%do-init (var type init))
 		 init)
 		((%do-init (var))
-		 (%syntax-error "do binding with no value"))
+		 (syntax-error "do binding with no value"))
 		((%do-init (var a b c))
-		 (%syntax-error
+		 (syntax-error
 		  "do binding must have syntax: (var [:: type] init [step])"))))
 
 (define-syntax %do-lambda1
@@ -234,26 +240,43 @@
 
 ;;; DELAY
 
-(define-syntax delay (syntax-rules ()
-				   ((delay expression)
-				    (make <kawa.lang.Promise> (lambda () expression)))))
+;; See racket-5.2/collects/racket/private/promise.rkt
+;; See SRFI-45
+
+(define-syntax (lazy form)
+  (syntax-case form ()
+    ((_ expression)
+     (gnu.expr.ApplyExp gnu.kawa.functions.MakePromise:makeLazy
+                        (syntax->expression #'(lambda () expression))))))
+
+(define-syntax (delay-force form)
+  (syntax-case form ()
+    ((_ expression)
+     (gnu.expr.ApplyExp gnu.kawa.functions.MakePromise:makeLazy
+                        (syntax->expression #'(lambda () expression))))))
+
+(define-syntax (delay form)
+  (syntax-case form ()
+    ((delay expression)
+     (gnu.expr.ApplyExp gnu.kawa.functions.MakePromise:makeDelay
+                        (syntax->expression #'(lambda () expression))))))
 
 (define-syntax define-procedure
-  (syntax-rules (:: <gnu.expr.GenericProc>)
-		((define-procedure name args ...)
-		 (begin
-		   ;; The GenericProc has to be allocated at init time, for
-		   ;; the sake of require, while the actual properties may
-		   ;; need to be evaluated at module-run-time.
-		   (define-constant name :: <gnu.expr.GenericProc>
-		     (make <gnu.expr.GenericProc> 'name))
-		   (invoke name 'setProperties (java.lang.Object[] args ...))))))
+   (syntax-rules ()
+     ((_ name . rest)
+      (%define name 27 gnu.expr.GenericProc . rest))))
 
-(define (syntax-object->datum obj)
+(define (syntax->datum obj)
   (kawa.lang.Quote:quote obj))
 
+(define (syntax-object->datum obj)
+  (syntax->datum obj))
+
+(define (datum->syntax template-identifier obj #!optional (srcloc #!null))
+  (kawa.lang.SyntaxForms:makeWithTemplate template-identifier obj srcloc))
+
 (define (datum->syntax-object template-identifier obj)
-  (kawa.lang.SyntaxForms:makeWithTemplate template-identifier obj))
+  (datum->syntax template-identifier obj))
 
 (define (generate-temporaries list)
   (let loop ((n (kawa.lang.Translator:listLength list)) (lst '()))
@@ -266,7 +289,18 @@
 	   (kawa.lang.SyntaxForms:isIdentifier form))))
 
 (define (free-identifier=? id1 id2) :: <boolean>
-  (kawa.lang.SyntaxForms:freeIdentifierEquals id1 id2))
+  (if (and (identifier? id1) (identifier? id2))
+      (kawa.lang.SyntaxForms:identifierEquals id1 id2 #f)
+      (report-syntax-error
+       (if (identifier? id1) id2 id1)
+       "free-identifier-? - argument is not an identifier")))
+
+(define (bound-identifier=? id1 id2) :: <boolean>
+  (if (and (identifier? id1) (identifier? id2))
+      (kawa.lang.SyntaxForms:identifierEquals id1 id2 #t)
+      (report-syntax-error
+       (if (identifier? id1) id2 id1)
+       "bound-identifier-? - argument is not an identifier")))
 
 (define (syntax-source form)
   (cond ((instance? form kawa.lang.SyntaxForm)
@@ -293,19 +327,6 @@
 	 (- ((as gnu.lists.PairWithPosition form):getColumnNumber) 0))
 	(else
 	 #f)))
-
-(define-syntax begin-for-syntax
-  (lambda (form)
-    (syntax-case form ()
-      ((begin-for-syntax . body)
-       (eval (syntax-object->datum (gnu.lists.Pair 'begin (syntax body))))
-       (syntax #!void)))))
-
-(define-syntax define-for-syntax
-  (syntax-rules ()
-    ((define-for-syntax . rest)
-     (begin-for-syntax
-      (define . rest)))))
 
 ;;; The definition of include is based on that in the portable implementation
 ;;; of syntax-case psyntax.ss, whixh is again based on Chez Scheme.

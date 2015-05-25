@@ -10,14 +10,7 @@ import java.io.*;
  */
 
 public class FString extends SimpleVector
-  implements
-  /* #ifdef JAVA2 */
-  Comparable,
-  /* #endif */
-  /* #ifdef JAVA5 */
-  Appendable,
-  /* #endif */
-  CharSeq, Externalizable, Consumable
+  implements Comparable, Appendable, CharSeq, Externalizable, Consumable
 {
   public char[] data;
   protected static char[] empty = new char[0];
@@ -33,14 +26,27 @@ public class FString extends SimpleVector
     data = new char[num];
   }
 
-  public FString (int num, char value)
-  {
-    char[] array = new char[num];
-    data = array;
-    size = num;
-    while (--num >= 0)
-      array[num] = value;
-  }
+    public FString(int num, int value) {
+        char c1, c2;
+        int len;
+        if (value >= 0x10000) {
+            c1 = (char) (((value - 0x10000) >> 10) + 0xD800);
+            c2 = (char) ((value & 0x3FF) + 0xDC00);
+            len = 2 * num;
+        } else {
+            c1 = (char) value;
+            c2 = 0;
+            len = num;
+        }
+        char[] array = new char[len];
+        data = array;
+        size = len;
+        for (int i = 0;  i < len;  ) {
+            array[i++] = c1;
+            if (c2 != 0)
+                array[i++] = c2;
+        }
+    }
 
   /** Create an FString from a char[].
    * Note that this contructor does *not* copy the argument. */
@@ -56,18 +62,27 @@ public class FString extends SimpleVector
     size = data.length;
   }
 
-  public FString (StringBuffer buffer)
-  {
-    this(buffer, 0, buffer.length());
-  }
+    public FString (StringBuilder buffer) {
+        this(buffer, 0, buffer.length());
+    }
 
-  public FString (StringBuffer buffer, int offset, int length)
-  {
-    this.size = length;
-    data = new char[length];
-    if (length > 0)
-      buffer.getChars (offset, offset+length, data, 0);
-  }
+    public FString (StringBuilder buffer, int offset, int length) {
+        this.size = length;
+        data = new char[length];
+        if (length > 0)
+            buffer.getChars(offset, offset+length, data, 0);
+    }
+
+    public FString (StringBuffer buffer) {
+        this(buffer, 0, buffer.length());
+    }
+
+    public FString (StringBuffer buffer, int offset, int length) {
+        this.size = length;
+        data = new char[length];
+        if (length > 0)
+            buffer.getChars (offset, offset+length, data, 0);
+    }
 
   public FString (char[] buffer, int offset, int length)
   {
@@ -82,34 +97,30 @@ public class FString extends SimpleVector
     addAll(seq);
   }
 
-  public FString(CharSeq seq)
-  {
-    this(seq, 0, seq.size());
-  }
+    public FString(CharSequence seq) {
+        this(seq, 0, seq.length());
+    }
 
-  public FString(CharSeq seq, int offset, int length)
-  {
-    char[] data = new char[length];
-    seq.getChars(offset, offset+length, data, 0);
-    this.data = data;
-    this.size = length;
-  }
+    public FString(CharSequence seq, int offset, int length) {
+        char[] data = new char[length];
+        if (seq instanceof CharSeq)
+            ((CharSeq) seq).getChars(offset, offset+length, data, 0);
+        else if (seq instanceof String)
+            ((String) seq).getChars(offset, offset+length, data, 0);
+        else {
+            for (int i = length; --i >= 0; )
+                data[i] = seq.charAt(offset+i);
+        }
+        this.data = data;
+        this.size = length;
+    }
 
-  /* #ifdef use:java.lang.CharSequence */
-  public FString (CharSequence seq)
-  {
-    this(seq, 0, seq.length());
-  }
-
-  public FString(CharSequence seq, int offset, int length)
-  {
-    char[] data = new char[length];
-    for (int i = length; --i >= 0; )
-      data[i] = seq.charAt(offset+i);
-    this.data = data;
-    this.size = length;
-  }
-  /* #endif */
+    /** Create a empty string, but with a given initial buffer size. */
+    public static FString alloc(int sz) {
+        FString str = new FString(sz);
+        str.size = 0;
+        return str;
+    }
 
   public int length() { return size; }
 
@@ -136,7 +147,7 @@ public class FString extends SimpleVector
     if (sz > data.length)
       {
         char[] d = new char[sz < 60 ? 120 : 2 * sz];
-        System.arraycopy(data, 0, d, 0, sz);
+        System.arraycopy(data, 0, d, 0, size);
         data = d;
       }
   }
@@ -148,11 +159,10 @@ public class FString extends SimpleVector
     return Convert.toObject(data[index]);
   }
 
-  public final Object setBuffer(int index, Object value)
+  @Override
+  public final void setBuffer(int index, Object value)
   {
-    Object old = Convert.toObject(data[index]);
     data[index] = Convert.toChar(value);
-    return old;
   }
 
   public final Object get (int index)
@@ -287,7 +297,7 @@ public class FString extends SimpleVector
   /* #endif */
 
   /** Append arguments to this FString.
-   * Used to implement Scheme's string-append and string-append/shared.
+   * Used to implement Scheme's string-append.
    * @param args an array of FString value
    * @param startIndex index of first string in <code>args</code> to use
    */
@@ -346,6 +356,66 @@ public class FString extends SimpleVector
       throw new StringIndexOutOfBoundsException(index);
     data[index] = ch;
   }
+
+    public void setCharacterAt(int index, int ch) {
+        if (index < 0 || index >= size)
+            throw new StringIndexOutOfBoundsException(index);
+        char old1 = data[index];
+        char old2;
+        boolean oldIsSupp = old1 >= 0xD800 && old1 <= 0xDBFF
+            && index+1 < size
+            && (old2 = data[index+1]) >= 0xDC00 && old2 <= 0xDFFF;
+        if (ch <= 0xFFFF) {
+            if (oldIsSupp) {
+                System.arraycopy(data, index+2, data, index+1, size-index-2);
+                size--;
+            }
+            data[index] = (char) ch;
+        } else {
+            char c1 = (char) (((ch - 0x10000) >> 10) + 0xD800);
+            char c2 = (char) ((ch & 0x3FF) + 0xDC00);
+            if (!oldIsSupp) {
+                ensureBufferLength(size+1);
+                System.arraycopy(data, index+1, data, index+2, size-index-1);
+                size++;
+            }
+            data[index] = c1;
+            data[index+1] = c2;
+        }
+    }
+
+    /** Replace a substring of this string with another.
+     * The two strings may have different lengths, so this
+     * generalizes insertion and deletion.
+     */
+    public void replace(CharSequence src, int srcStart, int srcEnd,
+                        int dstStart, int dstEnd) {
+        if (dstStart < 0 || dstStart > dstEnd || dstEnd > size
+            || srcStart < 0 || srcStart > srcEnd || srcEnd > src.length())
+            throw new StringIndexOutOfBoundsException();
+        int srcLength = srcEnd - srcStart;
+        int dstLength = dstEnd - dstStart;
+        int grow = srcLength - dstLength;
+        if (grow != 0) {
+            if (grow > 0)
+                ensureBufferLength(size + grow);
+            System.arraycopy(data, dstEnd, data, dstEnd+grow, size-dstEnd);
+            size += grow;
+        }
+        if (dstStart <= srcStart) {
+            int i = dstStart;
+            int j = srcStart;
+            for (; j < srcEnd; i++, j++) {
+                data[i] = src.charAt(j);
+            }
+        } else {
+            int i = dstEnd + grow;
+            int j = srcEnd;
+            while (--j >= srcStart) {
+                data[--i] = src.charAt(j);
+            }
+        }
+    }
 
   public void setCharAtBuffer (int index, char ch)
   {
@@ -444,15 +514,6 @@ public class FString extends SimpleVector
     out.write(data, 0, data.length);
   }
 
-  public boolean consumeNext (int ipos, Consumer out)
-  {
-    int index = ipos >>> 1;
-    if (index >= size)
-      return false;
-    out.write(data[index]);
-    return true;
-  }
-
   public void consumePosRange (int iposStart, int iposEnd, Consumer out)
   {
     if (out.ignoring())
@@ -476,7 +537,22 @@ public class FString extends SimpleVector
     return this;
   }
 
-  /* #ifdef use:java.lang.CharSequence */
+    /** Append a Unicode code point. */
+    public FString appendCharacter(int c) {
+        int sz = size;
+        int delta = c >= 0x10000 ? 2 : 1;
+        if (sz + delta > data.length)
+            ensureBufferLength(sz+delta);
+        char[] d = data;
+        if (delta > 1) {
+            d[sz++] = (char) (((c - 0x10000) >> 10) + 0xD800);
+            c = (c & 0x3FF) + 0xDC00;
+        }
+        d[sz++] = (char) c;
+        size = sz;
+        return this;
+    }
+
   public FString append (CharSequence csq)
   {
     if (csq == null)
@@ -503,21 +579,20 @@ public class FString extends SimpleVector
         for (int i = start; i < end;  i++)
           d[j++] = csq.charAt(i);;
       }
-    size = sz;
+    size = sz+len;
     return this;
   }
-  /* #else */
-  // public FString append (String str)
-  // {
-  //   int len = str.length();
-  //   ensureBufferLength(size+len);
-  //   str.getChars(0, len, data, size);
-  //   size += len;
-  //   return this;
-  // }
-  /* #endif */
 
-  /* #ifdef JAVA5 */
+    public FString append(Object obj) {
+        if (obj instanceof gnu.text.Char)
+            appendCharacter(((gnu.text.Char) obj).intValue());
+        else if (obj instanceof java.lang.Character)
+            appendCharacter(((java.lang.Character) obj).charValue());
+        else
+            append(obj.toString());
+        return this;
+    }
+
   public void writeTo(int start, int count, Appendable dest)
      throws java.io.IOException
   {
@@ -542,18 +617,6 @@ public class FString extends SimpleVector
   {
     writeTo(0, size, dest);
   }
-  /* #else */
-  // public void writeTo(int start, int count, java.io.Writer dest)
-  //   throws java.io.IOException
-  // {
-  //   dest.write(data, start, count);
-  // }
-
-  // public void writeTo(java.io.Writer dest) throws java.io.IOException
-  // {
-  //   dest.write(data, 0, size);
-  // }
-  /* #endif */
 
   /**
    * @serialData Write 'size' (using writeInt),

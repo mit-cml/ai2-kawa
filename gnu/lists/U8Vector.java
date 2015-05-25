@@ -40,6 +40,30 @@ public class U8Vector extends ByteVector
     addAll(seq);
   }
 
+  /** Copy constructor. */
+  public U8Vector(U8Vector seq)
+  {
+    size = seq.size;
+    data = new byte[size];
+    System.arraycopy(seq.data, 0, data, 0, size);
+  }
+
+  public U8Vector(U8Vector seq, int offset, int length)
+  {
+    size = length;
+    data = new byte[length];
+    if (offset + length > seq.size)
+      throw new IndexOutOfBoundsException();
+    System.arraycopy(seq.data, offset, data, 0, length);
+  }
+
+  public U8Vector(byte[] buffer, int offset, int length)
+  {
+    size = length;
+    data = new byte[length];
+    System.arraycopy(buffer, offset, data, 0, length);
+  }
+
   public final int intAtBuffer(int index)
   {
     return data[index] & 0xff;
@@ -57,11 +81,10 @@ public class U8Vector extends ByteVector
     return Convert.toObjectUnsigned(data[index]);
   }
 
-  public Object setBuffer(int index, Object value)
+  @Override
+  public void setBuffer(int index, Object value)
   {
-    byte old = data[index];
     data[index] = Convert.toByteUnsigned(value);
-    return Convert.toObjectUnsigned(old);
   }
 
   public int getElementKind()
@@ -74,5 +97,19 @@ public class U8Vector extends ByteVector
   public int compareTo(Object obj)
   {
     return compareToInt(this, (U8Vector) obj);
+  }
+
+    /** Covert bytes, interpreted as UTF-8 characters, to a String. */
+    public String toUtf8(int start, int length) {
+      if (start+length>size) throw new IndexOutOfBoundsException();
+      /* #ifdef JAVA7 */  
+      return new String(data, start, length, java.nio.charset.StandardCharsets.UTF_8);
+      /* #else */
+      // try {
+      //   return new String(data, start, length, "UTF-8");
+      // } catch (UnsupportedEncodingException ex) {
+      //     throw new RuntimeException(ex);
+      // }
+      /* #endif */
   }
 }

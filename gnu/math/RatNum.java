@@ -11,6 +11,11 @@ public abstract class RatNum extends RealNum
   public abstract IntNum numerator ();
   public abstract IntNum denominator ();
 
+    @Override
+    public int classifyFinite() {
+        return ! denominator().isZero() ? 1 : numerator().isZero() ? -1 : 0;
+    }
+
   public static RatNum make(IntNum num, IntNum den)
   {
     IntNum g = IntNum.gcd (num, den);
@@ -82,10 +87,20 @@ public abstract class RatNum extends RealNum
     return new IntFraction (IntNum.make(sign), IntNum.zero());
   }
 
-  public static int compare (RatNum x, RatNum y)
-  {
-    return IntNum.compare (IntNum.times (x.numerator (), y.denominator ()),
-			   IntNum.times (y.numerator (), x.denominator ()));
+    public static int compare(RatNum x, RatNum y) {
+        IntNum xn = x.numerator( );
+        IntNum xd = x.denominator();
+        IntNum yn = y.numerator();
+        IntNum yd = y.denominator();
+        IntNum left, right;
+        if (xd.isZero() && yd.isZero()) {
+            left = xn;
+            right = yn;
+        } else {
+            left = IntNum.times(xn, yd);
+            right = IntNum.times(yn, xd);
+        }
+    return IntNum.compare (left, right);
   }
 
   /* Assumes x and y are both canonicalized. */

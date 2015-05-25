@@ -1,3 +1,469 @@
+2014-12-02  Per Bothner  <per@bothner.com>
+
+	* ClassType.java (getAllInterfaces): New method.
+	(getMethods, getMethod): Use getAllInterfaces.
+
+2014-11-20  Per Bothner  <per@bothner.com>
+
+	* SwitchState.java (finish): Don't define after_label if nothing
+	reaches it.
+
+2014-11-03  Per Bothner  <per@bothner.com>
+
+	* CodeAttr.java (disAssemble): Handle invoke dynamic.
+	* CpoolInvokeDynamic.java (print): Remove excess space.
+
+2014-08-28  Per Bothner  <per@bothner.com>
+
+	* Type.java (isCompatibleWithValue): Change interpretation of return
+	value so 2 means no run-time conversion/check needed.
+	* ClassType.java (isCompatibleWithValue): New overload.
+	* ArrayType.java (isCompatibleWithValue): New overload.
+	* TypeVariable.java (isCompatibleWithValue): New overload.
+
+2014-08-27  Per Bothner  <per@bothner.com>
+
+	* ClassType.java (isSubclass, compare): Since toStringType is no
+	longer a ClassType, remove some dead code.
+
+2014-08-21  Per Bothner  <per@bothner.com>
+
+	* SwitchState.java (finish): Update, since defaultLabel is
+	now allocated in constructor.
+
+2014-08-12  Andrea Bernardini <andrebask@gmail.com>
+
+        * SwitchState.java (finish): Add code to avoid
+	possible integer overflows.
+
+2014-08-11  Per Bothner  <per@bothner.com>
+
+	* Type.java (javalangCharacterType): New static field.
+
+2014-07-10  Andrea Bernardini <andrebask@gmail.com>
+
+        * SwitchState.java: code readability improvements.
+
+2014-07-29  Per Bothner  <per@bothner.com>
+
+	Add support for generating MethodHandle constant pool entries.
+	* CpoolMethodHandle.java: New constructor.
+	(hashCode, write): New methods.
+	* ConstantPool.java (addMethodHandle): New methdods.
+	* CodeAttr.java (emitPushMethodHandle): New method.
+	* Type.java (javalanginvokeMethodHandleType): New field.
+
+2014-07-27  Per Bothner  <per@bothner.com>
+
+	* SpecialObjectType.java: New class that extends ObjectType.
+	Some properties moved from gnu.kawa.lispexpr.LangObjType.
+	* Makefile.am: Update accordingly.
+	* ObjectType.java (getImplementationType): No longer needed.
+	* Type.java (nullType, toStringType): Now are SpecialObjectType.
+
+2014-07-10  Per Bothner  <per@bothner.com>
+
+	Fix for Savannah bug #42713: "MalformedParameterizedTypeException
+	thrown when compiling".  Actually 2 fixes: (1) Make the call
+	getGenericType lazy (2) don't addField if field is private.
+	* Location.java (type): Make private.
+	(getType): Make non-final.
+	* CodeAttr.java: Update accordingly.
+	* ClassTypeWriter.java: Likewise.
+	* Field.java (getType): New override.  If we have a reflect-field
+	and type is null, call getGenericType.
+	* ClassType.java (addField(java.lang.reflect.Field)): Inline.
+	(addFields): Inline here. Leave type as null for now,
+	Also skip if private.
+
+2014-06-30  Per Bothner  <per@bothner.com>
+
+	* PrimType.java (convertToRaw): New method.
+
+2014-06-25  Per Bothner  <per@bothner.com>
+
+	* Method.java (rmethod): Change type to AccessibleObject.
+
+2014-06-25  Per Bothner  <per@bothner.com>
+
+	* Field.java (getAnnotation): New method.
+	* Method.java (rmethod): New field.
+	(getAnnotation): New method.
+	* ClassType.java (AddField): New convenience method.
+	It also sets rfield.
+	(addField): Use it.
+	(addMethod): Set Method's rmethod field.
+	* RuntimeAnnotationsAttr.java (getAnnotation *2): New methods.
+
+	* ArrayType.java (getRawType): New method.
+
+2014-06-16  Per Bothner  <per@bothner.com>
+
+	* SwitchState.java: Various fixes, mainly becase fixupChain
+	doesn't attempt to manage and propagate type-states.
+
+2014-04-18  Per Bothner  <per@bothner.com>
+
+	* CodeAttr.java (disAssembleWithFixups): Fix some logic bugs,
+	most critically in handling of FIXUP_CASE.
+	(processFixups): Add commented-out call to disAssembleWithFixups.
+
+	Support new Java8 constant pool entry types.
+	* ConstantPool.java (METHOD_HANDLE, METHOD_TYPE, INVOKE_DYNAMIC,
+	ANY_REF): New constants.
+	(getForced): Handle new types.
+	* CpoolInvokeDynamic.java: New class, extends CpoolEntry.
+	* CpoolMethodHandle.java: New class, extends CpoolEntry.
+	* CpoolMethodType.java: New class, extends CpoolEntry.
+	* Makefile.am: Update accordingly.
+
+2014-03-01  Per Bothner  <per@bothner.com>
+
+	* Scope.java (fixParamNames): New method to rename parameter names.
+
+2014-02-17  Per Bothner  <per@bothner.com>
+
+	* ArrayClassLoader.java: Make sure Error is uncaught or re-thrown.
+	* ClassType.java: Likewise.
+
+2014-02-12  Per Bothner  <per@bothner.com>
+
+	* CodeAttr.java (emitAndThen): New method.
+	(pushIfState): New private convenience method.  Use as needed.
+	* IfState.java (andThenSet): New field.
+
+2013-12-29  Per Bothner  <per@bothner.com>
+
+	* CodeAttr.java (emitGotoIfNull, emitGotoIfNonNull): New methods.
+
+2013-12-02  Per Bothner  <per@bothner.com>
+
+	* CodeAttr.java (castNeeded): Force top-type to raw type.
+	This is needed for TypeVariable in addition to UninitializedType.
+
+2013-11-13  Per Bothner  <per@bothner.com>
+
+	* ObjectType.java (getReflectClass): Simplify since we can
+	now assume that Throwable#getCause is available.
+
+2013-11-07  Per Bothner  <per@bothner.com>
+
+	* ArrayClassLoader.java (loadClass): Fix logic error from change
+	made 2008-05-10.  Fixes bug reported by Charles Turner.
+
+2013-09-16  Per Bothner  <per@bothner.com>
+
+	* ClassType.java (JDK_1_8_VERSION): New constant.
+
+	* CodeAttr.java (emitNewArray): Fix logic error noted by
+	Charles Turner.
+
+2013-07-18  Per Bothner  <per@bothner.com>
+
+	* Variable.java (freeLocal): Avoid out-of-bounds indexing of
+	local_types array.  This fixes Savannah bug # 39151
+	"ArrayOutOfBoundsException in Variable.freeLocal".
+
+2013-07-11  Per Bothner  <per@bothner.com>
+
+	* CodeAttr.java (pushAutoPoppableScope): New method.
+	(popScope): Keep popping Scopes until we pop a non-autoPop Scope.
+	* Scope.java (autoPop): New field.
+
+	* Scope.java (getStartLabel, getEndLabel): New accessor methods.
+
+	* CodeAttr.java (emitTailCall): Add overloaded method.
+
+2013-06-28  Per Bothner  <per@bothner.com>
+
+	* ClassType.java (writeToStream): Set ADD_ENCLOSING_DONE
+	in addition to ADD_FIELDS_DONE and ADD_METHODS_DONE.
+
+2013-06-02  Per Bothner  <per@bothner.com>
+
+	* Type.java (isCompatibleWithValue): New method.
+	(lowestCommonSuperType): Minor bullet-proofing.
+
+2013-02-10  Per Bothner  <per@bothner.com>
+
+	* Type.java (lowestCommonSuperType): Minor tweak.
+
+2012-12-12  thomas kirk  <tk@research.att.com>
+
+	* ZipLoader.java (loadAllClasses): Don't load duplicate.
+	Fixes Savannah bug #37910 "gnu.bytecode.ZipLoader:loadAllClasses
+	not checking for previous definitions".
+
+2012-12-09  Per Bothner  <per@bothner.com>
+
+	* TypeVariable.java: @Override annotation should not be in comment.
+	* ParameterizedType.java: Likewise.
+
+2012-11-05  Per Bothner  <per@bothner.com>
+
+	Fix bug in encodding of enum annotation values.  They should
+	use the enum type's descriptor (signature), not "internal name".
+	* AnnotationEntry.java (decodeEnumEntry): New static method.
+	(print): Use it.
+	* RuntimeAnnotationsAttr.java (assignConstants): Use decodeEnumEntry.
+	* ClassType.java (nameToSignature): New static method.
+	(setName): Use it.
+
+2012-10-06  Per Bothner  <per@bothner.com>
+
+	Change so reading a class cann detecte neverReturnsType easily.
+	* Type.java (neverReturnsType): Change to use Type$NeverReturns.
+	(NeverReturns): New helper class.
+
+2012-09-27  Per Bothner  <per@bothner.com>
+
+	* Field.java (setModifiers): New method.
+
+2012-08-16  Per Bothner  <per@bothner.com>
+
+	* ExitableBlock.java: When exiting, we may need to pop the stack.
+
+2012-07-17  Per Bothner  <per@bothner.com>
+
+	* CodeAttr.java (emitInvoke): Use invokespecial if method is private.
+	Fixes Savannah bug #36856 "More Dalvik issues".
+
+2012-06-19  Per Bothner  <per@bothner.com>
+
+	* Label.java (isUsed): New method.
+
+2012-04-22  Per Bothner  <per@bothner.com>
+
+	* CodeAttr.java (emitFi): Fix logic for updating unreachability.
+
+2012-02-03  Per Bothner  <per@bothner.com>
+
+	* Field.java (hasConstantValueAttr): New method.
+
+2012-01-27  Per Bothner  <per@bothner.com>
+
+	* ExitableBlock.java (finish): If appropriate, do setUnreachabe().
+	This fixes Savannah bug #35362: "endless loop + unused continuation".
+
+2011-12-12  Per Bothner  <per@bothner.com>
+
+	* Type.java (isInterface): New method.
+
+2011-12-01  Per Bothner  <per@bothner.com>
+
+	* ClassType.java (compare): Fix thinko.
+
+	* ClassType.java (isSubclass): Add explicit test for Object.
+	This is both for performance and it helps work around a bug in
+	subtyping a not-yet resolved ClassExp.
+
+2011-10-29  Jamison Hope  <jrh@theptrgroup.com>
+
+	* PrimType.java (unboxedType): New static convenience method.
+
+2011-10-07  Per Bothner  <per@bothner.com>
+
+	* ParameterizedType.java (getReflectClass): New method.
+
+2011-10-01  Jamison Hope  <jrh@theptrgroup.com>
+
+	* Method.java (isNative): New method.
+
+2011-08-04  Per Bothner  <per@bothner.com>
+
+	* CodeAttr.java (emitInc): If increment is zero, do nothing.
+
+2011-08-03  Per Bothner  <per@bothner.com>
+
+	* StackMapTableAttr.java (encodeVerificationType): Fix handling of
+	UninitializedType - which was broken when parameterized types were
+	added.  This fixes Savannah bug #33916 "Build error with Java7".
+
+2011-07-27  Per Bothner  <per@bothner.com>
+
+	* ParameterizedType.java (getName): Call toString().
+	* Type.java (getName): Make non-final.
+
+2011-07-12  Per Bothner  <per@bothner.com>
+
+	* Type.java (javalangannotationAnnotationType): New static field.
+	* AnnotationEntry.java (asAnnotationValue): Moved from
+	gnu/kawa/reflect/MakeAnnotation.java.
+	(addMember(String,Object,Type)): New convenience method.
+
+2011-06-29  Per Bothner  <bothner@kuling.bothner.com>
+
+	Improved support for parameterized types.
+	* TypeVariable.java: New class, extends ObjectType.
+	* Makefile.am: Update accordingly.
+	* Type.java (make(java.lang.reflect.Type)): Handle TypeVariable.
+	Fix thinko.
+	*  StackMapTableAttr.java (encodeVerificationType): Use getRawType.
+	* ClassType.java (getTypeParameters): New method.
+	(addMethod): Make use of getGenericParameterTypes etc to set types
+	according to generic Java types.
+	* Method.java (makeGenericSignature): New method.
+	(assignConstants): Also emit Signature attribute if appropriate.
+	* ParameterizedType.java (getRawType): Refine to return a ClassType.
+	(getTypeArgumentBound): Make more robust.
+	(getGenericSignature): A tweak to emit a '*' wildcard.
+	(emitCoerceFromObject): New method.
+
+2011-06-29  Per Bothner  <bothner@kuling.bothner.com>
+
+	* Attribute.java (next): Make private.
+	* ClassTypeWriter.java (printAttributes): Use getNext method.
+	* InnerClassesAttr.java (getFirstInnerClasses): Likewise.
+	* EnclosingMethodAttr.java (getFirstEnclosingMethod): Likewise.
+
+2011-06-20  Per Bothner  <bothner@kuling.bothner.com>
+
+	Start of support for parameterized (generic) types.
+	* ParameterizedType.java: New class, extends ObjectType.
+	* Makefile.am: Update accordingly.
+	* Field.java (assign_constants): Generate Signature attribute if needed.
+	* CodeAttr.java (castNeeded): Use getRawType, not
+	getImplementationType, since later may be a ParameterizedType.
+	* Location.java (getSignature): Likewise get signature of raw typw.
+	* Type.java (genericSignature): New field.
+	(getGenericSignature, setGenericSignature,
+	getMaybeGenericSignature): New methods.
+	(make): New non-public method to map java.lang.reflect.Type
+	to gnu.bytecode.Type.
+	(make): Try former method, but fall back to using Class if that fails.
+	* ClassType.java (addField): Use new 2-argument make method.
+
+2011-06-19  Per Bothner  <bothner@kuling.bothner.com>
+
+	* ClassType.java (getDeclaredStaticMethod): New method.
+	(getDeclaredMethod): New non-public overloaded method.
+
+	* ObjectType.java (compare): Make more robust/correct.
+
+2011-04-10  Per Bothner  <per@bothner.com>
+
+	* Type.java (getType, make): Use setExisting method.
+	* ObjectType.java (getReflectClass): Likewise.
+
+2011-03-07  Per Bothner  <per@bothner.com>
+
+	* CodeAttr.java (emitStore): Do nothing if not reachableHere().
+	(emitInvokeMethod): Likewise.
+	(emitRawReturn): Likewise.
+	(emitCatchStart): Note we're reachable at the handler.
+	Fixes Savannah bug#32678 "set! and endless loop".
+
+2011-03-04  Per Bothner  <per@bothner.com>
+
+	* Scope.java (noteStartFunction): Don't call setTypes on start address,
+	as setStartPC calls define, which calls setTypes anyway.
+
+	* Label.java (mergeLocalType): Check length of old localTypes array.
+	This fixes Savannah bug #32656 "ArrayIndexOutOfBoundsException in
+	mergeLocalType".
+
+	* Label.java (setTypes): If the new local variable array is shorter
+	than the old one, call mergeLocalType so notifyTypeChangeListeners
+	gets called.
+	This fixes Savannah bug #32657 "Verification error with JDK7".
+
+2011-03-02  Per Bothner  <per@bothner.com>
+
+	* ObjectType.java (getContextClassLoader): Remove special hack for
+	getting system ClassLoader (rather than context ClassLoader) on Android
+	- it causes problems with newer versions of Android and isn't needed.
+	It's unclear if the hack is still needed for older Android versions.
+
+2011-01-07  Per Bothner  <per@bothner.com>
+
+	* AnnotationEntry.java (print): Don't print initial identation
+	or final newline here.
+	* RuntimeAnnotationsAttr.java (print): Do it here instead.
+	* AnnotationEntry.java (Value.print): Thus we can avoid excess
+	whitespace when printing nested annotation values.
+
+	* ClassType.java (isFinal, isAnnotation): New convenience methods.
+	(compare): More precide results when comparing annotation type
+	or final class versus interface.
+
+2011-01-06  Per Bothner  <per@bothner.com>
+
+	* PrimType.java (boxedType): Handle voidType.
+
+2011-01-03  Per Bothner  <per@bothner.com>
+
+	* ClassType.java (getDefaultConstructor): New method.
+
+2010-12-26  Per Bothner  <per@bothner.com>
+
+	* RuntimeAnnotationsAttr.java (maybeAddAnnotation): New method.
+	* AnnotationEntry.java (getRetention, hasTarget): New methods.
+
+2010-12-01  Per Bothner  <per@bothner.com>
+
+	* AnnotationEntry.java: Also implement
+	java.lang.reflect.InvocationHandler.
+	(invoke): New method.
+	(Value.getValue, Value.print): Add/fix support for enums and arrays.
+	* RuntimeAnnotationsAttr.java (getAnnotationsAttr, addAnnotation,
+	getRuntimeVisibleAnnotations, getRuntimeInvisibleAnnotations):
+	New methods.
+	(assignConstants, write): Add/fix support for enums and arrays.
+
+2010-12-14  Per Bothner  <per@bothner.com>
+
+	* RuntimeAnnotationsAttr.java (write): Write entry count.
+	(assignConstants): Count space needed for entry count.
+
+	* RuntimeAnnotationsAttr.java (write): Add missing break statement.
+
+	* RuntimeAnnotationsAttr.java (assignConstants): String annotation
+	value uses a UTF8 constant, not a String constant.
+
+2010-12-01  Per Bothner  <per@bothner.com>
+
+	* AnnotationDefaultAttr.java: New class, extends Attribute.
+	* Makefile.am: Update accordingly.
+	* ClassFileInput.java (readAttribute): Read AnnotationDefault attribute.
+	* RuntimeAnnotationsAttr.java (write, assignConstants): Change to
+	static, so they can be called from AnnotationDefaultAttr.
+	* AnnotationEntry.java (print): Use printQuoteString for strings.
+
+2010-11-29  Per Bothner  <per@bothner.com>
+
+	Aim for complete support for Annotations.
+	* AttrContainer.java (getConstants): New method.
+	* Attribute.java (getConstants): New method.
+	* Field.java (getConstants): New method.
+	* ClassTypeWriter.java (printOptionalIndex): Skip if index is <= 0.
+	* AnnotationEntry.java (Value): New member class.
+	Add partial javax.lang.model.AnnotationValue support.
+	Add support for printing AnnotationEntry and Value instances.
+	* RuntimeAnnotationsAttr.java: Add support for parsing, generating,
+	and printing Annotation attributes.
+	Split support for printing RuntimeAnnotationsAttr into separate
+	pieces: First read/parse, then separate print parsed AnnotationEntrys.
+	* ClassFileInput.java (readAttribute): Change to use new
+	RuntimeAnnotationsAttr.readAnnotationEntry rather than reading an
+	unparsed data array.
+
+2010-11-26  Per Bothner  <per@bothner.com>
+
+	* dump.java (main): If the context ClassLoader is null,
+	use the SystemClassLoader.
+
+2010-11-22  Per Bothner  <per@bothner.com>
+
+	* StackMapTableAttr.java (encodeVerificationType): Fix handling of
+	Type.nullType - it's imlementation-type is objectType.
+
+2010-11-18  Per Bothner  <per@bothner.com>
+
+	* ClassType.java (getSimpleName): Make use of enclosingMember,
+	rather than unreliable scanning for '$'.
+
+	* InnerClassesAttr.java (print): Add a printOptionalIndex call.
+
 2010-10-26  Per Bothner  <per@bothner.com>
 
 	* PrimType.java (compare): Catch case where other is a LangPrimType.
@@ -1394,7 +1860,7 @@
 	* CodeAttr.java (assignConstants):  Handle CodeFragments, labels here.
 	* Method.java (assign_constants):  REname to assignConstants.
 
-2000-11-21  Brian R. Lewis <brlewis@users.sourceforge.net>
+2000-11-21  Bruce R. Lewis <brlewis@users.sourceforge.net>
 
 	* ArrayClassLoader.java:  Handle custom classloader by using
 	Class.forName() instead of findSystemClass().
@@ -1661,11 +2127,11 @@
 
 1999-08-22  Per Bothner  <per@bothner.com>
 
-	* ClassType.java (adMethods, getMatchingMethods):  New methods.
+	* ClassType.java (addMethods, getMatchingMethods):  New methods.
 
 	* CodeAttr.java (setReachable, setUnreachable):  New methods.
 	(emitNewArray):  Use anewarray even if element type is ArrayType.
-	* Method.java (toSTring):  Make safe even if arg_types is null.
+	* Method.java (toString):  Make safe even if arg_types is null.
 
 	* ZipArchive.java (append):  Remove version using byte[] name.
 

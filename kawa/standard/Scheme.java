@@ -2,21 +2,16 @@ package kawa.standard;
 import kawa.lang.*;
 import gnu.bytecode.Type;
 import gnu.bytecode.ClassType;
-import gnu.bytecode.ArrayType;
 import gnu.mapping.*;
-import gnu.math.IntNum;
 import gnu.expr.*;
 import java.util.*;
-import gnu.text.Lexer;
 import gnu.text.SourceMessages;
 import gnu.kawa.lispexpr.*;
 import gnu.lists.AbstractFormat;
 import gnu.kawa.functions.*;
-import gnu.kawa.reflect.ClassMethods;
-import gnu.kawa.reflect.StaticFieldLocation;
-import gnu.math.DFloNum;
-import gnu.kawa.xml.XmlNamespace;
-import gnu.math.Unit;
+import gnu.kawa.io.CharArrayInPort;
+import gnu.kawa.io.InPort;
+import gnu.kawa.reflect.LazyType;
 import gnu.kawa.servlet.HttpRequestContext;
 
 public class Scheme extends LispLanguage
@@ -24,10 +19,22 @@ public class Scheme extends LispLanguage
   public static final Environment nullEnvironment;
   public static final Environment r4Environment;
   public static final Environment r5Environment;
+  public static final Environment r6Environment;
   protected static final SimpleEnvironment kawaEnvironment;
 
-  public static LangPrimType booleanType;
+  public static final LangPrimType booleanType;
+
+  public static final int FOLLOW_R5RS = 5;
+  public static final int FOLLOW_R6RS = 6;
+  public static final int FOLLOW_R7RS = 7;
+
   public static final Scheme instance;
+  private static Scheme r5rsInstance;
+  private static Scheme r6rsInstance;
+  private static Scheme r7rsInstance;
+  int standardToFollow;
+
+  public int getStandardToFollow() { return standardToFollow; }
 
   public static final gnu.kawa.reflect.InstanceOf instanceOf;
   public static final Not not;
@@ -47,28 +54,31 @@ public class Scheme extends LispLanguage
 
   public static final Apply apply;
   public static final ApplyToArgs applyToArgs;
-  static final Declaration applyFieldDecl;
+
+  private static final String[] uniformVectorTags =
+    {"s8", "s16", "s32", "s64", "u8", "u16", "u32", "u64", "f32", "f64" };
+
+    public static final String emptyStringLeft = new String();
+    public static final String emptyStringRight = new String();
 
   static {
     // (null-environment)
     nullEnvironment = Environment.make("null-environment");
     r4Environment = Environment.make("r4rs-environment", nullEnvironment);
     r5Environment = Environment.make("r5rs-environment", r4Environment);
-    kawaEnvironment = Environment.make("kawa-environment", r5Environment);
+    r6Environment = Environment.make("r6rs-environment", r5Environment);
+    kawaEnvironment = Environment.make("kawa-environment", r6Environment);
 
     instance = new Scheme(kawaEnvironment);
     instanceOf = new gnu.kawa.reflect.InstanceOf(instance, "instance?");
     not = new Not(instance, "not");
     applyToArgs = new ApplyToArgs("apply-to-args", instance);
-    applyFieldDecl
-      = Declaration.getDeclarationFromStatic("kawa.standard.Scheme",
-                                             "applyToArgs");
     apply = new Apply("apply", applyToArgs);
     isEq = new gnu.kawa.functions.IsEq(instance, "eq?");
     isEqv = new gnu.kawa.functions.IsEqv(instance, "eqv?", isEq);
     isEqual = new gnu.kawa.functions.IsEqual(instance, "equal?");
-    map = new gnu.kawa.functions.Map(true, applyToArgs, applyFieldDecl, isEq);
-    forEach = new gnu.kawa.functions.Map(false, applyToArgs, applyFieldDecl, isEq);
+    map = new gnu.kawa.functions.Map(true, applyToArgs, isEq);
+    forEach = new gnu.kawa.functions.Map(false, applyToArgs, isEq);
     numEqu = NumberCompare.make(instance, "=",
                                 NumberCompare.TRUE_IF_EQU);
     numGrt = NumberCompare.make(instance, ">",
@@ -84,6 +94,8 @@ public class Scheme extends LispLanguage
 
     instance.initScheme();
 
+    booleanType = new LangPrimType(Type.booleanType, instance);
+            
     int withServlets = HttpRequestContext.importServletDefinitions;
     if (withServlets > 0)
       {
@@ -92,7 +104,7 @@ public class Scheme extends LispLanguage
             instance.loadClass(withServlets > 1 ? "gnu.kawa.servlet.servlets"
                                : "gnu.kawa.servlet.HTTP");
           }
-        catch (Throwable ex)
+        catch (Exception ex)
           {
           }
       }
@@ -101,6 +113,34 @@ public class Scheme extends LispLanguage
   public static Scheme getInstance()
   {
     return instance;
+  }
+
+  private static Scheme newStandardInstance (int standardToFollow)
+  {
+    Scheme instance = new Scheme(kawaEnvironment);
+    instance.standardToFollow = standardToFollow;
+    return instance;
+  }
+
+  public static synchronized Scheme getR5rsInstance()
+  {
+    if (r5rsInstance == null)
+      r5rsInstance = newStandardInstance(FOLLOW_R5RS);
+    return r5rsInstance;
+  }
+
+  public static synchronized Scheme getR6rsInstance()
+  {
+    if (r6rsInstance == null)
+      r6rsInstance = newStandardInstance(FOLLOW_R6RS);
+    return r6rsInstance;
+  }
+
+  public static synchronized Scheme getR7rsInstance()
+  {
+    if (r7rsInstance == null)
+      r7rsInstance = newStandardInstance(FOLLOW_R7RS);
+    return r7rsInstance;
   }
 
   public static Environment builtin ()
@@ -112,13 +152,26 @@ public class Scheme extends LispLanguage
   {
       environ = nullEnvironment;
 
-      environ.addLocation(LispLanguage.lookup_sym, null, getNamedPartLocation);
-
       defSntxStFld("lambda", "kawa.standard.SchemeCompilation", "lambda");
+      defSntxStFld("$bracket-apply$", "gnu.kawa.lispexpr.BracketApply", "instance");
+      defSntxStFld("$string$", "kawa.lib.syntax");
+      defSntxStFld("$string-with-default-format$", "kawa.lib.syntax");
+      defSntxStFld("$format$", "kawa.lib.syntax");
+      defSntxStFld("$sprintf$", "kawa.lib.syntax");
+      defSntxStFld("define-simple-constructor", "kawa.lib.syntax");
+      defAliasStFld("$<<$", "kawa.standard.Scheme", "emptyStringLeft");
+      defAliasStFld("$>>$", "kawa.standard.Scheme", "emptyStringRight");
+      defSntxStFld("$xml-element$", "gnu.kawa.lispexpr.MakeXmlElement", "makeXml");
+      defProcStFld("$xml-attribute$", "gnu.kawa.xml.MakeAttribute", "makeAttributeS");
+      defProcStFld("$xml-text$", "gnu.kawa.xml.MakeText", "makeText");
+      defProcStFld("$xml-CDATA$", "gnu.kawa.xml.MakeCDATA", "makeCDATA");
+      defProcStFld("$xml-comment$", "gnu.kawa.xml.CommentConstructor", "commentConstructor");
+      defProcStFld("$xml-processing-instruction$", "gnu.kawa.xml.MakeProcInst", "makeProcInst");
+      defSntxStFld("$resolve-qname$", "gnu.kawa.lispexpr.ResolveNamespace",
+                   "resolveQName");
 
       //-- Section 4.1  -- complete
-      defSntxStFld(LispLanguage.quote_sym, "kawa.lang.Quote", "plainQuote");
-      defSntxStFld("%define", "kawa.standard.define", "defineRaw");
+      defSntxStFld(LispLanguage.quote_str, "kawa.lang.Quote", "plainQuote");
       defSntxStFld("define", "kawa.lib.prim_syntax");
 
       defSntxStFld("if", "kawa.lib.prim_syntax");
@@ -126,18 +179,25 @@ public class Scheme extends LispLanguage
 
       // Section 4.2  -- complete
       defSntxStFld("cond", "kawa.lib.std_syntax");
-      defSntxStFld("case", "kawa.lib.std_syntax");
+      defSntxStFld("...", "kawa.lib.std_syntax");
+      defSntxStFld("_", "kawa.lib.std_syntax");
+      defSntxStFld("=>", "kawa.lib.std_syntax");
+      defSntxStFld("else", "kawa.lib.std_syntax");
+      defSntxStFld("unquote", "kawa.lib.std_syntax");
+      defSntxStFld("unquote-splicing", "kawa.lib.std_syntax");
+      defSntxStFld("case", "kawa.lib.case_syntax");
       defSntxStFld("and", "kawa.lib.std_syntax");
       defSntxStFld("or", "kawa.lib.std_syntax");
-      defSntxStFld("%let", "kawa.standard.let", "let");
       defSntxStFld("let", "kawa.lib.std_syntax");
       defSntxStFld("let*", "kawa.lib.std_syntax");
       defSntxStFld("letrec", "kawa.lib.prim_syntax");
+      defSntxStFld("letrec*", "kawa.lib.prim_syntax", "letrec");
 
       defSntxStFld("begin", "kawa.standard.begin", "begin");
       defSntxStFld("do", "kawa.lib.std_syntax");
+      defSntxStFld("lazy", "kawa.lib.std_syntax");
+      defSntxStFld("delay-force", "kawa.lib.std_syntax");
       defSntxStFld("delay", "kawa.lib.std_syntax");
-      defProcStFld("%make-promise", "kawa.lib.std_syntax");
       defSntxStFld("quasiquote", "kawa.lang.Quote", "quasiQuote");
 
       //-- Section 5  -- complete [except for internal definitions]
@@ -156,6 +216,7 @@ public class Scheme extends LispLanguage
       //-- Section 6.1  -- complete
       defProcStFld("not", "kawa.standard.Scheme");
       defProcStFld("boolean?", "kawa.lib.misc");
+      defProcStFld("boolean=?", "kawa.lib.misc");
 
       //-- Section 6.2  -- complete
       defProcStFld("eq?", "kawa.standard.Scheme", "isEq");
@@ -200,12 +261,15 @@ public class Scheme extends LispLanguage
       defProcStFld("cddddr", "kawa.lib.lists");
       defProcStFld("null?", "kawa.lib.lists");
       defProcStFld("list?", "kawa.lib.lists");
+      defProcStFld("make-list", "kawa.lib.lists");
       defProcStFld("length", "kawa.lib.lists");
       defProcStFld("append", "kawa.standard.append", "append");
       defProcStFld("reverse", "kawa.lib.lists");
       defProcStFld("reverse!", "kawa.lib.lists");  // Not R5RS.
       defProcStFld("list-tail", "kawa.lib.lists");
       defProcStFld("list-ref", "kawa.lib.lists");
+      defProcStFld("list-set!", "kawa.lib.lists");
+      defProcStFld("list-copy", "kawa.lib.lists");
 
       defProcStFld("memq", "kawa.lib.lists");
       defProcStFld("memv", "kawa.lib.lists");
@@ -234,6 +298,7 @@ public class Scheme extends LispLanguage
       defProcStFld("real?", "kawa.lib.numbers");
       defProcStFld("rational?", "kawa.lib.numbers");
       defProcStFld("integer?", "kawa.lib.numbers");
+      defProcStFld("exact-integer?", "kawa.lib.numbers");
       defProcStFld("exact?", "kawa.lib.numbers");
       defProcStFld("inexact?", "kawa.lib.numbers");
       defProcStFld("=", "kawa.standard.Scheme", "numEqu");
@@ -254,12 +319,19 @@ public class Scheme extends LispLanguage
       defProcStFld("/", "gnu.kawa.functions.DivideOp", "$Sl");
       defProcStFld("abs", "kawa.lib.numbers");
       defProcStFld("quotient", "gnu.kawa.functions.DivideOp", "quotient");
+      defProcStFld("truncate-quotient", "gnu.kawa.functions.DivideOp", "quotient");
       defProcStFld("remainder", "gnu.kawa.functions.DivideOp", "remainder");
+      defProcStFld("truncate-remainder", "gnu.kawa.functions.DivideOp", "remainder");
       defProcStFld("modulo", "gnu.kawa.functions.DivideOp", "modulo");
+      defProcStFld("floor-quotient",
+                   "gnu.kawa.functions.DivideOp", "floorQuotient");
+      defProcStFld("floor-remainder", "gnu.kawa.functions.DivideOp", "modulo");
       defProcStFld("div", "gnu.kawa.functions.DivideOp", "div");
       defProcStFld("mod", "gnu.kawa.functions.DivideOp", "mod");
       defProcStFld("div0", "gnu.kawa.functions.DivideOp", "div0");
       defProcStFld("mod0", "gnu.kawa.functions.DivideOp", "mod0");
+      defProcStFld("floor/", "kawa.lib.numbers");
+      defProcStFld("truncate/", "kawa.lib.numbers");
       defProcStFld("div-and-mod", "kawa.lib.numbers");
       defProcStFld("div0-and-mod0", "kawa.lib.numbers");
       defProcStFld("gcd", "kawa.lib.numbers");
@@ -280,6 +352,7 @@ public class Scheme extends LispLanguage
       defProcStFld("acos", "kawa.lib.numbers");
       defProcStFld("atan", "kawa.lib.numbers");
       defProcStFld("sqrt", "kawa.lib.numbers");
+      defProcStFld("square", "kawa.lib.numbers");
       defProcStFld("expt", "kawa.standard.expt");
       defProcStFld("make-rectangular", "kawa.lib.numbers");
       defProcStFld("make-polar", "kawa.lib.numbers");
@@ -296,22 +369,23 @@ public class Scheme extends LispLanguage
 
       //-- Section 6.6  -- complete
       defProcStFld("char?", "kawa.lib.characters");
-      defProcStFld("char=?", "kawa.lib.characters");
-      defProcStFld("char<?", "kawa.lib.characters");
-      defProcStFld("char>?", "kawa.lib.characters");
-      defProcStFld("char<=?", "kawa.lib.characters");
-      defProcStFld("char>=?", "kawa.lib.characters");
-      defProcStFld("char-ci=?", "kawa.lib.rnrs.unicode");
-      defProcStFld("char-ci<?", "kawa.lib.rnrs.unicode");
-      defProcStFld("char-ci>?", "kawa.lib.rnrs.unicode");
-      defProcStFld("char-ci<=?", "kawa.lib.rnrs.unicode");
-      defProcStFld("char-ci>=?", "kawa.lib.rnrs.unicode");
+      defProcStFld("char=?", "kawa.lib.strings");
+      defProcStFld("char<?", "kawa.lib.strings");
+      defProcStFld("char>?", "kawa.lib.strings");
+      defProcStFld("char<=?", "kawa.lib.strings");
+      defProcStFld("char>=?", "kawa.lib.strings");
+      defProcStFld("char-ci=?", "kawa.lib.strings");
+      defProcStFld("char-ci<?", "kawa.lib.strings");
+      defProcStFld("char-ci>?", "kawa.lib.strings");
+      defProcStFld("char-ci<=?", "kawa.lib.strings");
+      defProcStFld("char-ci>=?", "kawa.lib.strings");
       defProcStFld("char-alphabetic?", "kawa.lib.rnrs.unicode");
       defProcStFld("char-numeric?", "kawa.lib.rnrs.unicode");
       defProcStFld("char-whitespace?", "kawa.lib.rnrs.unicode");
       defProcStFld("char-upper-case?", "kawa.lib.rnrs.unicode");
       defProcStFld("char-lower-case?", "kawa.lib.rnrs.unicode");
       defProcStFld("char-title-case?", "kawa.lib.rnrs.unicode");
+      defProcStFld("digit-value", "kawa.lib.characters");
       defProcStFld("char->integer", "kawa.lib.characters");
       defProcStFld("integer->char", "kawa.lib.characters");
       defProcStFld("char-upcase", "kawa.lib.rnrs.unicode");
@@ -333,11 +407,11 @@ public class Scheme extends LispLanguage
       defProcStFld("string<=?", "kawa.lib.strings");
       defProcStFld("string>=?", "kawa.lib.strings");
 
-      defProcStFld("string-ci=?", "kawa.lib.rnrs.unicode");
-      defProcStFld("string-ci<?", "kawa.lib.rnrs.unicode");
-      defProcStFld("string-ci>?", "kawa.lib.rnrs.unicode");
-      defProcStFld("string-ci<=?", "kawa.lib.rnrs.unicode");
-      defProcStFld("string-ci>=?", "kawa.lib.rnrs.unicode");
+      defProcStFld("string-ci=?", "kawa.lib.strings");
+      defProcStFld("string-ci<?", "kawa.lib.strings");
+      defProcStFld("string-ci>?", "kawa.lib.strings");
+      defProcStFld("string-ci<=?", "kawa.lib.strings");
+      defProcStFld("string-ci>=?", "kawa.lib.strings");
       defProcStFld("string-normalize-nfd", "kawa.lib.rnrs.unicode");
       defProcStFld("string-normalize-nfkd", "kawa.lib.rnrs.unicode");
       defProcStFld("string-normalize-nfc", "kawa.lib.rnrs.unicode");
@@ -345,10 +419,12 @@ public class Scheme extends LispLanguage
 
       defProcStFld("substring", "kawa.lib.strings");
       defProcStFld("string-append", "kawa.lib.strings");
-      defProcStFld("string-append/shared", "kawa.lib.strings");
+      defProcStFld("string-append!", "kawa.lib.strings");
+      defProcStFld("string-replace!", "kawa.lib.strings");
       defProcStFld("string->list", "kawa.lib.strings");
       defProcStFld("list->string", "kawa.lib.strings");
       defProcStFld("string-copy", "kawa.lib.strings");
+      defProcStFld("string-copy!", "kawa.lib.strings");
       defProcStFld("string-fill!", "kawa.lib.strings");
 
       //-- Section 6.8  -- complete
@@ -359,6 +435,10 @@ public class Scheme extends LispLanguage
       defProcStFld("vector-set!", "kawa.lib.vectors");
       defProcStFld("list->vector", "kawa.lib.vectors");
       defProcStFld("vector->list", "kawa.lib.vectors");
+      defProcStFld("vector->string", "kawa.lib.vectors");
+      defProcStFld("string->vector", "kawa.lib.vectors");
+      defProcStFld("vector-copy", "kawa.lib.vectors");
+      defProcStFld("vector-copy!", "kawa.lib.vectors");
       defProcStFld("vector-fill!", "kawa.lib.vectors");
       // Extension:
       defProcStFld("vector-append", "kawa.standard.vector_append", "vectorAppend");
@@ -372,32 +452,61 @@ public class Scheme extends LispLanguage
       defProcStFld("for-each", "kawa.standard.Scheme", "forEach");
       defProcStFld("call-with-current-continuation",
                    "gnu.kawa.functions.CallCC", "callcc");
-      defProcStFld("call/cc", "kawa.standard.callcc", "callcc");
+      defProcStFld("call/cc", "gnu.kawa.functions.CallCC", "callcc");
       defProcStFld("force", "kawa.lib.misc");
+      defProcStFld("force*", "kawa.lib.misc");
+      defProcStFld("eager", "kawa.lib.misc");
+      defProcStFld("promise?", "kawa.lib.misc");
+      defProcStFld("make-promise", "kawa.lib.misc");
+      defProcStFld("promise-set-value!", "kawa.lib.misc");
+      defProcStFld("promise-set-alias!", "kawa.lib.misc");
+      defProcStFld("promise-set-exception!", "kawa.lib.misc");
+      defProcStFld("promise-set-thunk!", "kawa.lib.misc");
 
-      //-- Section 6.10  -- complete
+      defProcStFld("call-with-port", "kawa.lib.ports");
       defProcStFld("call-with-input-file", "kawa.lib.ports");
       defProcStFld("call-with-output-file", "kawa.lib.ports");
       defProcStFld("input-port?", "kawa.lib.ports");
       defProcStFld("output-port?", "kawa.lib.ports");
+      defProcStFld("textual-port?", "kawa.lib.ports");
+      defProcStFld("binary-port?", "kawa.lib.ports");
+      defProcStFld("port?", "kawa.lib.ports");
+      defProcStFld("input-port-open?", "kawa.lib.ports");
+      defProcStFld("output-port-open?", "kawa.lib.ports");
       defProcStFld("current-input-port", "kawa.lib.ports");
       defProcStFld("current-output-port", "kawa.lib.ports");
       defProcStFld("with-input-from-file", "kawa.lib.ports");
       defProcStFld("with-output-to-file", "kawa.lib.ports");
       defProcStFld("open-input-file", "kawa.lib.ports");
+      defProcStFld("open-binary-input-file", "kawa.lib.ports");
       defProcStFld("open-output-file", "kawa.lib.ports");
+      defProcStFld("open-binary-output-file", "kawa.lib.ports");
+      defProcStFld("close-port", "kawa.lib.ports");
       defProcStFld("close-input-port", "kawa.lib.ports");
       defProcStFld("close-output-port", "kawa.lib.ports");
       defProcStFld("read", "kawa.lib.ports");
       defProcStFld("read-line", "kawa.lib.ports");
-      defProcStFld("read-char", "kawa.standard.readchar", "readChar");
-      defProcStFld("peek-char", "kawa.standard.readchar", "peekChar");
+      defProcStFld("read-char", "kawa.lib.ports");
+      defProcStFld("peek-char", "kawa.lib.ports");
       defProcStFld("eof-object?", "kawa.lib.ports");
+      defProcStFld("eof-object", "kawa.lib.ports");
+      defProcStFld("read-string", "kawa.lib.ports");
+      defProcStFld("read-u8", "kawa.lib.ports");
+      defProcStFld("peek-u8", "kawa.lib.ports");
+      defProcStFld("u8-ready?", "kawa.lib.ports");
+      defProcStFld("read-bytevector", "kawa.lib.ports");
+      defProcStFld("read-bytevector!", "kawa.lib.ports");
       defProcStFld("char-ready?", "kawa.lib.ports");
       defProcStFld("write", "kawa.lib.ports");
+      defProcStFld("write-simple", "kawa.lib.ports");
+      defProcStFld("write-shared", "kawa.lib.ports");
+      defProcStFld("write-with-shared-structure", "kawa.lib.ports");
       defProcStFld("display", "kawa.lib.ports");
       defProcStFld("print-as-xml", "gnu.xquery.lang.XQuery", "writeFormat");
       defProcStFld("write-char", "kawa.lib.ports");
+      defProcStFld("write-string", "kawa.lib.ports");
+      defProcStFld("write-u8", "kawa.lib.ports");
+      defProcStFld("write-bytevector", "kawa.lib.ports");
       defProcStFld("newline", "kawa.lib.ports");
       defProcStFld("load", "kawa.standard.load", "load");
       defProcStFld("load-relative", "kawa.standard.load", "loadRelative");
@@ -407,7 +516,11 @@ public class Scheme extends LispLanguage
       defProcStFld("open-input-string", "kawa.lib.ports");  // SRFI-6
       defProcStFld("open-output-string", "kawa.lib.ports");  // SRFI-6
       defProcStFld("get-output-string", "kawa.lib.ports");  // SRFI-6
+      defProcStFld("open-input-bytevector", "kawa.lib.ports");
+      defProcStFld("open-output-bytevector", "kawa.lib.ports");
+      defProcStFld("get-output-bytevector", "kawa.lib.ports");
       defProcStFld("call-with-output-string", "kawa.lib.ports"); // Extension
+      defProcStFld("flush-output-port", "kawa.lib.ports");  // R6RS/R7RS
       defProcStFld("force-output", "kawa.lib.ports");  // Extension
 
       defProcStFld("port-line", "kawa.lib.ports");
@@ -423,9 +536,9 @@ public class Scheme extends LispLanguage
       defProcStFld("set-input-port-prompter!", "kawa.lib.ports");
       defProcStFld("base-uri", "kawa.lib.misc");
 
-      defProcStFld("%syntax-error", "kawa.standard.syntax_error",
+      defProcStFld("syntax-error", "kawa.standard.syntax_error",
                    "syntax_error");
-      defProcStFld("syntax-error", "kawa.lib.prim_syntax");
+      defProcStFld("report-syntax-error", "kawa.lib.prim_syntax");
 
       r4Environment.setLocked();
       environ = r5Environment;
@@ -435,20 +548,41 @@ public class Scheme extends LispLanguage
 		   "callWithValues");
       defSntxStFld("let-values", "kawa.lib.syntax");
       defSntxStFld("let*-values", "kawa.lib.syntax");
+      defSntxStFld("define-values", "kawa.lib.syntax");
       defSntxStFld("case-lambda", "kawa.lib.syntax");
       defSntxStFld("receive", "kawa.lib.syntax");
-      defProcStFld("eval", "kawa.lang.Eval");
+      defProcStFld("eval", "kawa.lib.scheme.eval");
       defProcStFld("repl", "kawa.standard.SchemeCompilation", "repl");
       defProcStFld("scheme-report-environment", "kawa.lib.misc");
+      defProcStFld("environment", "kawa.lib.scheme.eval");
       defProcStFld("null-environment", "kawa.lib.misc");
       defProcStFld("interaction-environment", "kawa.lib.misc");
       defProcStFld("dynamic-wind", "kawa.lib.misc");
 
       r5Environment.setLocked();
+      environ = r6Environment;
+
+      defProcStFld("vector-map", "kawa.lib.vectors");
+      defProcStFld("vector-for-each", "kawa.lib.vectors");
+      defProcStFld("string-map", "kawa.lib.strings");
+      defProcStFld("srfi-13-string-for-each", "kawa.lib.strings");
+      defProcStFld("string-for-each", "kawa.lib.strings");
+      defProcStFld("real-valued?", "kawa.lib.numbers");
+      defProcStFld("rational-valued?", "kawa.lib.numbers");
+      defProcStFld("integer-valued?", "kawa.lib.numbers");
+      defProcStFld("finite?", "kawa.lib.numbers");
+      defProcStFld("infinite?", "kawa.lib.numbers");
+      defProcStFld("nan?", "kawa.lib.numbers");
+      defProcStFld("exact-integer-sqrt", "kawa.lib.numbers");
+      // TODO Some of the bindings made below in kawaEnvironment
+      // should be moved here instead.
+
+      r6Environment.setLocked();
       environ = kawaEnvironment;
  
       defSntxStFld("define-private", "kawa.lib.prim_syntax");
       defSntxStFld("define-constant", "kawa.lib.prim_syntax");
+      defSntxStFld("define-early-constant", "kawa.lib.prim_syntax");
 
       defSntxStFld("define-autoload",
                    "kawa.standard.define_autoload", "define_autoload");
@@ -457,7 +591,10 @@ public class Scheme extends LispLanguage
                    "define_autoloads_from_file");
 
       defProcStFld("exit", "kawa.lib.rnrs.programs");
+      defProcStFld("emergency-exit", "kawa.lib.rnrs.programs");
       defProcStFld("command-line", "kawa.lib.rnrs.programs");
+      defAliasStFld("command-line-arguments", 
+                    "gnu.expr.ApplicationMainSupport", "commandLineArguments");
 
       defProcStFld("bitwise-arithmetic-shift",
                    "gnu.kawa.functions.BitwiseOp", "ashift");
@@ -480,8 +617,6 @@ public class Scheme extends LispLanguage
       defProcStFld("lognot", "gnu.kawa.functions.BitwiseOp", "not");
       defProcStFld("logop", "kawa.lib.numbers");
       defProcStFld("bitwise-bit-set?", "kawa.lib.numbers");
-      defProcStFld("logbit?", "kawa.lib.numbers",
-                   Compilation.mangleNameIfNeeded("bitwise-bit-set?"));
       defProcStFld("logtest", "kawa.lib.numbers");
       defProcStFld("bitwise-bit-count", "kawa.lib.numbers");
       defProcStFld("logcount", "kawa.lib.numbers");
@@ -489,7 +624,7 @@ public class Scheme extends LispLanguage
       defProcStFld("bitwise-copy-bit-field", "kawa.lib.numbers");
       defProcStFld("bitwise-bit-field", "kawa.lib.numbers");
       defProcStFld("bit-extract", "kawa.lib.numbers",
-                   Compilation.mangleNameIfNeeded("bitwise-bit-field"));
+                   Language.mangleNameIfNeeded("bitwise-bit-field"));
       defProcStFld("bitwise-length", "kawa.lib.numbers");
       defProcStFld("integer-length", "kawa.lib.numbers", "bitwise$Mnlength");
       defProcStFld("bitwise-first-bit-set", "kawa.lib.numbers");
@@ -523,12 +658,21 @@ public class Scheme extends LispLanguage
       defSntxStFld("primitive-array-set", "kawa.lib.reflection");
       defSntxStFld("primitive-array-length", "kawa.lib.reflection");
       defProcStFld("subtype?", "kawa.lib.reflection");
-      defProcStFld("primitive-throw", "kawa.standard.prim_throw", "primitiveThrow");
+      defProcStFld("primitive-throw", "gnu.kawa.reflect.Throw", "primitiveThrow");
       defSntxStFld("try-finally", "kawa.lib.syntax");
       defSntxStFld("try-catch", "kawa.lib.prim_syntax");
-      defProcStFld("throw", "kawa.standard.throw_name", "throwName");
-      defProcStFld("catch", "kawa.lib.system");
-      defProcStFld("error", "kawa.lib.misc");
+      defProcStFld("throw", "kawa.lib.exceptions");
+      defProcStFld("catch", "kawa.lib.exceptions");
+      defProcStFld("error", "kawa.lib.exceptions");
+      defProcStFld("error-object?", "kawa.lib.exceptions");
+      defProcStFld("error-object-message", "kawa.lib.exceptions");
+      defProcStFld("error-object-irritants", "kawa.lib.exceptions");
+      defProcStFld("file-error?", "kawa.lib.exceptions");
+      defProcStFld("read-error?", "kawa.lib.exceptions");
+      defProcStFld("raise", "kawa.lib.exceptions");
+      defProcStFld("raise-continuable", "kawa.lib.exceptions");
+      defProcStFld("with-exception-handler", "kawa.lib.exceptions");
+      defSntxStFld("guard", "kawa.lib.exceptions");
       defProcStFld("as", "gnu.kawa.functions.Convert", "as");
       defProcStFld("instance?", "kawa.standard.Scheme", "instanceOf");
       defSntxStFld("synchronized", "kawa.lib.syntax");
@@ -556,25 +700,30 @@ public class Scheme extends LispLanguage
                    "define_macro");
       defSntxStFld("define-syntax-case", "kawa.lib.syntax");
       defSntxStFld("syntax-case", "kawa.standard.syntax_case", "syntax_case");
-      defSntxStFld("%define-syntax", "kawa.standard.define_syntax",
-                   "define_syntax");
+      defSntxStFld("define-rewrite-syntax", "kawa.standard.define_syntax",
+                   "define_rewrite_syntax");
       defSntxStFld("syntax", "kawa.standard.syntax", "syntax");
       defSntxStFld("quasisyntax", "kawa.standard.syntax", "quasiSyntax");
+      defProcStFld("syntax->datum", "kawa.lib.std_syntax");
       defProcStFld("syntax-object->datum", "kawa.lib.std_syntax");
       defProcStFld("datum->syntax-object", "kawa.lib.std_syntax");
+      defProcStFld("datum->syntax", "kawa.lib.std_syntax");
       defProcStFld("syntax->expression", "kawa.lib.prim_syntax");
       defProcStFld("syntax-body->expression", "kawa.lib.prim_syntax");
       defProcStFld("generate-temporaries", "kawa.lib.std_syntax");
       defSntxStFld("with-syntax", "kawa.lib.std_syntax");
       defProcStFld("identifier?", "kawa.lib.std_syntax");
       defProcStFld("free-identifier=?", "kawa.lib.std_syntax");
+      defProcStFld("bound-identifier=?", "kawa.lib.std_syntax");
       defProcStFld("syntax-source", "kawa.lib.std_syntax");
       defProcStFld("syntax-line", "kawa.lib.std_syntax");
       defProcStFld("syntax-column", "kawa.lib.std_syntax");
-      defSntxStFld("begin-for-syntax", "kawa.lib.std_syntax");
-      defSntxStFld("define-for-syntax", "kawa.lib.std_syntax");
-      defSntxStFld("include", "kawa.lib.misc_syntax");
-      defSntxStFld("include-relative", "kawa.lib.misc_syntax");
+      defSntxStFld("begin-for-syntax", "kawa.lib.syntax");
+      defSntxStFld("define-for-syntax", "kawa.lib.syntax");
+      defSntxStFld("include", "kawa.standard.Include", "include");
+      defSntxStFld("include-relative", "kawa.standard.Include",
+                   "includeRelative");
+      defSntxStFld("include-ci", "kawa.standard.Include", "includeCi");
 
       defProcStFld("file-exists?", "kawa.lib.files");
       defProcStFld("file-directory?", "kawa.lib.files");
@@ -588,14 +737,31 @@ public class Scheme extends LispLanguage
       defProcStFld("create-directory", "kawa.lib.files");
       defProcStFld("->pathname", "kawa.lib.files");
       define("port-char-encoding", Boolean.TRUE);
-      define("symbol-read-case", "P");
+      define("symbol-read-case", "");
 
       defProcStFld("system", "kawa.lib.system");
       defProcStFld("make-process", "kawa.lib.system");
+      defProcStFld("pipe-process", "kawa.lib.system");
+      defProcStFld("run-process", "gnu.kawa.functions.RunProcess", "instance");
+      defProcStFld("process-exit-wait", "kawa.lib.system");
+      defProcStFld("process-exit-ok?", "kawa.lib.system");
+      defProcStFld(LispLanguage.constructNamespace.getSymbol("cmd"),
+                   "kawa.lib.system", "cmd");
+      defProcStFld(LispLanguage.constructNamespace.getSymbol("`"),
+                   "kawa.lib.system", "cmd");
+      defProcStFld(LispLanguage.constructNamespace.getSymbol("sh"),
+                   "kawa.lib.system", "sh");
       defProcStFld("tokenize-string-to-string-array", "kawa.lib.system");
       defProcStFld("tokenize-string-using-shell", "kawa.lib.system");
       defProcStFld("command-parse", "kawa.lib.system");
       defProcStFld("process-command-line-assignments", "kawa.lib.system");
+      defProcStFld("get-environment-variable", "kawa.lib.system");
+      defProcStFld("get-environment-variables", "kawa.lib.system");
+      defProcStFld("current-path", "kawa.lib.ports");
+      defProcStFld("current-second", "kawa.lib.system");
+      defProcStFld("current-jiffy", "kawa.lib.system");
+      defProcStFld("jiffies-per-second", "kawa.lib.system");
+      defProcStFld("features", "kawa.lib.misc");
       
       defProcStFld("record-accessor", "kawa.lib.reflection");
       defProcStFld("record-modifier", "kawa.lib.reflection");
@@ -606,7 +772,7 @@ public class Scheme extends LispLanguage
       defProcStFld("record-type-name", "kawa.lib.reflection");
       defProcStFld("record-type-field-names", "kawa.lib.reflection");
       defProcStFld("record?", "kawa.lib.reflection");
-      defSntxStFld("define-record-type", "gnu.kawa.slib.DefineRecordType");
+      defSntxStFld("define-record-type", "kawa.lib.DefineRecordType");
 
       defSntxStFld("when", "kawa.lib.syntax"); //-- (when cond exp ...)
       defSntxStFld("unless", "kawa.lib.syntax"); //-- (unless cond exp ...)
@@ -614,7 +780,7 @@ public class Scheme extends LispLanguage
       defSntxStFld("constant-fold", "kawa.standard.constant_fold",
                    "constant_fold");
       defProcStFld("make-parameter", "kawa.lib.parameters");
-      defSntxStFld("parameterize", "kawa.lib.parameters");
+      defSntxStFld("parameterize", "kawa.lib.parameterize");
 
       defProcStFld("compile-file", "kawa.lib.system");
       defProcStFld("environment-bound?", "kawa.lib.misc");
@@ -661,8 +827,8 @@ public class Scheme extends LispLanguage
       defProcStFld("format", "gnu.kawa.functions.Format");
       defProcStFld("parse-format", "gnu.kawa.functions.ParseFormat", "parseFormat");
 
-      defProcStFld("make-element", "gnu.kawa.xml.MakeElement", "makeElement");
-      defProcStFld("make-attribute", "gnu.kawa.xml.MakeAttribute", "makeAttribute");
+      defProcStFld("make-element", "gnu.kawa.xml.MakeElement", "makeElementS");
+      defProcStFld("make-attribute", "gnu.kawa.xml.MakeAttribute", "makeAttributeS");
       defProcStFld("map-values", "gnu.kawa.functions.ValuesMap", "valuesMap");
       defProcStFld("children", "gnu.kawa.xml.Children", "children");
       defProcStFld("attributes", "gnu.kawa.xml.Attributes");
@@ -672,14 +838,18 @@ public class Scheme extends LispLanguage
       defProcStFld("keyword->string", "kawa.lib.keywords");
       defProcStFld("string->keyword", "kawa.lib.keywords");
       defSntxStFld("location", "kawa.standard.location", "location");
+      defSntxStFld("define-library", "kawa.standard.define_library",
+                   "define_library");
       defSntxStFld("define-alias", "kawa.standard.define_alias",
                    "define_alias");
+      defSntxStFld("define-private-alias", "kawa.standard.define_alias",
+                   "define_private_alias");
       defSntxStFld("define-variable", "kawa.standard.define_variable",
                    "define_variable");
       defSntxStFld("define-member-alias", "kawa.standard.define_member_alias",
                    "define_member_alias");
       defSntxStFld("define-enum", "gnu.kawa.slib.enums");
-      defSntxStFld("import", "kawa.lib.syntax");
+      defSntxStFld("import", "kawa.standard.ImportFromLibrary", "instance");
       defSntxStFld("require", "kawa.standard.require", "require");
       defSntxStFld("module-name", "kawa.standard.module_name",
                    "module_name");
@@ -709,113 +879,60 @@ public class Scheme extends LispLanguage
       defProcStFld("array-set!", "gnu.kawa.functions.ArraySet", "arraySet");
       defProcStFld("share-array", "kawa.lib.arrays");
 
-      defProcStFld("s8vector?", "kawa.lib.uniform");
-      defProcStFld("make-s8vector", "kawa.lib.uniform");
-      defProcStFld("s8vector", "kawa.lib.uniform");
-      defProcStFld("s8vector-length", "kawa.lib.uniform");
-      defProcStFld("s8vector-ref", "kawa.lib.uniform");
-      defProcStFld("s8vector-set!", "kawa.lib.uniform");
-      defProcStFld("s8vector->list", "kawa.lib.uniform");
-      defProcStFld("list->s8vector", "kawa.lib.uniform");
-      defProcStFld("u8vector?", "kawa.lib.uniform");
-      defProcStFld("make-u8vector", "kawa.lib.uniform");
-      defProcStFld("u8vector", "kawa.lib.uniform");
-      defProcStFld("u8vector-length", "kawa.lib.uniform");
-      defProcStFld("u8vector-ref", "kawa.lib.uniform");
-      defProcStFld("u8vector-set!", "kawa.lib.uniform");
-      defProcStFld("u8vector->list", "kawa.lib.uniform");
-      defProcStFld("list->u8vector", "kawa.lib.uniform");
+      for (int i = uniformVectorTags.length;  --i >= 0; )
+        {
+          String tag = uniformVectorTags[i];
+          defAliasStFld(tag+"vector", "gnu.kawa.lispexpr.LangObjType",
+                        tag+"vectorType");
+          defProcStFld(tag+"vector?", "kawa.lib.uniform");
+          defProcStFld("make-"+tag+"vector", "kawa.lib.uniform");
+          defProcStFld(tag+"vector-length", "kawa.lib.uniform");
+          defProcStFld(tag+"vector-ref", "kawa.lib.uniform");
+          defProcStFld(tag+"vector-set!", "kawa.lib.uniform");
+          defProcStFld(tag+"vector->list", "kawa.lib.uniform");
+          defProcStFld("list->"+tag+"vector", "kawa.lib.uniform");
+        }
 
-      defProcStFld("s16vector?", "kawa.lib.uniform");
-      defProcStFld("make-s16vector", "kawa.lib.uniform");
-      defProcStFld("s16vector", "kawa.lib.uniform");
-      defProcStFld("s16vector-length", "kawa.lib.uniform");
-      defProcStFld("s16vector-ref", "kawa.lib.uniform");
-      defProcStFld("s16vector-set!", "kawa.lib.uniform");
-      defProcStFld("s16vector->list", "kawa.lib.uniform");
-      defProcStFld("list->s16vector", "kawa.lib.uniform");
-      defProcStFld("u16vector?", "kawa.lib.uniform");
-      defProcStFld("make-u16vector", "kawa.lib.uniform");
-      defProcStFld("u16vector", "kawa.lib.uniform");
-      defProcStFld("u16vector-length", "kawa.lib.uniform");
-      defProcStFld("u16vector-ref", "kawa.lib.uniform");
-      defProcStFld("u16vector-set!", "kawa.lib.uniform");
-      defProcStFld("u16vector->list", "kawa.lib.uniform");
-      defProcStFld("list->u16vector", "kawa.lib.uniform");
-
-      defProcStFld("s32vector?", "kawa.lib.uniform");
-      defProcStFld("make-s32vector", "kawa.lib.uniform");
-      defProcStFld("s32vector", "kawa.lib.uniform");
-      defProcStFld("s32vector-length", "kawa.lib.uniform");
-      defProcStFld("s32vector-ref", "kawa.lib.uniform");
-      defProcStFld("s32vector-set!", "kawa.lib.uniform");
-      defProcStFld("s32vector->list", "kawa.lib.uniform");
-      defProcStFld("list->s32vector", "kawa.lib.uniform");
-      defProcStFld("u32vector?", "kawa.lib.uniform");
-      defProcStFld("make-u32vector", "kawa.lib.uniform");
-      defProcStFld("u32vector", "kawa.lib.uniform");
-      defProcStFld("u32vector-length", "kawa.lib.uniform");
-      defProcStFld("u32vector-ref", "kawa.lib.uniform");
-      defProcStFld("u32vector-set!", "kawa.lib.uniform");
-      defProcStFld("u32vector->list", "kawa.lib.uniform");
-      defProcStFld("list->u32vector", "kawa.lib.uniform");
-
-      defProcStFld("s64vector?", "kawa.lib.uniform");
-      defProcStFld("make-s64vector", "kawa.lib.uniform");
-      defProcStFld("s64vector", "kawa.lib.uniform");
-      defProcStFld("s64vector-length", "kawa.lib.uniform");
-      defProcStFld("s64vector-ref", "kawa.lib.uniform");
-      defProcStFld("s64vector-set!", "kawa.lib.uniform");
-      defProcStFld("s64vector->list", "kawa.lib.uniform");
-      defProcStFld("list->s64vector", "kawa.lib.uniform");
-      defProcStFld("u64vector?", "kawa.lib.uniform");
-      defProcStFld("make-u64vector", "kawa.lib.uniform");
-      defProcStFld("u64vector", "kawa.lib.uniform");
-      defProcStFld("u64vector-length", "kawa.lib.uniform");
-      defProcStFld("u64vector-ref", "kawa.lib.uniform");
-      defProcStFld("u64vector-set!", "kawa.lib.uniform");
-      defProcStFld("u64vector->list", "kawa.lib.uniform");
-      defProcStFld("list->u64vector", "kawa.lib.uniform");
-
-      defProcStFld("f32vector?", "kawa.lib.uniform");
-      defProcStFld("make-f32vector", "kawa.lib.uniform");
-      defProcStFld("f32vector", "kawa.lib.uniform");
-      defProcStFld("f32vector-length", "kawa.lib.uniform");
-      defProcStFld("f32vector-ref", "kawa.lib.uniform");
-      defProcStFld("f32vector-set!", "kawa.lib.uniform");
-      defProcStFld("f32vector->list", "kawa.lib.uniform");
-      defProcStFld("list->f32vector", "kawa.lib.uniform");
-      defProcStFld("f64vector?", "kawa.lib.uniform");
-      defProcStFld("make-f64vector", "kawa.lib.uniform");
-      defProcStFld("f64vector", "kawa.lib.uniform");
-      defProcStFld("f64vector-length", "kawa.lib.uniform");
-      defProcStFld("f64vector-ref", "kawa.lib.uniform");
-      defProcStFld("f64vector-set!", "kawa.lib.uniform");
-      defProcStFld("f64vector->list", "kawa.lib.uniform");
-      defProcStFld("list->f64vector", "kawa.lib.uniform");
+      defAliasStFld("bytevector", "gnu.kawa.lispexpr.LangObjType",
+                    "u8vectorType");
+      defProcStFld("bytevector?", "kawa.lib.bytevectors");
+      defProcStFld("make-bytevector", "kawa.lib.bytevectors");
+      defProcStFld("bytevector-length", "kawa.lib.bytevectors");
+      defProcStFld("bytevector-u8-ref", "kawa.lib.bytevectors");
+      defProcStFld("bytevector-u8-set!", "kawa.lib.bytevectors");
+      defProcStFld("bytevector-copy", "kawa.lib.bytevectors");
+      defProcStFld("bytevector-copy!", "kawa.lib.bytevectors");
+      defProcStFld("bytevector-append", "kawa.lib.bytevectors");
+      defProcStFld("utf8->string", "kawa.lib.bytevectors");
+      defProcStFld("string->utf8", "kawa.lib.bytevectors");
 
       defSntxStFld("cut", "gnu.kawa.slib.cut");
       defSntxStFld("cute", "gnu.kawa.slib.cut");
 
-      defSntxStFld("cond-expand", "kawa.lib.syntax");
-      defSntxStFld("%cond-expand", "kawa.lib.syntax");
+      defSntxStFld("cond-expand", "kawa.standard.IfFeature", "condExpand");
 
       defAliasStFld("*print-base*", "gnu.kawa.functions.DisplayFormat",
                     "outBase");
       defAliasStFld("*print-radix*", "gnu.kawa.functions.DisplayFormat",
                     "outRadix");
       defAliasStFld("*print-right-margin*",
-                    "gnu.text.PrettyWriter", "lineLengthLoc");
+                    "gnu.kawa.io.PrettyWriter", "lineLengthLoc");
       defAliasStFld("*print-miser-width*",
-                    "gnu.text.PrettyWriter", "miserWidthLoc");
+                    "gnu.kawa.io.PrettyWriter", "miserWidthLoc");
+      defAliasStFld("*print-circle*", "gnu.kawa.io.PrettyWriter", "isSharing");
+      defAliasStFld("*print-xml-indent*",
+                    "gnu.xml.XMLPrinter", "indentLoc");
       defAliasStFld("html", "gnu.kawa.xml.XmlNamespace", "HTML");
-      defAliasStFld("unit", "kawa.standard.Scheme", "unitNamespace");
+      defAliasStFld("unit", "gnu.kawa.lispexpr.LispLanguage", "unitNamespace");
+      defAliasStFld("$entity$", "gnu.kawa.lispexpr.LispLanguage", "entityNamespace");
+      defAliasStFld("$construct$", "gnu.kawa.lispexpr.LispLanguage", "constructNamespace");
 
       defAliasStFld("path", "gnu.kawa.lispexpr.LangObjType", "pathType");
       defAliasStFld("filepath", "gnu.kawa.lispexpr.LangObjType", "filepathType");
       defAliasStFld("URI", "gnu.kawa.lispexpr.LangObjType", "URIType");
       defProcStFld("resolve-uri", "kawa.lib.files");
 
+      defAliasStFld("$bracket-list$", "gnu.kawa.lispexpr.LangObjType", "constVectorType");
       defAliasStFld("vector", "gnu.kawa.lispexpr.LangObjType", "vectorType");
       defAliasStFld("string", "gnu.kawa.lispexpr.LangObjType", "stringType");
       defAliasStFld("list", "gnu.kawa.lispexpr.LangObjType", "listType");
@@ -836,6 +953,18 @@ public class Scheme extends LispLanguage
       defProcStFld("path-extension", "kawa.lib.files");
       defProcStFld("path-fragment", "kawa.lib.files");
       defProcStFld("path-query", "kawa.lib.files");
+      defProcStFld("path-bytes", "kawa.lib.files");
+      defProcStFld("path-data", "kawa.lib.files");
+      defProcStFld(LispLanguage.constructNamespace.getSymbol("PD"),
+                   "kawa.lib.files", "PD");
+      defProcStFld(LispLanguage.constructNamespace.getSymbol("<"),
+                   "kawa.lib.files", "PD");
+      defProcStFld(LispLanguage.constructNamespace.getSymbol(">"),
+                   "kawa.lib.files", "set_PD");
+      defProcStFld(LispLanguage.constructNamespace.getSymbol(">>"),
+                   "kawa.lib.files", "append_PD");
+
+      defProcStFld("annotation", "gnu.kawa.reflect.MakeAnnotation", "instance");
 
       kawaEnvironment.setLocked();
   }
@@ -853,11 +982,23 @@ public class Scheme extends LispLanguage
 
   public String getName()
   {
-    return "Scheme";
+    switch (standardToFollow)
+      {
+      case FOLLOW_R5RS:
+        return "Scheme-r5rs";
+      case FOLLOW_R6RS:
+        return "Scheme-r6rs";
+      case FOLLOW_R7RS:
+        return "Scheme-r7rs";
+      default:
+        return "Scheme";
+      }
   }
 
-  /** Evalutate Scheme expressions from string.
-   * @param string the string constaining Scheme expressions
+  public String getCompilationClass () { return "kawa.standard.SchemeCompilation"; }
+
+  /** Evaluate Scheme expressions from string.
+   * @param string the string containing Scheme expressions
    * @param env the Environment to evaluate the string in
    * @return result of last expression, or Language.voidObject if none. */
   public static Object eval (String string, Environment env)
@@ -865,7 +1006,7 @@ public class Scheme extends LispLanguage
     return eval (new CharArrayInPort(string), env);
   }
 
-  /** Evalutate Scheme expressions from stream.
+  /** Evaluate Scheme expressions from stream.
    * @param port the port to read Scheme expressions from
    * @param env the Environment to evaluate the string in
    * @return result of last expression, or Language.voidObject if none. */
@@ -876,7 +1017,7 @@ public class Scheme extends LispLanguage
       {
 	LispReader lexer = (LispReader)
 	  Language.getDefaultLanguage().getLexer(port, messages);
-	Object body = ReaderParens.readList(lexer, 0, 1, -1);
+	Object body = ReaderParens.readList(lexer, null, 0, 1, -1, -1);
         if (messages.seenErrors())
           throw new gnu.text.SyntaxException(messages);
 	return Eval.evalBody(body, env, messages);
@@ -893,21 +1034,13 @@ public class Scheme extends LispLanguage
 	throw new RuntimeException("eval: I/O exception: "
 				   + e.toString ());
       }
-    catch (RuntimeException ex)
-      {
-	throw ex;
-      }
-    catch (Error ex)
-      {
-	throw ex;
-      }
     catch (Throwable ex)
       {
-	throw new WrappedException(ex);
+	throw WrappedException.rethrow(ex);
       }
   }
 
-  /** Evalutate Scheme expressions from an "S expression."
+  /** Evaluate Scheme expressions from an "S expression."
    * @param sexpr the S expression to evaluate
    * @param env the Environment to evaluate the string in
    * @return result of the expression. */
@@ -917,27 +1050,30 @@ public class Scheme extends LispLanguage
       {
 	return Eval.eval (sexpr, env);
       }
-    catch (RuntimeException ex)
-      {
-	throw ex;
-      }
-    catch (Error ex)
-      {
-	throw ex;
-      }
     catch (Throwable ex)
       {
-	throw new WrappedException(ex);
+	throw WrappedException.rethrow(ex);
       }
   }
 
-  public static final AbstractFormat writeFormat = new DisplayFormat(true, 'S');
-  public static final AbstractFormat displayFormat = new DisplayFormat(false, 'S');
+  @Override
   public AbstractFormat getFormat(boolean readable)
   {
-    return readable ? writeFormat : displayFormat;
+    return readable ? DisplayFormat.schemeWriteFormat
+        : DisplayFormat.schemeDisplayFormat;
   }
 
+  @Override
+  public LispReader getLexer(InPort inp, SourceMessages messages)
+  {
+    LispReader reader = super.getLexer(inp, messages);
+    if (reader.getReadCase() == '\0'
+        && standardToFollow == FOLLOW_R5RS)
+      reader.setReadCase('D');
+    return reader;
+  }
+
+  @Override
   public int getNamespaceOf (Declaration decl)
   {
     return FUNCTION_NAMESPACE+VALUE_NAMESPACE;
@@ -949,181 +1085,44 @@ public class Scheme extends LispLanguage
     return getInstance().getTypeFor(exp);
   }
 
-  static HashMap<String,Type> types;
-  static HashMap<Type,String> typeToStringMap;
+    private HashMap<String,Type> types;
+    private HashMap<Type,String> typeToStringMap;
 
-  static synchronized HashMap<String,Type> getTypeMap ()
-  {
-    if (types == null)
-      {
-	booleanType
-	  = new LangPrimType(Type.booleanType, Scheme.getInstance());
-	types = new HashMap<String,Type> ();
-	types.put ("void", LangPrimType.voidType);
-	types.put ("int", LangPrimType.intType);
-	types.put ("char", LangPrimType.charType);
-	types.put ("boolean", booleanType);
-	types.put ("byte", LangPrimType.byteType);
-	types.put ("short", LangPrimType.shortType);
-	types.put ("long", LangPrimType.longType);
-	types.put ("float", LangPrimType.floatType);
-	types.put ("double", LangPrimType.doubleType);
-	types.put ("never-returns", Type.neverReturnsType);
+    @Override
+    protected synchronized HashMap<String, Type> getTypeMap() {
+        if (types == null) {
+            types = new HashMap<String, Type>(128); // Bit more wiggle room
+            types.put("boolean", booleanType);
+            types.putAll(super.getTypeMap());
+            for (int i = uniformVectorTags.length; --i >= 0;) {
+                String tag = uniformVectorTags[i];
+                String cname = "gnu.lists." + tag.toUpperCase() + "Vector";
+                types.put(tag + "vector", ClassType.make(cname));
+            }
+        }
+        return types;
+    }
 
-	types.put ("Object", Type.objectType);
-	types.put ("String", Type.toStringType);
+    public String formatType(Type type) {
+        // FIXME synchronize
+        if (type instanceof LazyType) {
+            LazyType ltype = (LazyType) type;
+            return formatType(ltype.getRawType())
+                +'['+formatType(ltype.getValueType())+']';
+        }
+        if (typeToStringMap == null)  {
+            typeToStringMap = new HashMap<Type,String>();
+            // Invert the map returned by getTypeMap.
+            for (java.util.Map.Entry<String,Type> e : getTypeMap().entrySet())
+                typeToStringMap.put(e.getValue(), e.getKey());
+        }
+        String str = typeToStringMap.get(type);
+        if (str != null)
+            return str;
+        return super.formatType(type);
+    }
 
-	types.put ("object", Type.objectType);
-	types.put ("number", LangObjType.numericType);
-	types.put ("quantity", ClassType.make("gnu.math.Quantity"));
-	types.put ("complex", ClassType.make("gnu.math.Complex"));
-	types.put ("real", LangObjType.realType);
-	types.put ("rational", LangObjType.rationalType);
-	types.put ("integer", LangObjType.integerType);
-	types.put ("symbol", ClassType.make("gnu.mapping.Symbol"));
-	types.put ("namespace", ClassType.make("gnu.mapping.Namespace"));
-	types.put ("keyword", ClassType.make("gnu.expr.Keyword"));
-	types.put ("pair", ClassType.make("gnu.lists.Pair"));
-	types.put ("pair-with-position",
-		   ClassType.make("gnu.lists.PairWithPosition"));
-	types.put ("constant-string", ClassType.make("java.lang.String"));
-	types.put ("abstract-string", ClassType.make("gnu.lists.CharSeq"));
-	types.put ("character", ClassType.make("gnu.text.Char"));
-	types.put ("vector", LangObjType.vectorType);
-	types.put ("string", LangObjType.stringType);
-	types.put ("list", LangObjType.listType);
-	types.put ("function", ClassType.make("gnu.mapping.Procedure"));
-	types.put ("procedure", ClassType.make("gnu.mapping.Procedure"));
-	types.put ("input-port", ClassType.make("gnu.mapping.InPort"));
-	types.put ("output-port", ClassType.make("gnu.mapping.OutPort"));
-	types.put ("string-output-port",
-                   ClassType.make("gnu.mapping.CharArrayOutPort"));
-	types.put ("record", ClassType.make("kawa.lang.Record"));
-	types.put ("type", LangObjType.typeType);
-	types.put ("class-type", LangObjType.typeClassType);
-	types.put ("class", LangObjType.typeClass);
-
-        types.put ("s8vector", ClassType.make("gnu.lists.S8Vector"));
-        types.put ("u8vector", ClassType.make("gnu.lists.U8Vector"));
-        types.put ("s16vector", ClassType.make("gnu.lists.S16Vector"));
-        types.put ("u16vector", ClassType.make("gnu.lists.U16Vector"));
-        types.put ("s32vector", ClassType.make("gnu.lists.S32Vector"));
-        types.put ("u32vector", ClassType.make("gnu.lists.U32Vector"));
-        types.put ("s64vector", ClassType.make("gnu.lists.S64Vector"));
-        types.put ("u64vector", ClassType.make("gnu.lists.U64Vector"));
-        types.put ("f32vector", ClassType.make("gnu.lists.F32Vector"));
-        types.put ("f64vector", ClassType.make("gnu.lists.F64Vector"));
-        types.put ("document", ClassType.make("gnu.kawa.xml.KDocument"));
-        types.put ("readtable", ClassType.make("gnu.kawa.lispexpr.ReadTable"));
-      }
-    return types;
-  }
-
-  public static Type getNamedType (String name)
-  {
-    getTypeMap();
-    Type type = (Type) types.get(name);
-    if (type == null
-	&& (name.startsWith("elisp:") || name.startsWith("clisp:")))
-      {
-	int colon = name.indexOf(':');
-	Class clas = getNamedType(name.substring(colon+1)).getReflectClass();
-	String lang = name.substring(0,colon);
-	Language interp = Language.getInstance(lang);
-	if (interp == null)
-	    throw new RuntimeException("unknown type '" + name
-				       + "' - unknown language '"
-				       + lang + '\'');
-	type = interp.getTypeFor(clas);
-	if (type != null)
-	  types.put(name, type);
-      }
-    return type;
-  }
-
-  public Type getTypeFor (Class clas)
-  {
-    String name = clas.getName();
-    if (clas.isPrimitive())
-      return getNamedType(name);
-    if ("java.lang.String".equals(name))
-      return Type.toStringType;
-    if ("gnu.math.IntNum".equals(name))
-      return LangObjType.integerType;
-    if ("gnu.math.DFloNum".equals(name))
-      return LangObjType.dflonumType;
-    if ("gnu.math.RatNum".equals(name))
-      return LangObjType.rationalType;
-    if ("gnu.math.RealNum".equals(name))
-      return LangObjType.realType;
-    if ("gnu.math.Numeric".equals(name))
-      return LangObjType.numericType;
-    if ("gnu.lists.FVector".equals(name))
-      return LangObjType.vectorType;
-    if ("gnu.lists.LList".equals(name))
-      return LangObjType.listType;
-    if ("gnu.text.Path".equals(name))
-      return LangObjType.pathType;
-    if ("gnu.text.URIPath".equals(name))
-      return LangObjType.URIType;
-    if ("gnu.text.FilePath".equals(name))
-      return LangObjType.filepathType;
-    if ("java.lang.Class".equals(name))
-      return LangObjType.typeClass;
-    if ("gnu.bytecode.Type".equals(name))
-      return LangObjType.typeType;
-    if ("gnu.bytecode.ClassType".equals(name))
-      return LangObjType.typeClassType;
-    return Type.make(clas);
-  }
-
-  public String formatType (Type type)
-  {
-    // FIXME synchronize
-    if (typeToStringMap == null)
-      {
-        typeToStringMap = new HashMap<Type,String>();
-        for (java.util.Map.Entry<String,Type> e : getTypeMap().entrySet())
-          {
-            String s = e.getKey();
-            Type t = e.getValue();
-            typeToStringMap.put(t, s);
-            Type it = t.getImplementationType();
-            if (it != t)
-              typeToStringMap.put(it, s);
-          }
-      }
-    String str = typeToStringMap.get(type);
-    if (str != null)
-      return str;
-    return super.formatType(type);
-  }
-
-  public static Type string2Type (String name)
-  {
-    Type t;
-    if (name.endsWith("[]"))
-      {
-	t = string2Type(name.substring(0, name.length()-2));
-	if (t != null)
-	  t = ArrayType.make(t);
-      }
-    else
-      t = getNamedType (name);
-    if (t != null)
-      return t;
-    t = Language.string2Type(name);
-    if (t != null)
-      types.put (name, t);
-    return t;
-  }
-
-  public Type getTypeFor(String name)
-  {
-    return string2Type(name);
-  }
-
-  /** Convert expression to a Type.
+ /** Convert expression to a Type.
    * Allow "TYPE" or 'TYPE or <TYPE>.
    */
   public static Type exp2Type (Expression exp)
@@ -1131,314 +1130,44 @@ public class Scheme extends LispLanguage
     return getInstance().getTypeFor(exp);
   }
 
-  public static final Namespace unitNamespace =
-    Namespace.valueOf("http://kawa.gnu.org/unit", "unit");
-
-  /** If a symbol is lexically unbound, look for a default binding.
-   * If the symbol is the name of an existing Java type/class,
-   * return that Class.
-   * Handles both with and without (semi-deprecated) angle-brackets:
-   * {@code <java.lang.Integer>} and {@code java.lang.Integer}.
-   * Also handles arrays, such as {@code java.lang.String[]}.
-   */
-  public Expression checkDefaultBinding (Symbol symbol, Translator tr)
-  {
-    Namespace namespace = symbol.getNamespace();
-    String local = symbol.getLocalPart();
-    if (namespace instanceof XmlNamespace)
-      return QuoteExp.getInstance(((XmlNamespace) namespace).get(local));
-    if (namespace.getName() == unitNamespace.getName())
-      {
-        Object val = Unit.lookup(local);
-        if (val != null)
-          return QuoteExp.getInstance(val);
-      }
-    String name = symbol.toString();
-    int len = name.length();
-    if (len == 0)
-      return null;
-    if (len > 1 && name.charAt(len-1) == '?')
-      {
-        int llen = local.length();
-        if (llen > 1)
-          {
-            String tlocal = local.substring(0, llen-1).intern();
-            Symbol tsymbol = namespace.getSymbol(tlocal);
-            Expression texp = tr.rewrite(tsymbol, false);
-            if (texp instanceof ReferenceExp)
-              {
-                Declaration decl = ((ReferenceExp) texp).getBinding();
-                if (decl == null || decl.getFlag(Declaration.IS_UNKNOWN))
-                  texp = null;
-              }
-            else if (! (texp instanceof QuoteExp))
-              texp = null;
-            if (texp != null)
-              {
-                LambdaExp lexp = new LambdaExp(1);
-                lexp.setSymbol(symbol);
-                Declaration param = lexp.addDeclaration((Object) null);
-                lexp.body = new ApplyExp(instanceOf,
-                                         new Expression[] {
-                                           new ReferenceExp(param), texp, });
-                return lexp;
-              }
-          }
-      }
-    char ch0 = name.charAt(0);
-
-    // Look for quantities.
-    if (ch0 == '-' || ch0 == '+' || Character.digit(ch0, 10) >= 0)
-      {
-        // 1: initial + or -1 seen.
-        // 2: digits seen
-        // 3: '.' seen
-        // 4: fraction seen
-        // 5: [eE][=+]?[0-9]+ seen
-        int state = 0;
-        int i = 0;
-        for (;  i < len;  i++)
-          {
-            char ch = name.charAt(i);
-            if (Character.digit(ch, 10) >= 0)
-              state = state < 3 ? 2 : state < 5 ? 4 : 5;
-            else if ((ch == '+' || ch == '-') && state == 0)
-              state = 1;
-            else if (ch == '.' && state < 3)
-              state = 3;
-            else if ((ch == 'e' || ch == 'E') && (state == 2 || state == 4)
-                     && i + 1 < len)
-              {
-                int j = i+1;
-                char next = name.charAt(j);
-                if ((next == '-' || next == '+') && ++j < len)
-                  next = name.charAt(j);
-                if (Character.digit(next, 10) < 0)
-                  break;
-                state = 5;
-                i = j+1;
-              }
-            else
-              break;
-          }
-      tryQuantity:
-        if (i < len && state > 1)
-          {
-            DFloNum num = new DFloNum(name.substring(0,i));
-            boolean div = false;
-            Vector vec = new Vector();
-            for (; i < len ;)
-              {
-                char ch = name.charAt(i++);
-                if (ch == '*')
-                  {
-                    if (i == len) break tryQuantity;
-                    ch = name.charAt(i++);
-                  }
-                else if (ch == '/')
-                  {
-                    if (i == len || div) break tryQuantity; 
-                    div = true;
-                    ch = name.charAt(i++);
-                  }
-                int unitStart = i-1;
-                int unitEnd;
-                for (;;)
-                  {
-                    if (! Character.isLetter(ch))
-                      {
-                        unitEnd = i - 1;
-                        if (unitEnd == unitStart)
-                          break tryQuantity;
-                        break;
-                      }
-                    if (i == len)
-                      {
-                        unitEnd = i;
-                        ch = '1';
-                        break;
-                      }
-                    ch = name.charAt(i++);
-                  }
-                vec.addElement(name.substring(unitStart, unitEnd));
-                boolean expRequired = false;
-                if (ch == '^')
-                  {
-                    expRequired = true;
-                    if (i == len) break tryQuantity; 
-                    ch = name.charAt(i++);
-                  }
-                boolean neg = div;
-                if (ch == '+')
-                  {
-                    expRequired = true;
-                    if (i == len) break tryQuantity; 
-                    ch = name.charAt(i++);
-                  }
-                else if (ch == '-')
-                  {
-                    expRequired = true;
-                    if (i == len) break tryQuantity; 
-                    ch = name.charAt(i++);
-                    neg = ! neg;
-                  }
-                int nexp = 0;
-                int exp = 0;
-                for (;;)
-                  {
-                    int dig = Character.digit(ch, 10);
-                    if (dig <= 0)
-                      {
-                        i--;
-                        break;
-                      }
-                    exp = 10 * exp + dig;
-                    nexp++;
-                    if (i == len)
-                      break;
-                    ch = name.charAt(i++);
-                  }
-                if (nexp == 0)
-                  {
-                    exp = 1;
-                    if (expRequired)
-                      break tryQuantity;
-                  }
-                if (neg)
-                  exp = - exp;
-                vec.addElement(IntNum.make(exp));
-              }
-            if (i == len)
-              {
-                int nunits = vec.size() >> 1;
-                Expression[] units = new Expression[nunits];
-                for (i = 0;  i < nunits;  i++)
-                  {
-                    String uname = (String) vec.elementAt(2*i);
-                    Symbol usym = unitNamespace.getSymbol(uname.intern());
-                    Expression uref = tr.rewrite(usym);
-                    IntNum uexp = (IntNum) vec.elementAt(2*i+1);
-                    if (uexp.longValue() != 1)
-                      uref = new ApplyExp(expt.expt,
-                                          new Expression[] { uref , QuoteExp.getInstance(uexp) });
-                    units[i] = uref;
-                  }
-                Expression unit;
-                if (nunits == 1)
-                  unit = units[0];
-                else
-                  unit = new ApplyExp(MultiplyOp.$St, units);
-                return new ApplyExp(MultiplyOp.$St,
-                                    new Expression[] { QuoteExp.getInstance(num),
-                                                       unit });
-              }
-          }
-      }
-
-    boolean sawAngle;
-    if (len > 2 && ch0 == '<' && name.charAt(len-1) == '>')
-      {
-        name = name.substring(1, len-1);
-        len -= 2;
-        sawAngle = true;
-      }
-    else
-      sawAngle = false;
-    int rank = 0;
-    while (len > 2 && name.charAt(len-2) == '[' && name.charAt(len-1) == ']')
-      {
-        len -= 2;
-        rank++;
-      }
-
-    String cname = name;
-    if (rank != 0)
-      cname = name.substring(0, len);
-    try
-      { 
-        Class clas;
-        Type type = getNamedType(cname);
-        if (rank > 0 && (! sawAngle || type == null))
-          {
-            Symbol tsymbol = namespace.getSymbol(cname.intern());
-            Expression texp = tr.rewrite(tsymbol, false);
-            texp = InlineCalls.inlineCalls(texp, tr);
-            if (! (texp instanceof ErrorExp))
-              type = tr.getLanguage().getTypeFor(texp);
-          }
-        if (type != null)
-          {
-            // Somewhat inconsistent: Types named by getNamedType are Type,
-            // while standard type/classes are Class.  FIXME.
-            while (--rank >= 0)
-              type = gnu.bytecode.ArrayType.make(type);
-            return QuoteExp.getInstance(type);
-          }
-        else
-          {
-            type = Type.lookupType(cname);
-            if (type instanceof gnu.bytecode.PrimType)
-              clas = type.getReflectClass();
-            else
-              {
-                if (cname.indexOf('.') < 0)
-                  cname = (tr.classPrefix
-                           + Compilation.mangleNameIfNeeded(cname));
-                clas = ClassType.getContextClass(cname);
-              }
-          }
-        if (clas != null)
-          {
-            if (rank > 0)
-              {
-                type = Type.make(clas);
-                while (--rank >= 0)
-                  type = gnu.bytecode.ArrayType.make(type);
-                clas = type.getReflectClass();
-              }
-            return QuoteExp.getInstance(clas);
-          }
-      }
-    catch (ClassNotFoundException ex)
-      {
-        Package pack = gnu.bytecode.ArrayClassLoader.getContextPackage(name);
-        if (pack != null)
-          return QuoteExp.getInstance(pack);
-      }
-    catch (Throwable ex)
-      {
-      }
-    return null;
-  }
-
-  public Expression makeApply (Expression func, Expression[] args)
-  {
-    Expression[] exps = new Expression[args.length+1];
-    exps[0] = func;
-    System.arraycopy(args, 0, exps, 1, args.length);
-    return new ApplyExp(new ReferenceExp(applyFieldDecl), exps);
-  }
-
   public Symbol asSymbol (String ident)
   {
     return Namespace.EmptyNamespace.getSymbol(ident);
   }
 
+  /** Should the values of body/block be appended as multiple values?
+   * Otherwise, just return the result of the final expression.
+   */
+  public boolean appendBodyValues () { return false; }
+
+    @Override
+    public boolean keywordsAreSelfEvaluating() { return false; }
+
   public ReadTable createReadTable ()
   {
     ReadTable tab = ReadTable.createInitial();
-    tab.postfixLookupOperator = ':';
+    int std =  standardToFollow;
     ReaderDispatch dispatchTable = (ReaderDispatch) tab.lookup('#');
-    dispatchTable.set('\'', new ReaderQuote(asSymbol("syntax")));
-    dispatchTable.set('`', new ReaderQuote(asSymbol("quasisyntax")));
-    dispatchTable.set(',', ReaderDispatchMisc.getInstance());
+    ReaderDispatchSyntaxQuote sentry = new ReaderDispatchSyntaxQuote();
+    dispatchTable.set('\'', sentry);
+    dispatchTable.set('`', sentry);
+    dispatchTable.set(',', sentry);
     tab.putReaderCtorFld("path", "gnu.kawa.lispexpr.LangObjType", "pathType");
     tab.putReaderCtorFld("filepath", "gnu.kawa.lispexpr.LangObjType", "filepathType");
     tab.putReaderCtorFld("URI", "gnu.kawa.lispexpr.LangObjType", "URIType");
     tab.putReaderCtor("symbol", ClassType.make("gnu.mapping.Symbol"));
     tab.putReaderCtor("namespace", ClassType.make("gnu.mapping.Namespace"));
     tab.putReaderCtorFld("duration", "kawa.lib.numbers", "duration");
-    tab.setFinalColonIsKeyword(true);
+    if (std == FOLLOW_R5RS || std == FOLLOW_R6RS || std == FOLLOW_R7RS)
+      {
+      }
+    else
+      {
+        tab.postfixLookupOperator = ':';
+        tab.setFinalColonIsKeyword(true);
+        tab.set('@', new ReaderQuote(LispLanguage.splice_sym,
+                                     ReadTable.NON_TERMINATING_MACRO));
+      }
     return tab;
   }
 

@@ -7,9 +7,17 @@ import gnu.text.SourceMessages;
 import gnu.text.SyntaxException;
 import gnu.lists.*;
 import java.util.ArrayList;
-import java.util.Vector;
+import java.util.Collections;
+import java.util.List;
 import gnu.bytecode.ClassType;
 import gnu.kawa.servlet.HttpRequestContext;
+import gnu.kawa.io.CharArrayInPort;
+import gnu.kawa.io.InPort;
+import gnu.kawa.io.OutPort;
+import gnu.kawa.io.Path;
+import gnu.kawa.io.WriterManager;
+import gnu.kawa.util.ExitCalled;
+import kawa.lang.SyntaxPattern;
 
 /** Start a "Read-Eval-Print-Loop" for the Kawa Scheme evaluator. */
 
@@ -101,12 +109,12 @@ public class repl extends Procedure0or1
     printOption(out, "-P <prefix>", "Prefix to prepand to class names");
     printOption(out, "-T <topname>", "name to give to top-level class");
     
-    printOption(out, "--main", "Generate an application, with a main method");
     printOption(out, "--applet", "Generate an applet");
     printOption(out, "--servlet", "Generate a servlet");
     printOption(out, "--module-static", "Top-level definitions are by default static");
 
-    ArrayList<String> keys = Compilation.options.keys();
+    List<String> keys = Compilation.options.keys();
+    Collections.sort(keys);
     for (int i = 0; i < keys.size(); ++i)
       {
         String name = keys.get(i);
@@ -124,25 +132,60 @@ public class repl extends Procedure0or1
     /* Set homeDirectory;  if first time called, run ~/.kawarc.scm. */
     if (homeDirectory == null)
       {
-	File initFile = null;
-	homeDirectory = System.getProperty ("user.home");
-	Object scmHomeDirectory;
-	if (homeDirectory != null)
-	  {
-	    scmHomeDirectory = new FString (homeDirectory);
-	    String file_separator = System.getProperty("file.separator");
-	    String kawarc_name =
-	      "/".equals(file_separator) ? ".kawarc.scm"
-	      : "kawarc.scm";
-	    initFile = new File(homeDirectory, kawarc_name);
-	  }
-	else
-	  scmHomeDirectory = Boolean.FALSE;
-	Environment.getCurrent().put("home-directory", scmHomeDirectory);
+	File initFile = getInitFile();
 	if (initFile != null && initFile.exists())
 	  if (! Shell.runFileOrClass(initFile.getPath(), true, 0))
-            System.exit(-1);
+	    System.exit(-1);
       }
+  }
+
+  static File getInitFile()
+  {
+    File initFile = null;
+    homeDirectory = System.getProperty ("user.home");
+    Object scmHomeDirectory;
+    if (homeDirectory != null)
+      {
+	scmHomeDirectory = new FString (homeDirectory);
+	String file_separator = System.getProperty("file.separator");
+	String kawarc_name = new String();
+	if (Language.getDefaultLanguage().getName().equals("Emacs-Lisp"))
+	    kawarc_name = ".jemacs";
+	else
+	    kawarc_name =
+	  "/".equals(file_separator) ? ".kawarc.scm"
+	  : "kawarc.scm";
+	initFile = new File(homeDirectory, kawarc_name);
+      }
+    else
+      scmHomeDirectory = Boolean.FALSE;
+    Environment.getCurrent().put("home-directory", scmHomeDirectory);
+    return initFile;
+  }
+
+  /** Evaluate init file, if any, returning error message on failure. */
+  public static String evalInitFileWithErrorMessage ()
+  {
+    File initFile = getInitFile();
+    if (initFile != null && initFile.exists())
+      {
+        try 
+          {
+            Path path = Path.valueOf(initFile.getPath());
+            InputStream fs = path.openInputStream();
+            Environment env = Environment.getCurrent();
+            Shell.runFile(fs, path, env, true, 0);
+          }
+        catch (Error e)
+          {
+            throw e;
+          }
+        catch (Throwable e)
+          {
+            return "An error occurred while loading '" + initFile +"' : " + e;
+          }
+      }
+    return null;
   }
 
   public static void setArgs (String[] args, int arg_start)
@@ -174,11 +217,12 @@ public class repl extends Procedure0or1
   }
 
   static boolean shutdownRegistered
-    = gnu.text.WriterManager.instance.registerShutdownHook();
+    = WriterManager.instance.registerShutdownHook();
 
   public static int processArgs(String[] args, int iArg, int maxArg)
   {
     boolean something_done = false;
+    int returnDelta = 0;
     for ( ;  iArg < maxArg;  iArg++)
       {
 	String arg = args[iArg];
@@ -228,7 +272,7 @@ public class repl extends Procedure0or1
                   {
                     skipLines = Integer.parseInt(count);
                   }
-                catch (Throwable ex)
+                catch (Exception ex)
                   {
                     iArg = maxArg; // force bad_option.
                   }
@@ -249,6 +293,7 @@ public class repl extends Procedure0or1
 	    if (++iArg == maxArg)
 	      bad_option (arg);
 	    String filename = args[iArg];
+            ApplicationMainSupport.commandName.set(filename);
 	    InPort freader;
             SourceMessages messages = new SourceMessages();
 	    try
@@ -258,7 +303,7 @@ public class repl extends Procedure0or1
 		if (ch == '#')
 		  {
 		    StringBuffer sbuf = new StringBuffer(100);
-		    Vector xargs = new Vector(10);
+		    ArrayList<String> xargs = new ArrayList<String>(10);
 		    int state = 0;
 		    while (ch != '\n' && ch != '\r' && ch >= 0)
 		      ch = fstream.read();
@@ -283,7 +328,7 @@ public class repl extends Procedure0or1
 			      {
 				if (sbuf.length() > 0)
 				  {
-				    xargs.addElement(sbuf.toString());
+				    xargs.add(sbuf.toString());
 				    sbuf.setLength(0);
 				  }
 				continue;
@@ -299,40 +344,21 @@ public class repl extends Procedure0or1
 			sbuf.append((char) ch);
 		      }
 		    if (sbuf.length() > 0)
-		      xargs.addElement(sbuf.toString());
+		      xargs.add(sbuf.toString());
 		    int nxargs = xargs.size();
-		    if (nxargs > 0)
-		      {
-			String[] sargs = new String[nxargs];
-			xargs.copyInto(sargs);
-			int ixarg = processArgs(sargs, 0, nxargs);
-			if (ixarg >= 0 && ixarg < nxargs)
-			  { // FIXME
-			    System.err.println(""+(nxargs-ixarg)+" unused meta args");
-			  }
-		      }
+                    iArg--;
+                    String[] nargs = new String[maxArg+nxargs-1];
+                    System.arraycopy(args, 0, nargs, 0, iArg);
+                    for (int i = 0;  i < nxargs;  i++)
+                        nargs[iArg+i] = xargs.get(i);
+                    System.arraycopy(args, iArg+1, nargs, iArg+nxargs,
+                                     maxArg-iArg-1);
+                    maxArg = maxArg+nxargs-1;
+                    returnDelta += nargs.length-args.length;
+                    args = nargs;
+                    iArg--;
+                    continue;
 		  }
-		getLanguageFromFilenameExtension(filename);
-		freader = InPort.openFile(fstream, filename);
-		// FIXME adjust line number
-		setArgs(args, iArg+1);
-		checkInitFile();
-                OutPort err = OutPort.errDefault();
-                Throwable ex = Shell.run(Language.getDefaultLanguage(),
-                                         Environment.getCurrent(),
-                                         freader, OutPort.outDefault(), null,
-                                         messages);
-                messages.printAll(err, 20);
-                if (ex != null)
-                  {
-                    if (ex instanceof SyntaxException)
-                      {
-                        SyntaxException se = (SyntaxException) ex;
-                        if (se.getMessages() == messages)
-                          System.exit(1);
-                      }
-                    throw ex;
-                  }
 	      }
 	    catch (Throwable ex)
 	      {
@@ -367,15 +393,17 @@ public class repl extends Procedure0or1
             ModuleManager manager = ModuleManager.getInstance();
 	    manager.setCompilationDirectory(args[iArg]);
 	  }
-        else if (arg.equals("--target") || arg.equals("target"))
+        else if (arg.equals("--target") || arg.equals("-target"))
           {
 	    iArg++;
 	    if (iArg == maxArg)
 	      bad_option (arg);
             arg = args[iArg];
-            if (arg.equals("7"))
+            if (arg.equals("8") || arg.equals("1.8"))
+              Compilation.defaultClassFileVersion = ClassType.JDK_1_8_VERSION;
+            else if (arg.equals("7") || arg.equals("1.7"))
               Compilation.defaultClassFileVersion = ClassType.JDK_1_7_VERSION;
-            if (arg.equals("6") || arg.equals("1.6"))
+            else if (arg.equals("6") || arg.equals("1.6"))
               Compilation.defaultClassFileVersion = ClassType.JDK_1_6_VERSION;
             else if (arg.equals("5") || arg.equals("1.5"))
               Compilation.defaultClassFileVersion = ClassType.JDK_1_5_VERSION;
@@ -404,6 +432,10 @@ public class repl extends Procedure0or1
 	      bad_option (arg);
 	    compilationTopname = args[iArg];
 	  }
+        else if (arg.equals ("--main"))
+          {
+	    defaultParseOptions |= Language.PARSE_EMIT_MAIN;
+          }
 	else if (arg.equals ("-C"))
 	  {
 	    ++iArg;
@@ -557,10 +589,6 @@ public class repl extends Procedure0or1
             // System.exit(-1);
             /* #endif */
           }
-        else if (arg.equals("--main"))
-	  {
-	    Compilation.generateMainDefault = true;
-	  }
 	else if (arg.equals("--applet"))
 	  {
 	    defaultParseOptions |= Language.PARSE_FOR_APPLET;
@@ -582,6 +610,10 @@ public class repl extends Procedure0or1
 	  {
 	    Compilation.debugPrintFinalExpr = true;
 	  }
+	else if (arg.equals("--debug-syntax-pattern-match"))
+	  {
+	    SyntaxPattern.printSyntaxPatternMatch = true;
+	  }
 	else if (arg.equals("--debug-error-prints-stack-trace"))
 	  {
             SourceMessages.debugStackTraceOnError = true;
@@ -590,6 +622,8 @@ public class repl extends Procedure0or1
 	  {
             SourceMessages.debugStackTraceOnWarning = true;
 	  }
+        else if (arg.equals("--diagnostic-strip-directories"))
+          SourceMessages.stripDirectoriesDefault = true;
 	else if (arg.equals("--module-nonstatic")
                  || arg.equals("--no-module-static"))
 	  {
@@ -609,7 +643,7 @@ public class repl extends Procedure0or1
 	    Compilation.inlineOk = false;
 	  }
         else if (arg.equals("--no-console"))
-          noConsole = true;
+          InPort.noConsole = true;
 	else if (arg.equals("--inline"))
 	  {
 	    Compilation.inlineOk = true;
@@ -648,14 +682,13 @@ public class repl extends Procedure0or1
 	    System.out.print("Kawa ");
 	    System.out.print(Version.getVersion());
 	    System.out.println();
-	    System.out.println("Copyright (C) 2009 Per Bothner");
+	    System.out.println("Copyright (C) 2014 Per Bothner");
 	    something_done = true;
 	  }
 	else if (arg.length () > 0 && arg.charAt(0) == '-')
 	  { // Check if arg is a known language name.
-	    String name = arg;
-	    if (name.length() > 2 && name.charAt(0) == '-')
-	      name = name.substring(name.charAt(1) == '-' ? 2 :1);
+            boolean doubleDash = arg.length() > 2 && arg.charAt(1) == '-';
+	    String name = arg.substring(doubleDash ? 2 : 1);
 	    Language lang = Language.getInstance(name);
 	    if (lang != null)
 	      {
@@ -668,7 +701,7 @@ public class repl extends Procedure0or1
 	    else
 	      {
 		// See if arg is a valid Compilation option, and if so set it.
-		int eq = name.indexOf("=");
+		int eq = name.indexOf('=');
 		String opt_value;
 		if (eq < 0)
 		  opt_value = null;
@@ -681,19 +714,26 @@ public class repl extends Procedure0or1
 		// Convert "--no-xxx" to "--xxx=no":
 		boolean startsWithNo
 		  = name.startsWith("no-") && name.length() > 3;
-		if (opt_value == null && startsWithNo)
+		boolean addedNo = false;
+                if (opt_value == null && startsWithNo)
 		  {
 		    opt_value = "no";
 		    name = name.substring(3);
+                    addedNo = true;
 		  }
 
 		String msg = Compilation.options.set(name, opt_value);
 		if (msg != null)
 		  {
-		    // It wasn't a valid Complation option.
-		    if (startsWithNo && msg == gnu.text.Options.UNKNOWN)
-		      msg = "both '--no-' prefix and '="+
-			opt_value+"' specified";
+		    if (msg == gnu.text.Options.UNKNOWN)
+                      {
+                        if (addedNo)
+                          msg = "unknown option '"+name+"'";
+                        // It wasn't a valid Compilation option.
+                        else if (startsWithNo)
+                          msg = "both '--no-' prefix and '="+
+                            opt_value+"' specified";
+                      }
 		    if (msg == gnu.text.Options.UNKNOWN)
 		      {
 			bad_option(arg);
@@ -710,7 +750,9 @@ public class repl extends Procedure0or1
 	else if (! ApplicationMainSupport.processSetProperty(arg))
           break;
       }
-    return something_done ? -1 : iArg;
+    // Adjust return value to index in *incoming* array.
+    // This is a hack to compensate for meta-arg handling.
+    return something_done ? -1 : iArg-returnDelta;
   }
 
   public static void compileFiles (String[] args, int iArg, int maxArg)
@@ -730,7 +772,8 @@ public class repl extends Procedure0or1
             InPort fstream;
             try
               {
-                fstream = InPort.openFile(arg);
+                Path path = Path.valueOf(arg);
+                fstream = Shell.openFile(path.openInputStream(), path);
               }
             catch (java.io.FileNotFoundException ex)
               {
@@ -739,26 +782,24 @@ public class repl extends Procedure0or1
                 break; // Kludge to shut up compiler.
               }
             
-            comp
-              = language.parse(fstream, messages,
-                               defaultParseOptions);
-
+            ModuleInfo minfo = manager.findWithSourcePath(arg);
+    
             if (compilationTopname != null)
               {
                 String cname
                   = Compilation.mangleNameIfNeeded(compilationTopname);
-                ClassType ctype = new ClassType(cname);
-                ModuleExp mexp = comp.getModule();
-                mexp.setType(ctype);
-                mexp.setName(compilationTopname);
-                comp.mainClass = ctype;
+                if (Compilation.classPrefixDefault != null)
+                  cname = Compilation.classPrefixDefault + cname;
+                minfo.setClassName(cname);
               }
-            
-            infos[i-iArg] = manager.find(comp);
-            comps[i-iArg] = comp;
 
+            comp
+              = language.parse(fstream, messages,
+                               defaultParseOptions, minfo);
+            infos[i-iArg] = minfo;
+            comps[i-iArg] = comp;
           }
-        catch (Throwable ex)
+        catch (Exception ex)
           {
             if (! (ex instanceof SyntaxException)
                 || ((SyntaxException) ex).getMessages() != messages)
@@ -791,7 +832,7 @@ public class repl extends Procedure0or1
             if (sawErrors)
               System.exit(-1);
           }
-        catch (Throwable ex)
+        catch (Exception ex)
           {
             internalError(ex, comp, arg);
           }
@@ -800,6 +841,8 @@ public class repl extends Procedure0or1
 
   static void internalError (Throwable ex, Compilation comp, Object arg)
   {
+    try { comp.getMessages().checkErrors(System.err, 50); }
+    catch (Exception e) { }
     StringBuffer sbuf = new StringBuffer();
     if (comp != null)
       {
@@ -824,6 +867,7 @@ public class repl extends Procedure0or1
   {
     try
       {
+        ExitCalled.push();
 	int iArg = processArgs(args, 0, args.length);
 	if (iArg < 0)
 	  return;
@@ -841,7 +885,7 @@ public class repl extends Procedure0or1
 	    getLanguage();
 	    setArgs (args, iArg);
 	    checkInitFile();
-            if (shouldUseGuiConsole())
+            if (! InPort.haveConsole())
               startGuiConsole();
             else
               {
@@ -857,29 +901,11 @@ public class repl extends Procedure0or1
 	if (! shutdownRegistered)
 	  {
 	    // Redundant if registerShutdownHook succeeded (e.g on JDK 1.3).
-	    gnu.mapping.OutPort.runCleanups();
+	    OutPort.runCleanups();
 	  }
 	ModuleBody.exitDecrement();
+        ExitCalled.pop();
       }
-  }
-
-  public static boolean noConsole;
-
-  public static boolean shouldUseGuiConsole ()
-  {
-    if (noConsole)
-      return true;
-    try
-      {
-        if ((Class.forName("java.lang.System")
-             .getMethod("console", new Class[0])
-             .invoke(new Object[0])) == null)
-          return true;
-      }
-    catch (Throwable ex)
-      {
-      }
-    return false;
   }
 
   private static void startGuiConsole ()

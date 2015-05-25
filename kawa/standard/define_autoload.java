@@ -3,11 +3,12 @@
 
 package kawa.standard;
 import gnu.expr.*;
-import kawa.lang.*;
 import gnu.lists.*;
-import java.io.File;
 import gnu.mapping.*;
+import gnu.kawa.io.InPort;
 import gnu.kawa.lispexpr.*;
+import kawa.lang.*;
+import java.io.File;
 
 public class define_autoload extends Syntax
 {
@@ -24,11 +25,11 @@ public class define_autoload extends Syntax
     this.fromFile = fromFile;
   }
 
-  public boolean scanForDefinitions (Pair st, java.util.Vector forms,
-                                     ScopeExp defs, Translator tr)
+  @Override
+  public boolean scanForDefinitions (Pair st, ScopeExp defs, Translator tr)
   {
     if (! (st.getCdr() instanceof Pair))
-      return super.scanForDefinitions(st, forms, defs, tr);
+      return super.scanForDefinitions(st, defs, tr);
     Pair p = (Pair) st.getCdr();
     if (fromFile)
       {
@@ -59,7 +60,7 @@ public class define_autoload extends Syntax
       {
 	p = (Pair) p.getCdr();
 	filename = p.getCar();
-	return process(names, filename, forms, defs, tr);
+	return process(names, filename, defs, tr);
       }
     tr.syntaxError("invalid syntax for define-autoload");
     return false;
@@ -202,8 +203,6 @@ public class define_autoload extends Syntax
 			Expression ex = new QuoteExp(value);
 			decl.setFlag(Declaration.IS_CONSTANT);
 			decl.noteValue(ex);
-			decl.setProcedureDecl(true);
-			decl.setType(Compilation.typeProcedure);
 		      }
 		  }
 		lineStart = false;
@@ -233,14 +232,13 @@ public class define_autoload extends Syntax
   }
 
   public static boolean process(Object names, Object filename,
-			       java.util.Vector forms,
 			       ScopeExp defs, Translator tr)
   {
     if (names instanceof Pair)
       {
 	Pair p = (Pair) names;
-	return (process(p.getCar(), filename, forms, defs, tr)
-		&& process(p.getCdr(), filename, forms, defs, tr));
+	return (process(p.getCar(), filename, defs, tr)
+		&& process(p.getCdr(), filename, defs, tr));
       }
     if (names == LList.Empty)
       return true;
@@ -271,8 +269,8 @@ public class define_autoload extends Syntax
       {
 	String name = names.toString();
 	Declaration decl = defs.getDefine(name, 'w', tr);
-	if (filename instanceof String
-	    && (len = (fn = (String) filename).length()) > 2
+	if (filename instanceof SimpleSymbol
+	    && (len = (fn = filename.toString()).length()) > 2
 	    && fn.charAt(0) == '<' && fn.charAt(len-1) == '>')
 	  filename = fn.substring(1, len-1);
 	Object value = new AutoloadProcedure(name, filename.toString(),

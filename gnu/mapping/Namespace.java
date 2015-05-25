@@ -1,8 +1,9 @@
-// Copyright (c) 1996-2000, 2001, 2002, 2004  Per M.A. Bothner.
+// Copyright (c) 1996-2000, 2001, 2002, 2004, 2012  Per M.A. Bothner.
 // This is free software;  for terms and warranty disclaimer see ./COPYING.
 
 package gnu.mapping;
-import java.util.Hashtable;
+import gnu.kawa.util.*;
+import java.util.*;
 import java.io.*;
 
 /** A mapping from strings ("print names") to <code>Symbol</code>s.
@@ -17,6 +18,7 @@ import java.io.*;
  */
 
 public class Namespace
+  extends AbstractHashTable<SymbolRef, String, Symbol>
   implements Externalizable, HasNamedParts
 {
   /** Map namepsace names (and nick-names) to Namespaces. */
@@ -37,19 +39,14 @@ public class Namespace
 
   public final String getPrefix () { return prefix; }
 
-  protected Namespace ()
+  public Namespace()
   {
     this(64);
   }
 
   protected Namespace (int capacity)
   {
-    log2Size = 4;
-    while (capacity > (1 << log2Size))
-      log2Size++;
-    capacity = 1 << log2Size;
-    table = new SymbolRef[capacity];
-    mask = capacity - 1;
+    super(capacity);
   }
 
   public static Namespace create (int capacity)
@@ -77,6 +74,9 @@ public class Namespace
     return EmptyNamespace;
   }
 
+  /** Return Namespace with the given name (namespace-URI).
+   *  Create it if needed.
+   */
   public static Namespace valueOf (String name)
   {
     if (name == null)
@@ -93,6 +93,15 @@ public class Namespace
       }
   }
 
+    /** Return Namespace with the given name (namespace-URI), if it exists.
+     * Return null if no such namespace exists.
+     */
+    public static Namespace valueOfNoCreate(String name) {
+        if (name == null)
+            name = "";
+        return (Namespace) nsTable.get(name);
+    }
+
   public static Namespace valueOf (String uri, String prefix)
   {
     if (prefix == null || prefix.length() == 0)
@@ -104,7 +113,9 @@ public class Namespace
 	if (old instanceof Namespace)
 	  return (Namespace) old;
 	Namespace ns = new Namespace();
-        ns.setName(uri.intern());
+        if (uri != UNKNOWN_NAMESPACE)
+            uri = uri.intern();
+        ns.setName(uri);
         ns.prefix = prefix.intern();
 	nsTable.put(xname, ns);
 	return ns;
@@ -116,19 +127,22 @@ public class Namespace
     return valueOf(uri, prefix == null ? null : prefix.getName());
   }
 
-  /** Create a "placeholder" for a namespace with a known prefix
-   * but unknown uri.
-   * @see Symbol#makeWithUnknownNamespace
-   */
-  public static Namespace makeUnknownNamespace (String prefix)
-  {
-    String uri;
-    if (prefix == null || prefix == "")
-      uri = "";
-    else
-      uri = "http://kawa.gnu.org/unknown-namespace/"+prefix;
-    return Namespace.valueOf(uri, prefix);
-  }
+  public static final String UNKNOWN_NAMESPACE = new String("$unknown$");
+
+  /** A namespace with known prefix but unknown uri. */
+  public boolean isUnknownNamespace() {
+      return name == UNKNOWN_NAMESPACE;
+    }
+
+    /** Create a "placeholder" for a namespace with a known prefix
+     * but unknown uri.
+     * @see Symbol#makeWithUnknownNamespace
+     */
+    public static Namespace makeUnknownNamespace (String prefix) {
+        String uri = prefix == null || prefix == "" ? ""
+            : UNKNOWN_NAMESPACE;
+        return Namespace.valueOf(uri, prefix);
+    }
 
   public Object get (String key)
   {
@@ -157,9 +171,12 @@ public class Namespace
     return lookup(key, key.hashCode(), false);
   }
 
+  /** Search for an existing Symbol with the give name.
+   * @param key String - does not need to be interned.
+   */
   protected final Symbol lookupInternal(String key, int hash)
   {
-    int index = hash & mask;
+    int index = hashToIndex(hash);
     SymbolRef prev = null;
     for (SymbolRef ref = table[index];  ref != null;  )
       {
@@ -187,15 +204,19 @@ public class Namespace
 
   public Symbol add(Symbol sym, int hash)
   {
-    int index = hash & mask;
-    SymbolRef ref = new SymbolRef(sym, this);
-    sym.namespace = this;
-    ref.next = table[index];
-    table[index] = ref;
-    num_bindings++;
-    if (num_bindings >= table.length)
-      rehash();
+    put(sym.getName(), hash, sym);
     return sym;
+  }
+
+  public Symbol get (Object key, Symbol defaultValue)
+  {
+    if (key instanceof String)
+      {
+        Symbol sym = lookup((String) key, key.hashCode(), false);
+        if (sym != null)
+          return sym;
+      }
+      return defaultValue;
   }
 
   public Symbol lookup(String key, int hash, boolean create)
@@ -221,7 +242,7 @@ public class Namespace
             if (this == EmptyNamespace)
               sym = new SimpleSymbol(key);
             else
-              sym = new Symbol(this, key);
+              sym = new Symbol(key, this);
             return add(sym, hash);
           }
 	else
@@ -234,70 +255,21 @@ public class Namespace
     synchronized (this)
       {
 	String name = symbol.getLocalPart();
-	int hash = name.hashCode();
-	int index = hash & mask;
-	SymbolRef prev = null;
-	SymbolRef ref = table[index];
-	while (ref != null)
-	  {
-	    SymbolRef next = ref.next;
-	    Symbol refsym = ref.getSymbol();
-	    if (refsym == null || refsym == symbol)
-	      {
-		if (prev == null)
-		  table[index] = next;
-		else
-		  prev.next = next;
-		num_bindings--;
-		if (refsym != null)
-		  return true;
-	      }
-	    else
-	      prev = ref;
-	    ref = next;
-	  }
-	return false;
+        return remove(name) != null;
       }
   }
 
-  protected SymbolRef[] table;
-  int log2Size;
-  private int mask;
-  int num_bindings;
+    protected int getEntryHashCode (SymbolRef entry) { return entry.hashCode(); }
+    /** Extract next Entry in same hash-bucket. */
+    protected SymbolRef getEntryNext (SymbolRef entry) { return entry.next; }
+    /** Set next Entry in same hash-bucket. */
+    protected void setEntryNext (SymbolRef entry, SymbolRef next) { entry.next = next; }
+    /** Allocate Entry[n]. */
+    protected SymbolRef[] allocEntries(int n) { return new SymbolRef[n]; }
 
-  protected void rehash ()
-  {
-    int oldCapacity = table.length;
-    int newCapacity = 2 * oldCapacity;
-    int newMask = newCapacity - 1;
-    int countInserted = 0;
-    SymbolRef[] oldTable = table;
-    SymbolRef[] newTable = new SymbolRef[newCapacity];
-
-    for (int i = oldCapacity;  --i >= 0;)
-      {
-	for (SymbolRef ref = oldTable[i];  ref != null;  )
-	  {
-	    SymbolRef next = ref.next;
-	    Symbol sym = ref.getSymbol();
-	    if (sym != null)
-	      {
-		String key = sym.getName();
-		int hash = key.hashCode();
-		int index = hash & newMask;
-		countInserted++;
-		ref.next = newTable[index];
-		newTable[index] = ref;
-	      }
-	    ref = next;
-	  }
-      }
-
-    table = newTable;
-    log2Size++;
-    mask = newMask;
-    num_bindings = countInserted;
-  }
+    protected SymbolRef makeEntry (String key, int hash, Symbol value) {
+        return new SymbolRef(value);
+    }
 
   public void writeExternal(ObjectOutput out) throws IOException
   {
@@ -348,45 +320,48 @@ public class Namespace
  * even though they're referenced from a <code>Namespace</code>. */
 
 class SymbolRef
-  /* #ifdef JAVA2 */
-  extends java.lang.ref.WeakReference
-  /* #endif */
+  extends java.lang.ref.WeakReference<Symbol>
+  implements Map.Entry<String,Symbol>
 {
-  SymbolRef next;
+    SymbolRef next;
 
-  /* #ifndef JAVA2 */
-  // Symbol sym;
-  /* #endif */
+    String getName () {
+        Symbol sym = getSymbol();
+        return sym == null ? null : sym.getName();
+    }
 
-  /*
-  String getName ()
-  {
-    Symbol sym = getSymbol();
-    return sym == null ? null : sym.getName();
-  }
-  */
+    SymbolRef (Symbol sym) {
+        super(sym);
+    }
 
-  SymbolRef (Symbol sym, Namespace ns)
-  {
-    /* #ifdef JAVA2 */
-    super(sym);
-    /* #else */
-    // this.sym = sym;
-    /* #endif */
-  }
+    public String getKey() {
+        Symbol sym = getSymbol();
+        return sym == null ? null : sym.getName();
+    }
 
-  Symbol getSymbol()
-  {
-    /* #ifdef JAVA2 */
-    return (Symbol) get();
-    /* #endif */
-    /* #ifndef JAVA2 */
-    // return sym;
-    /* #endif */
-  }
+    public Symbol getValue() {
+        return getSymbol();
+    }
 
-  public String toString()
-  {
-    return "SymbolRef["+getSymbol()+"]";
-  }
+    public int hashCode() {
+        Symbol sym = getSymbol();
+        return sym == null ? 0 : sym.hashCode();
+    }
+
+    public Symbol setValue(Symbol value) {
+        throw new UnsupportedOperationException();
+    }
+
+    public boolean equals (Object o) {
+        return o instanceof SymbolRef
+            && get() == ((SymbolRef) o).get();
+    }
+
+    Symbol getSymbol() {
+        return get();
+    }
+
+    public String toString() {
+        return "SymbolRef["+getSymbol()+"]";
+    }
 }

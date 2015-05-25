@@ -61,7 +61,7 @@ public class CompileMisc
               {
                 return BooleanValue.booleanValue(value) ? XQuery.trueExp : XQuery.falseExp;
               }
-            catch (Throwable ex)
+            catch (Exception ex)
               {
                 String message = "cannot convert to a boolean";
                 visitor.getMessages().error('e', message);
@@ -95,13 +95,27 @@ public class CompileMisc
 	|| lexp2.max_args != 3)
       return exp;
 
-    exp.setType(args[0].getType());
+    Expression seq = args[0];
+    Type seqType = seq.getType();
+    if (seqType instanceof OccurrenceType) {
+        OccurrenceType occType = (OccurrenceType) seqType;
+        Type baseType = occType.getBase();
+        if (OccurrenceType.itemCountIsOne(baseType)) {
+            int min = occType.minOccurs();
+            if (min > 0)
+                occType =
+                    new OccurrenceType(baseType, min, occType.maxOccurs());
+            exp.setType(occType);
+        }
+    }
 
-    Compilation parser = visitor.getCompilation();
+    Compilation comp = visitor.getCompilation();
 
     Declaration dotArg = lexp2.firstDecl();
     Declaration posArg = dotArg.nextDecl();
     Declaration lastArg = posArg.nextDecl();
+    dotArg.setCanRead(true);
+    posArg.setCanRead(true);
 
     lexp2.setInlineOnly(true);
     lexp2.returnContinuation = exp;
@@ -117,24 +131,23 @@ public class CompileMisc
         // Don't need to do anything more - lastArg is not needed.
         return exp;
       }
+    lastArg.setCanRead(true);
 
-    parser.letStart();
-    Expression seq = args[0];
-    Type seqType;
+    comp.letStart();
     Method sizeMethod;
     if (vproc.kind == 'P')
       {
-        seqType = seq.getType();
         sizeMethod = Compilation.typeValues.getDeclaredMethod("countValues", 1);
       }
     else
       {
         seqType = SortNodes.typeSortedNodes;
         seq = new ApplyExp(SortNodes.sortNodes, new Expression [] {seq});
-        sizeMethod = CoerceNodes.typeNodes.getDeclaredMethod("size", 0);
+        sizeMethod = ClassType.make("gnu.lists.AbstractSequence")
+            .getDeclaredMethod("size", 0);
       }
-    Declaration sequence = parser.letVariable("sequence", seqType, seq);
-    parser.letEnter();
+    Declaration sequence = comp.letVariable("sequence", seqType, seq);
+    comp.letEnter();
 
     Expression pred = lexp2.body;
     Type predType = lexp2.body.getType();
@@ -145,6 +158,7 @@ public class CompileMisc
     if (vproc.kind == 'R')
       {
         Declaration posIncoming = new Declaration(null, Type.intType);
+        posIncoming.setCanRead(true);
 	Expression init
 	  = new ApplyExp(AddOp.$Mn,
 			 new Expression[] {
@@ -155,11 +169,12 @@ public class CompileMisc
 			 new Expression[] {
 			   init,
 			   new QuoteExp(IntNum.one())});
-        LetExp let = new LetExp(new Expression[] { init });
+        
+        comp.letStart();
         lexp2.replaceFollowing(dotArg, posIncoming);
-        let.add(posArg);
-        let.body = pred;
-        pred = let;
+        comp.letVariable(posArg, init);
+        comp.letEnter();
+        pred = comp.letDone(pred);
       }
 
     pred = new IfExp(pred,
@@ -171,18 +186,18 @@ public class CompileMisc
       = new ApplyExp(ValuesMap.valuesMapWithPos,
 		     new Expression[] { lexp2,
 					new ReferenceExp(sequence) });
-    doMap.setType(dotArg.getType());
+    doMap.setType(OccurrenceType.getInstance(dotArg.getType(), 0, -1));
     lexp2.returnContinuation = doMap;
 
     Expression lastInit = new ApplyExp(sizeMethod,
                                        new Expression[] {
                                          new ReferenceExp(sequence)});
 
-    LetExp let2 = new LetExp(new Expression[] { lastInit });
-    let2.add(lastArg);
-    let2.body = gnu.kawa.functions.CompileMisc.validateApplyValuesMap(doMap, visitor, required, ValuesMap.valuesMapWithPos);
+    comp.letStart();
+    comp.letVariable(lastArg, lastInit);
+    LetExp let2 = comp.letDone(gnu.kawa.functions.CompileMisc.validateApplyValuesMap(doMap, visitor, required, ValuesMap.valuesMapWithPos));
 
-    return parser.letDone(let2);
+    return comp.letDone(let2);
   }
 
   public static Expression validateApplyRelativeStep
@@ -254,13 +269,15 @@ public class CompileMisc
 
         Method sizeMethod = typeNodes.getDeclaredMethod("size", 0);
         Expression lastInit
-          =  new ApplyExp(sizeMethod,
-                          new Expression[] {new ReferenceExp(sequence)});
-        LetExp lastLet = new LetExp(new Expression[] { lastInit });
-        lastLet.addDeclaration(lastArg);
-        lastLet.body = new ApplyExp(exp.getFunction(),
+          = new ApplyExp(sizeMethod,
+                         new Expression[] {new ReferenceExp(sequence)});
+        comp.letStart();
+        comp.letVariable(lastArg, lastInit);
+        comp.letEnter();
+        LetExp lastLet =
+          comp.letDone(new ApplyExp(exp.getFunction(),
                                     new Expression[] { new ReferenceExp(sequence),
-                                                       lexp2 });
+                                                       lexp2 }));
         return comp.letDone(lastLet);
       }
 

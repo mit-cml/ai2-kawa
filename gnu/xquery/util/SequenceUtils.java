@@ -297,7 +297,7 @@ public class SequenceUtils
                 if (! deepEqualItems(arg1, arg2, collator))
                   return false;
               }
-            catch (Throwable ex)
+            catch (Exception ex)
               {
                 return false;
               }
@@ -322,6 +322,35 @@ public class SequenceUtils
             if (! is2seq)
               ipos2 = 0;
           }
+      }
+  }
+
+  public static void subList$X(Object seq, double start, double end,
+                               CallContext ctx)
+  {
+    subList$C(seq, start, end, ctx.consumer);
+  }
+
+  public static void subList$C(Object seq, double start, double end,
+                               Consumer out)
+  {
+    if (seq instanceof Values)
+      {
+        int istart = (int) (start - 1.0);
+        int iend = (int) (end - 1.0);
+	Values vals = (Values) seq;
+        int sz = vals.size();
+        if (istart < 0)
+            istart = 0;
+        if (iend > sz)
+            iend = sz;
+        if (iend > istart)
+            vals.consume(istart, iend, out);
+      }
+    else
+      {
+	if (start <= 1 && end >= 2)
+	  out.writeObject(seq);
       }
   }
 }

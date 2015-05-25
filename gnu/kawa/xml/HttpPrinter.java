@@ -4,8 +4,9 @@
 package gnu.kawa.xml;
 import gnu.lists.*;
 import gnu.xml.*;
-import java.io.*;
 import gnu.mapping.*;
+import gnu.kawa.io.OutPort;
+import java.io.*;
 import java.util.Vector;
 
 /** Output as an Http response.
@@ -141,9 +142,9 @@ public class HttpPrinter extends FilterConsumer
 	  {
 	    printHeaders();
 	  }
-	catch (Throwable ex)
+	catch (Exception ex)
 	  {
-	    throw new RuntimeException(ex.toString());
+	    throw new RuntimeException(ex);
 	  }
       }
     /* #ifdef use:java.lang.CharSequence */
@@ -242,7 +243,7 @@ public class HttpPrinter extends FilterConsumer
 	if (ostream != null)
 	  ostream.flush();
       }
-    catch (Throwable ex)
+    catch (Exception ex)
       {
       }
   }

@@ -7,13 +7,12 @@ import gnu.kawa.xml.*;
 import gnu.xml.*;
 import gnu.mapping.*;
 import gnu.bytecode.*;
-import gnu.kawa.util.HashNode;
 import gnu.kawa.reflect.StaticFieldLocation;
 import gnu.kawa.reflect.SingletonType;
 import gnu.kawa.functions.CompileNamedPart;
 import gnu.xquery.util.NamedCollator;
 import gnu.xquery.util.QNameUtils;
-import kawa.standard.Scheme;
+import java.util.*;
 
 public class XQResolveNames extends ResolveNames
 {
@@ -300,7 +299,7 @@ public class XQResolveNames extends ResolveNames
             if (mname != null)
               {
                 Method meth =
-                  ClassType.make("gnu.kawa.servlet.ServletRequestContext")
+                  ClassType.make("gnu.kawa.servlet.KawaServlet")
                   .getDeclaredMethod(mname, 0);
                 return new ApplyExp(meth, Expression.noExpressions);
               }
@@ -343,12 +342,12 @@ public class XQResolveNames extends ResolveNames
                         Type type = null;
                         if (XQuery.SCHEMA_NAMESPACE.equals(uri))
                           {
-                            type = XQuery.getStandardType(sym.getName());
+                            type = parser.interpreter.getStandardType(sym.getName());
                           }
                         else if (needType && uri == ""
                             && ! getCompilation().isPedantic())
                           {
-                            type = Scheme.string2Type(sym.getName());
+                            type = parser.interpreter.getTypeFor(name);
                           }
                         if (type != null)
                           return new QuoteExp(type).setLine(exp);
@@ -427,6 +426,45 @@ public class XQResolveNames extends ResolveNames
     return exp;
   }
 
+    static class CycleDetector extends ExpExpVisitor<Void> { 
+        Map<Declaration,Integer> depsScanState = new HashMap<Declaration,Integer>();
+        static final Integer SCANNING = 0;
+        static final Integer SCANNED_CYCLE = 1;
+        static final Integer SCANNED_NO_CYCLE = -1;
+
+        //public boolean cycleSeen;
+
+        protected Expression visitReferenceExp(ReferenceExp exp, Void ignored) {
+            Declaration decl = exp.getBinding();
+            if (decl != null && decl.context instanceof ModuleExp)
+                scanDependencies(decl);
+            return exp;
+        }
+
+        /** Return true if cycle detected. */
+        public void scanDependencies(Declaration decl) {
+            Integer state = depsScanState.get(decl);
+            if (state != null) {
+                if (state == SCANNING)
+                    depsScanState.put(decl, SCANNED_CYCLE);
+                return;
+            }
+            depsScanState.put(decl, SCANNING);
+            Expression dval = decl.getValue();
+            if (dval != null)
+                visit(dval, null);
+            state = depsScanState.get(decl);
+            if (state == SCANNING)
+                depsScanState.put(decl, SCANNED_NO_CYCLE);
+        }
+
+        public boolean scanVariable(Declaration decl) {
+            scanDependencies(decl);
+            Integer state = depsScanState.get(decl);
+            return state == SCANNED_CYCLE;
+         }
+    }
+
   public void resolveModule(ModuleExp exp)
   {
     currentLambda = exp;
@@ -439,10 +477,17 @@ public class XQResolveNames extends ResolveNames
     moduleDecl = exp.firstDecl();
     exp.body = visitStatements(exp.body);
 
-    // Remove old hidden declarations, for GC and speed.
+    CycleDetector cycleDetector = new CycleDetector();
+
     for (Declaration decl = exp.firstDecl();
          decl != null;  decl = decl.nextDecl())
       {
+        if (! decl.isProcedureDecl() && cycleDetector.scanVariable(decl))
+            getCompilation().error('e',
+                "cycle detected initializing $"+decl.getName(),
+                "XQST0054", decl);
+
+        // Remove old hidden declarations, for GC and speed.
         if (decl.getSymbol() != null)
           lookup.removeSubsumed(decl);
       }
@@ -792,10 +837,7 @@ public class XQResolveNames extends ResolveNames
                   Expression base = getBaseUriExpr();
                   Expression uri = args.length > 0 ? args[0]
                     : QuoteExp.voidExp;
-                  ApplyExp aexp
-                    = new ApplyExp(meth, new Expression[]{ uri, base });
-                  aexp.setType(NodeType.documentNodeTest);
-                  return aexp;
+                  return new ApplyExp(meth, new Expression[]{ uri, base });
                 }
               case DOC_BUILTIN:
               case DOC_AVAILABLE_BUILTIN:
@@ -816,9 +858,12 @@ public class XQResolveNames extends ResolveNames
                   Method meth = cl.getDeclaredMethod(mname, 2);
                   if ((err = checkArgCount(args, decl, 1, 1)) != null)
                     return err;
+                  PrimProcedure pproc = new PrimProcedure(meth);
+                  if (code == DOC_BUILTIN)
+                      pproc.setSideEffectFree();
                   Expression base = getBaseUriExpr();
                   ApplyExp aexp
-                    = new ApplyExp(meth, new Expression[]{ args[0], base });
+                    = new ApplyExp(pproc, new Expression[]{args[0], base});
                   if (code == DOC_BUILTIN)
                     aexp.setType(NodeType.documentNodeTest);
                   else

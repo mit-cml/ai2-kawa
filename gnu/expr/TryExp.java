@@ -1,6 +1,7 @@
 package gnu.expr;
 import gnu.bytecode.*;
-import gnu.mapping.*;
+import gnu.kawa.io.OutPort;
+import gnu.mapping.CallContext;
 
 /**
   * This class represents try/catch/finally.
@@ -21,6 +22,18 @@ public class TryExp extends Expression
   {
     this.catch_clauses = catch_clauses;
   }
+
+    public void addCatchClause(Declaration decl, Expression body) {
+        CatchClause clause = new CatchClause(decl, body);
+        CatchClause last = catch_clauses;
+        if (last == null)
+            catch_clauses = clause;
+        else {
+            while (last.next != null)
+                last = last.next;
+            last.next = clause;
+        }
+    }
 
   public TryExp (Expression try_clause, Expression finally_clause)
   {
@@ -110,13 +123,14 @@ public class TryExp extends Expression
       finally_clause = visitor.visitAndUpdate(finally_clause, d);
   }
 
-  public gnu.bytecode.Type getType()
-  {
-    if (catch_clauses == null)
-      return try_clause.getType();
-    // FIXME - return union type
-    return super.getType();
-  }
+    protected gnu.bytecode.Type calculateType() {
+        Type t = try_clause.getType();
+        for (CatchClause clause = catch_clauses;
+             clause != null; clause = clause.getNext())  {
+            t = Language.unionType(t, clause.getType());
+        }
+        return t;
+    }
 
   public void print (OutPort ps)
   {

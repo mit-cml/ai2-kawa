@@ -62,13 +62,16 @@ public class CompileNamedPart
           }
         if (CompileReflect.checkKnownClass(typeval, comp) < 0)
           return exp;
+        ObjectType otype = (ObjectType) typeval;
         PrimProcedure[] methods
-          = ClassMethods.getMethods((ObjectType) typeval,
+          = ClassMethods.getMethods(otype,
                                     Compilation.mangleName(mname),
                                     '\0', caller, language);
         if (methods != null && methods.length > 0)
           {
             nexp.methods = methods;
+            nexp.otype = otype;
+            nexp.mname = mname;
             return nexp.setProcedureKind('S');
           }
         ApplyExp aexp = new ApplyExp(SlotGet.staticField, args);
@@ -145,10 +148,15 @@ public class CompileNamedPart
   public static Expression validateSetNamedPart
   (ApplyExp exp, InlineCalls visitor, Type required, Procedure proc)
   {
-    exp.visitArgs(visitor);
     Expression[] args = exp.getArgs();
     if (args.length != 3 || ! (args[1] instanceof QuoteExp))
-      return exp;
+      {
+        exp.visitArgs(visitor);
+        return exp;
+      }
+    args[0] = visitor.visit(args[0], null);
+    args[1] = visitor.visit(args[1], null);
+
     Expression context = args[0];
     String mname = ((QuoteExp) args[1]).getValue().toString();
     Type type = context.getType();
@@ -165,18 +173,18 @@ public class CompileNamedPart
       }
     else if (type instanceof ClassType)
       {
-        Object part = SlotSet.lookupMember((ClassType) type, mname, caller);
+        Member part = SlotSet.lookupMember((ClassType) type, mname, caller);
         if (part != null)
-          {
-            // FIXME: future kludge to avoid re-doing SlotGet.getField.
-            // args = new Expression[] { context, new QuoteExp(part) });
-            exp = new ApplyExp(SlotSet.set$Mnfield$Ex, args);
-          }
+          return visitor.visit(CompileReflect.makeSetterCall(args[0], part, args[2]), Type.voidType);
       }
-    if (exp != original)
-      exp.setLine(original);
     exp.setType(Type.voidType);
-    return exp;
+    if (exp == original)
+      {
+        args[2] = visitor.visit(args[2], null);
+        return exp;
+      }
+    exp.setLine(original);
+    return visitor.visit(exp, required);
   }
 
   public static Expression makeExp (Expression clas, Expression member)
@@ -210,7 +218,7 @@ public class CompileNamedPart
                 Class cl = ClassType.getContextClass(name);
                 clas = QuoteExp.getInstance(Type.make(cl));
               }
-            catch (Throwable ex)
+            catch (Exception ex)
               {
               }
           }
@@ -279,7 +287,7 @@ public class CompileNamedPart
   (ApplyExp exp, InlineCalls visitor, Type required, Procedure proc)
   {
     exp.visitArgs(visitor);
-    NamedPart get = (NamedPart) ((NamedPartSetter) proc).getGetter();
+    NamedPart get = (NamedPart) ((NamedPart.Setter) proc).getGetter();
     if (get.kind == 'D')
       {
         Expression[] xargs = new Expression[3];
@@ -318,10 +326,9 @@ public class CompileNamedPart
         if (val instanceof SimpleSymbol)
           return QuoteExp.getInstance(new GetNamedInstancePart(val.toString()));
       }
-    Expression[] args = new Expression[2];
-    args[0] = new QuoteExp(ClassType.make("gnu.kawa.functions.GetNamedInstancePart"));
-    args[1] = member;
-    return new ApplyExp(Invoke.make, args);
+    return new ApplyExp(Invoke.make,
+                        new QuoteExp(ClassType.make("gnu.kawa.functions.GetNamedInstancePart")),
+                        member);
   }
 
   public static Expression validateGetNamedInstancePart
@@ -374,6 +381,8 @@ class GetNamedExp extends ApplyExp
    */
   char kind;
   PrimProcedure[] methods;
+  ObjectType otype;
+  String mname;
 
   public String combinedName;
 
@@ -420,6 +429,7 @@ class GetNamedExp extends ApplyExp
     Expression context = pargs[0];
     Expression[] args = exp.getArgs();
     Expression[] xargs;
+    int adjust;
     switch (kind)
       {
       case 'M':
@@ -428,12 +438,14 @@ class GetNamedExp extends ApplyExp
         xargs[0] = pargs[0];
         xargs[1] = pargs[1];
         System.arraycopy(args, 0, xargs, 2, args.length);
+        adjust = 2;
         break;
       case 'N': // new
         decl = makeDecl;
         xargs = new Expression[args.length+1];
         System.arraycopy(args, 0, xargs, 1, args.length);
         xargs[0] = context;
+        adjust = 1;
         break;
       case 'I': // instance-of
         decl = instanceOfDecl;
@@ -441,13 +453,14 @@ class GetNamedExp extends ApplyExp
         System.arraycopy(args, 1, xargs, 2, args.length-1);
         xargs[0] = args[0];
         xargs[1] = context;
+        adjust = exp.firstSpliceArg > 0 ? 1 : 0;
         break;
       case 'C': // cast
         decl = castDecl;
         xargs = new Expression[args.length+1];
-        System.arraycopy(args, 1, xargs, 2, args.length-1);
+        System.arraycopy(args, 0, xargs, 1, args.length);
         xargs[0] = context;
-        xargs[1] = args[0];
+        adjust = 1;
         break;
       case 'S': // invoke-static
         decl = invokeStaticDecl;
@@ -455,12 +468,22 @@ class GetNamedExp extends ApplyExp
         xargs[0] = context;
         xargs[1] = pargs[1];
         System.arraycopy(args, 0, xargs, 2, args.length);
+        adjust = 2;
         break;
       default:
         return exp;
       }
     ApplyExp result = new ApplyExp(new ReferenceExp(decl), xargs);
+    if (exp.firstSpliceArg >= 0)
+      result.firstSpliceArg = exp.firstSpliceArg + adjust;
     result.setLine(exp);
+    if (methods != null && kind == 'S') {
+        return CompileInvoke.validateNamedInvoke(result, visitor,
+                                                 otype, mname,
+                                                 methods,
+                                                 Invoke.invokeStatic,
+                                                 required);
+    }
     return visitor.visit(result, required);
   }
 

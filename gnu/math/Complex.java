@@ -3,15 +3,60 @@
 
 package gnu.math;
 
-public abstract class Complex extends Quantity
+public abstract class Complex extends Quaternion
 {
-  public Complex number() { return this; }
+    @Override public final RealNum jm() { return IntNum.zero(); }
+    @Override public final RealNum km() { return IntNum.zero(); }
+
+    @Override public final Complex complexPart() { return this; }
+
+    @Override public Quaternion vectorPart() {
+        return Complex.make(IntNum.zero(), im());
+    }
+
+    @Override public Quaternion unitVector() {
+        int imSign = im().sign();
+
+        switch (imSign) {
+        case 1:
+            return Complex.imOne();
+        case 0:
+            return IntNum.zero();
+        case -1:
+            return Complex.imMinusOne();
+        case -2: default:
+            return Complex.make(0, Double.NaN);
+        }
+    }
+
+    @Override public Quaternion unitQuaternion() {
+        if (im().isZero())
+            return re().unitQuaternion();
+        if (re().isZero())
+            return Complex.make(IntNum.zero(), (RealNum)im().unitQuaternion());
+        return DComplex.unitQuaternion(doubleRealValue(), doubleImagValue());
+    }
+
+    @Override public Quaternion conjugate() {
+        return Complex.make(re(), im().rneg());
+    }
 
   public boolean isExact ()
   {
     // Should we return false if unit() != unit.Empty ?
     return re().isExact() && im().isExact();
   }
+
+    /** Check if value is finite, infinite, or NaN.
+     * @return 1 if finite; 0 if infinite; -1 if NaN.
+     */
+    public int classifyFinite() {
+        int r = re().classifyFinite();
+        if (r < 0)
+            return r;
+        int i = im().classifyFinite();
+        return r < i ? r : i;
+    }
 
   public Complex toExact ()
   {
@@ -49,16 +94,11 @@ public abstract class Complex extends Quantity
     return imMinusOne;
   }
 
-  public double doubleValue () { return re().doubleValue (); }
-  public double doubleImagValue () { return im().doubleValue (); }
-  public final double doubleRealValue () { return doubleValue (); }
-  public long longValue () { return re().longValue(); }
-
   public static Complex make (RealNum re, RealNum im)
   {
-    if (im.isZero ())
+    if (im.isZero() && im.isExact())
       return re;
-    if (! re.isExact() || ! im.isExact())
+    if (! re.isExact() && ! im.isExact())
       return new DComplex(re.doubleValue(), im.doubleValue());
     return new CComplex (re, im);
   }
@@ -108,10 +148,13 @@ public abstract class Complex extends Quantity
     return new DFloNum(Math.atan2(doubleImagValue(), doubleRealValue()));
   }
 
+    @Override public final RealNum colatitude() { return IntNum.zero(); }
+    @Override public final RealNum longitude() { return IntNum.zero(); }
+
   public static boolean equals (Complex x, Complex y)
   {
     return x.re().equals(y.re())
-      && x.im().equals(x.im());
+      && x.im().equals(y.im());
   }
 
   public boolean equals (Object obj)
@@ -158,7 +201,8 @@ public abstract class Complex extends Quantity
     if (im().isZero ())
       return re().toString(radix);
     String imString = im().toString(radix) + "i";
-    if (imString.charAt(0) != '-')
+    char ch0 = imString.charAt(0);
+    if (ch0 != '-' && ch0 != '+')
       imString = "+" + imString;
     if (re().isZero())
       return imString;
@@ -267,4 +311,16 @@ public abstract class Complex extends Quantity
   {
     return DComplex.sqrt(doubleRealValue(), doubleImagValue());
   }
+
+    @Override public Complex sin() {
+        return DComplex.sin(doubleRealValue(), doubleImagValue());
+    }
+
+    @Override public Complex cos() {
+        return DComplex.cos(doubleRealValue(), doubleImagValue());
+    }
+
+    @Override public Complex tan() {
+        return DComplex.tan(doubleRealValue(), doubleImagValue());
+    }
 }

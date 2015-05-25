@@ -57,47 +57,21 @@ public class DComplex extends Complex implements Externalizable
   {
     String prefix = "";
 
-    String reString;
-    if (real == 1.0/0.0)
-      {
-	prefix = "#i"; reString = "1/0";
-      }
-    else if (real == -1.0/0.0)
-      {
-	prefix = "#i"; reString = "-1/0";
-      }
-    else if (Double.isNaN (real))
-      {
-	prefix = "#i"; reString = "0/0";
-      }
-    else
-      reString = Double.toString (real);
+    String reString = DFloNum.toString(real);
 
     if (Double.doubleToLongBits (imag) == 0)  // i.e. imag is 0.0 and not -0.0
-      return prefix + reString;
+      return reString;
 
-    String imString;
-    if (imag == 1.0/0.0)
-      {
-	prefix = "#i"; imString = "+1/0i";
-      }
-    else if (imag == -1.0/0.0)
-      {
-	prefix = "#i"; imString = "-1/0i";
-      }
-    else if (Double.isNaN (imag))
-      {
-	prefix = "#i"; imString = "+0/0i";
-      }
-    else
-      {
-	imString = Double.toString (imag) + "i";
-	if (imString.charAt (0) != '-')
-	  imString = "+" + imString;
-      }
-
-    return ((Double.doubleToLongBits (real) == 0 ? prefix : prefix + reString)
-            + imString);
+    String imString = DFloNum.toString(imag);
+    StringBuilder sbuf = new StringBuilder();
+    if (! reString.equals("0.0"))
+      sbuf.append(reString);
+    char ch0 = imString.charAt(0);
+    if (ch0 != '-' && ch0 != '+')
+      sbuf.append('+');
+    sbuf.append(imString);
+    sbuf.append('i');
+    return sbuf.toString();
   }
 
   public String toString (int radix)
@@ -253,6 +227,39 @@ public class DComplex extends Complex implements Externalizable
       }
     return new DComplex (nr, ni);
   }
+
+    public static Complex sin(double x_re, double x_im) {
+        if (x_im == 0.0)
+            return new DFloNum(Math.sin(x_re));
+        return Complex.make(Math.sin(x_re)*Math.cosh(x_im),
+                            Math.cos(x_re)*Math.sinh(x_im));
+    }
+
+    public static Complex cos(double x_re, double x_im) {
+        if (x_im == 0.0)
+            return new DFloNum(Math.cos(x_re));
+        return Complex.make(Math.cos(x_re)*Math.cosh(x_im),
+                            -Math.sin(x_re)*Math.sinh(x_im));
+    }
+
+    public static Complex tan(double x_re, double x_im) {
+        if (x_im == 0.0)
+            return new DFloNum(Math.tan(x_re));
+
+        double sin_re = Math.sin(x_re);
+        double cos_re = Math.cos(x_re);
+        double sinh_im = Math.sinh(x_im);
+        double cosh_im = Math.cosh(x_im);
+        // tan = sin/cos
+        return DComplex.div(sin_re*cosh_im, cos_re*sinh_im,
+                            cos_re*cosh_im, -sin_re*sinh_im);
+    }
+
+    public static Complex unitQuaternion(double x_re, double x_im) {
+        double r = Math.hypot(x_re, x_im);
+        if (r == 0.0) return IntNum.zero();
+        return Complex.make(x_re/r, x_im/r);
+    }
 
   // Transcribed from:
   // http://netlib.bell-labs.com/netlib/fdlibm/e_hypot.c.Z

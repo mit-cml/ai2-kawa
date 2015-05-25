@@ -1,10 +1,12 @@
 package gnu.kawa.functions;
+import gnu.kawa.io.CharArrayOutPort;
+import gnu.kawa.io.OutPort;
 import gnu.lists.*;
+import gnu.mapping.*;
+import gnu.text.ReportFormat;
 import java.io.OutputStream;
 import java.io.Writer;
 import java.text.MessageFormat;
-import gnu.text.ReportFormat;
-import gnu.mapping.*;
 
 public class Format extends ProcedureN
 {
@@ -37,7 +39,7 @@ public class Format extends ProcedureN
         else
           {
             if (! (format instanceof ReportFormat))
-              format = ParseFormat.parseFormat.apply1(format);
+              format = ParseFormat.asFormat(format, '~');
 	    ((ReportFormat) format).format(vals, 0, dst, null);
 	  }
       }
@@ -63,6 +65,19 @@ public class Format extends ProcedureN
     return str;
   }
 
+    public static String sprintfToString(Object fmt, Object... args) {
+        ReportFormat rfmt = ParseFormat.asFormat(fmt, '%');
+        CharArrayOutPort port = new CharArrayOutPort();
+        try {
+            rfmt.format(args, 0, port, null);
+        } catch (java.io.IOException ex) {
+            WrappedException.rethrow(ex);
+        }
+        String str = port.toString();
+        port.close();
+        return str;
+    }
+
   /**
    * Apply format and argument, yielding an FString.
    * @param style either '%' (C/Emacs-style format specifiers), or
@@ -80,7 +95,7 @@ public class Format extends ProcedureN
       }
     catch (java.io.IOException ex)
       {
-	throw new RuntimeException("Error in format: "+ ex);
+        WrappedException.rethrow(ex);
       }
     char[] chars = port.toCharArray();
     port.close ();

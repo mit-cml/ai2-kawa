@@ -13,6 +13,9 @@ public class ApplicationMainSupport
 
   public static FVector commandLineArguments;
 
+     public static ThreadLocation<String> commandName
+         = new ThreadLocation<String>("command-name");
+
   public static void processSetProperties ()
   {
     String[] args = commandLineArgArray;
@@ -40,26 +43,31 @@ public class ApplicationMainSupport
     setArgs(args, iarg);
   }
 
-  public static void setArgs (String[] args, int arg_start)
-  {
-    int nargs = args.length - arg_start;
-    Object[] array = new Object[nargs];
-    if (arg_start == 0)
-     commandLineArgArray = args;
-    else
-      {
-	String[] strings = new String[nargs];
-	for (int i = nargs;  --i >= 0; )
-	  strings[i] = args[i+arg_start];
-	commandLineArgArray = strings;
-      }
-    for (int i = nargs;  --i >= 0; )
-      array[i] = new FString (args[i + arg_start]);
-    commandLineArguments = new FVector (array);  // FIXME scsh has list
-    // FIXME scsh also has command-line proc
-    Environment.getCurrent().put("command-line-arguments",
-                                 commandLineArguments);
-  }
+    public static void setArgs (String[] args, int arg_start) {
+        if (commandName.get(null) == null) {
+            try {
+                String name = System.getProperty("kawa.command.name");
+                if (name != null)
+                    commandName.set(name);   
+            } catch (Exception ex) {
+              // Leave commandName unset.
+            }
+        }
+
+        int nargs = args.length - arg_start;
+        if (arg_start == 0)
+            commandLineArgArray = args;
+        else {
+            String[] strings = new String[nargs];
+            for (int i = nargs;  --i >= 0; )
+                strings[i] = args[i+arg_start];
+            commandLineArgArray = strings;
+        }
+    
+        Object[] array = new Object[nargs];
+        System.arraycopy(args, arg_start, array, 0, nargs);
+        commandLineArguments = new ConstVector(array);  // FIXME scsh has list
+    }
 
   public static boolean processSetProperty (String arg)
   {
@@ -85,7 +93,7 @@ public class ApplicationMainSupport
                 loc.setGlobal(value);
                 break;
               }
-            catch (Throwable ex)
+            catch (Exception ex)
               {
                 System.err.println("error setting property " + key
                                    +" field "+cname+'.'+fname+": "+ex);
@@ -112,9 +120,10 @@ public class ApplicationMainSupport
       { "out:doctype-public", "gnu.xml.XMLPrinter", "doctypePublic" },
       { "out:base", "gnu.kawa.functions.DisplayFormat", "outBase" },
       { "out:radix", "gnu.kawa.functions.DisplayFormat", "outRadix" },
-      { "out:line-length", "gnu.text.PrettyWriter", "lineLengthLoc" },
-      { "out:right-margin", "gnu.text.PrettyWriter", "lineLengthLoc" },
-      { "out:miser-width", "gnu.text.PrettyWriter", "miserWidthLoc" },
+      { "out:line-length", "gnu.kawa.io.PrettyWriter", "lineLengthLoc" },
+      { "out:right-margin", "gnu.kawa.io.PrettyWriter", "lineLengthLoc" },
+      { "out:miser-width", "gnu.kawa.io.PrettyWriter", "miserWidthLoc" },
+      { "out:print-circle", "gnu.kawa.io.PrettyWriter", "isSharing" },
       { "out:xml-indent", "gnu.xml.XMLPrinter", "indentLoc" },
       { "display:toolkit", "gnu.kawa.models.Display", "myDisplay" },
       null

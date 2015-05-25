@@ -14,6 +14,39 @@ public class syntax extends kawa.lang.Quote
     super(name, isQuasi);
   }
 
+    protected boolean matchesUnquote(Pair pair, SyntaxForm syntax,
+                                     Translator tr) {
+        Object form = pair.getCar();
+        if (tr.matches(form, syntax, "unsyntax"))
+            return true;
+        if (tr.matches(form, syntax, "unquote")) {
+            tr.error('w',
+                "unquote inside quasisyntax is deprecated - use unsyntax or #,",
+                pair instanceof PairWithPosition ? (PairWithPosition)pair : tr);
+            return true;
+        }
+        return false;
+    }
+
+    protected boolean matchesUnquoteSplicing(Pair pair, SyntaxForm syntax,
+                                     Translator tr) {
+        Object form = pair.getCar();
+        if (tr.matches(form, syntax, "unsyntax-splicing"))
+            return true;
+        if (tr.matches(form, syntax, "unquote-splicing")) {
+            tr.error('w',
+                "unquote-splicing inside quasisyntax is deprecated - use unsyntax-splicing or #@,",
+                pair instanceof PairWithPosition ? (PairWithPosition)pair : tr);
+            return true;
+        }
+        return false;
+    }
+
+    protected boolean matchesQuasiQuote(Object form, SyntaxForm syntax,
+                                     Translator tr) {
+        return tr.matches(form, syntax, "quasisyntax");
+    }
+
   protected boolean expandColonForms ()
   {
     return false;
@@ -62,14 +95,16 @@ public class syntax extends kawa.lang.Quote
 
   static Expression makeSyntax (Object form, Translator tr)
   {
-    SyntaxTemplate template = new SyntaxTemplate(form, null, tr);
+    SyntaxTemplate template = new SyntaxTemplate(form, null,
+                                                 SyntaxRule.dots3Symbol, tr);
     Expression matchArray = QuoteExp.nullExp;
     PatternScope patternScope = tr.patternScope;
     if (patternScope != null && patternScope.matchArray != null)
       matchArray = new ReferenceExp(patternScope.matchArray);
     Expression[] args = { new QuoteExp(template), matchArray, new ReferenceExp(tr.templateScopeDecl) };
     return new ApplyExp(ClassType.make("kawa.lang.SyntaxTemplate")
-			.getDeclaredMethod("execute", 2),
+			.getDeclaredMethod("execute",
+                                           new Type[]{null, typeTemplateScope}),
 			args);
   }
 }

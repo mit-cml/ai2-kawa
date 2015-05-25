@@ -2,9 +2,13 @@ package gnu.expr;
 import gnu.mapping.*;
 import gnu.bytecode.*;
 import gnu.mapping.Location; // As opposed to gnu.bytecode.Location
-import gnu.text.*;
-import java.io.*;
+import gnu.kawa.io.OutPort;
+import gnu.kawa.io.Path;
 import gnu.kawa.reflect.StaticFieldLocation;
+import gnu.kawa.reflect.FieldLocation;
+import gnu.text.SourceMessages;
+import gnu.text.SyntaxException;
+import java.io.*;
 import java.net.URL;
 
 /**
@@ -21,25 +25,34 @@ public class ModuleExp extends LambdaExp
   public static final int SUPERTYPE_SPECIFIED = NONSTATIC_SPECIFIED << 1;
   public static final int STATIC_RUN_SPECIFIED = SUPERTYPE_SPECIFIED << 1;
   public static final int LAZY_DECLARATIONS = STATIC_RUN_SPECIFIED << 1;
+
+  /** True if the module is immediately evaluated. */
   public static final int IMMEDIATE = LAZY_DECLARATIONS << 1;
+
+  /** True of a read-eval-print interface where each module is only partial.
+   * Conceptually, each statement is a fragment of a imagined super-module
+   * for the whole interaction, though currently there is no super-module object.
+   * IMMEDIATE is also set in this case.
+   */
+  public static final int INTERACTIVE = IMMEDIATE << 1;
+
+  /** Using explicit class (e.g. define-simple-class) for module class. */
+  public static final int USE_DEFINED_CLASS = INTERACTIVE << 1;
+
+  public static final int HAS_SUB_MODULE = USE_DEFINED_CLASS << 1;
 
   public ModuleExp ()
   {
   }
 
+    public static ModuleExp valueOf(ClassType type) {
+        return ModuleInfo.find(type).getModuleExp();
+    }
+
   /** Used to control which .zip file dumps are generated. */
   public static String dumpZipPrefix;
 
   static int lastZipCounter;
-
-  /** Numeric identifier for this interactive "command".
-   * Incremented by Shell.run, and used to set the module name,
-   * and maybe the name of the --debug-dump-zip output file.
-   * We increment and use this counter purely to ease debugging.
-   * (Since each module gets its own ClassLoader, they don't
-   * need to be named differently, and it doesn't matter
-   * if there is a race condition on the counter.) */
-  public static int interactiveCounter;
 
   /** Compile to a class for immediate evaluation.
    * Return null on error, if so errors go to comp.getMessages().
@@ -48,11 +61,12 @@ public class ModuleExp extends LambdaExp
     throws SyntaxException
   {
     ModuleExp mexp = comp.getModule();
+    ModuleInfo minfo = mexp.info;
     SourceMessages messages = comp.getMessages();
     try
       {
 
-        comp.minfo.loadByStages(Compilation.COMPILED);
+        minfo.loadByStages(Compilation.COMPILED);
 
 	if (messages.seenErrors())
 	  return null;
@@ -66,10 +80,10 @@ public class ModuleExp extends LambdaExp
 	if (dumpZipPrefix != null)
 	  {
 	    StringBuffer zipname = new StringBuffer(dumpZipPrefix);
-            
+            ModuleManager manager = ModuleManager.getInstance();
             lastZipCounter++;
-	    if (interactiveCounter > lastZipCounter)
-	      lastZipCounter = interactiveCounter;
+	    if (manager.interactiveCounter > lastZipCounter)
+	      lastZipCounter = manager.interactiveCounter;
             zipname.append(lastZipCounter);
 	    zipname.append(".zip");
 	    java.io.FileOutputStream zfout
@@ -131,7 +145,6 @@ public class ModuleExp extends LambdaExp
               context.addClass(cclass);
           }
 
-        ModuleInfo minfo = comp.minfo;
         minfo.setModuleClass(clas);
         comp.cleanupAfterCompilation();
         int ndeps = minfo.numDependencies;
@@ -141,7 +154,7 @@ public class ModuleExp extends LambdaExp
             ModuleInfo dep = minfo.dependencies[idep];
             Class dclass = dep.getModuleClassRaw();
             if (dclass == null)
-              dclass = evalToClass(dep.comp, null);
+              dclass = evalToClass(dep.getCompilation(), null);
             comp.loader.addClass(dclass);
           }
 
@@ -155,22 +168,41 @@ public class ModuleExp extends LambdaExp
       {
 	throw new WrappedException("class not found in lambda eval", ex);
       }
-    catch (Throwable ex)
+    catch (Exception ex)
       {
-	comp.getMessages()
-          .error('f', "internal compile error - caught "+ex, ex);
+        messages.error('f', "internal compile error - caught "+ex, ex);
         throw new SyntaxException(messages);
       }
   }
 
-  // TODO: This should be false #ifdef Android.
-  // The complication is that it needs to be true while building
-  // Kawa itself, or generally compiling code *for* Android.
-  // I.e. we need to be able to distinguish compile-time and run-time.
-  public static boolean compilerAvailable = true;
+    /** @deprecated */
+    public static boolean compilerAvailable = true;
+
+    /** 1: have compiler; -1: don't have compiler: 0: need to check. */
+    private static int haveCompiler;
+
+    public static synchronized boolean compilerAvailable() {
+        if (haveCompiler == 0) {
+            if (! compilerAvailable)
+                haveCompiler = -1;
+            else if ("Dalvik".equals(System.getProperty("java.vm.name")))
+                haveCompiler = -1;
+            else {
+                try {
+                    // Just in case you somehow managed to get this far
+                    // while using kawart - i.e. the Kawa "runtime" jar.
+                    Class.forName("gnu.expr.TryExp");
+                    haveCompiler = 1;
+                } catch (Exception ex) {
+                    haveCompiler = -1;
+                }
+            }
+        }
+        return haveCompiler >= 0;
+    }
 
   /** Flag to force compilation, even when not required. */
-  public static boolean alwaysCompile = compilerAvailable;
+  public static boolean alwaysCompile = compilerAvailable();
 
   public final static boolean evalModule (Environment env, CallContext ctx,
                                        Compilation comp, URL url,
@@ -180,8 +212,10 @@ public class ModuleExp extends LambdaExp
     ModuleExp mexp = comp.getModule();
     Language language = comp.getLanguage();
     Object inst = evalModule1(env, comp, url, msg);
-    if (inst == null)
-      return false;
+    if (inst == null) {
+	comp.pop(comp.mainLambda);
+	return false;
+    }
     evalModule2(env, ctx, language, mexp, inst);
     return true;
   }
@@ -196,7 +230,6 @@ public class ModuleExp extends LambdaExp
     throws SyntaxException
   {
     ModuleExp mexp = comp.getModule();
-    mexp.info = comp.minfo;
     Environment orig_env = Environment.setSaveCurrent(env);
     Compilation orig_comp = Compilation.setSaveCurrent(comp);
     SourceMessages messages = comp.getMessages();
@@ -205,7 +238,7 @@ public class ModuleExp extends LambdaExp
     try
       {
         comp.process(Compilation.RESOLVED);
-        comp.minfo.loadByStages(Compilation.WALKED);
+        comp.getMinfo().loadByStages(Compilation.WALKED);
 
         if (msg != null ? messages.checkErrors(msg, 20) : messages.seenErrors())
           return null;
@@ -232,7 +265,7 @@ public class ModuleExp extends LambdaExp
                     savedLoader = thread.getContextClassLoader();
                     thread.setContextClassLoader(clas.getClassLoader());
                   }
-                catch (Throwable ex)
+                catch (Exception ex)
                   {
                     thread = null;
                   }
@@ -320,7 +353,7 @@ public class ModuleExp extends LambdaExp
                             if (! decl.isIndirectBinding())
                               decl.setValue(QuoteExp.getInstance(value));
                             else if (! decl.isAlias() || ! (dvalue instanceof ReferenceExp))
-                              decl.setValue(null);
+                              decl.noteValueUnknown();
                           }
 			if (decl.isIndirectBinding())
                           env.addLocation(sym, property, (Location) value);
@@ -334,7 +367,7 @@ public class ModuleExp extends LambdaExp
                                                     fld.getName());
 			loc.setDeclaration(decl);
 			env.addLocation(sym, property, loc);
-			decl.setValue(null);
+			decl.noteValueUnknown();
 		      }
 		  }
 	      }
@@ -355,17 +388,22 @@ public class ModuleExp extends LambdaExp
       }
   }
 
-  ClassType superType;
-  ClassType[] interfaces;
-
   ModuleInfo info;
 
   public String getNamespaceUri () { return info.uri; }
 
-  public final ClassType getSuperType() { return superType; }
-  public final void setSuperType(ClassType s) { superType = s; }
-  public final ClassType[] getInterfaces() { return interfaces; }
-  public final void setInterfaces(ClassType[] s) { interfaces = s; }
+    public final ClassType getSuperType() {
+        return compiledType.getSuperclass();
+    }
+    public final void setSuperType(ClassType s) {
+        compiledType.setSuper(s);
+    }
+    public final ClassType[] getInterfaces() {
+        return compiledType.getInterfaces();
+    }
+    public final void setInterfaces(ClassType[] s) {
+        compiledType.setInterfaces(s);
+    }
 
   public final boolean isStatic ()
   {
@@ -419,7 +457,7 @@ public class ModuleExp extends LambdaExp
 	if (decl.field != null)
 	  continue;
 	Expression value = decl.getValue();
-	if (((decl.isSimple() && ! decl.isPublic()))
+        if (((decl.isSimple() && decl.isModuleLocal()))
             // Kludge - needed for macros - see Savannah bug #13601.
             && ! decl.isNamespaceDecl()
             && ! (decl.getFlag(Declaration.IS_CONSTANT)
@@ -489,59 +527,58 @@ public class ModuleExp extends LambdaExp
     return decls;
   }
 
-  /** Return the class this module.
+  /** Return the class for this module.
    * If not set yet, sets it now, based on the source file name.
    */
   public ClassType classFor (Compilation comp)
   {
-    if (type != null && type != Compilation.typeProcedure)
-      return (ClassType) type;
-    String fileName = getFileName();
+    if (compiledType != null && compiledType != Compilation.typeProcedure)
+      return (ClassType) compiledType;
     String mname = getName();
-    String className = null;
+    String className = getFileName();
     Path path = null;
-    if (mname != null)
-      fileName = mname;
-    else if (fileName == null)
-      {
-        fileName = getName();
-        if (fileName == null)
-          fileName = "$unnamed_input_file$";
-      }
-    else if (filename.equals("-") || filename.equals("/dev/stdin"))
-      {
-        fileName = getName();
-        if (fileName == null)
-          fileName = "$stdin$";
-      }
+    if (comp.getModule() == this && info != null
+        && info.className != null)
+      // If explicitly set, perhaps using command-line flags.
+      className = info.className;
     else
       {
-        path = Path.valueOf(fileName);
-        fileName = path.getLast();
-        int dotIndex = fileName.lastIndexOf('.');
-        if (dotIndex > 0)
-          fileName = fileName.substring (0, dotIndex);
+        if (mname != null)
+          className = mname;
+        else if (className == null)
+          className = "$unnamed_input_file$";
+        else if (className.equals("-") || className.equals("/dev/stdin"))
+          className = "$stdin$";
+        else
+          {
+            path = Path.valueOf(className);
+            className = path.getLast();
+            int dotIndex = className.lastIndexOf('.');
+            if (dotIndex > 0)
+              className = className.substring (0, dotIndex);
+          }
+        className = Compilation.mangleNameIfNeeded(className);
+
+        Path parentPath;
+        String parent;
+        if (comp.classPrefix.length() == 0
+            && path != null
+            && ! path.isAbsolute()
+            && (parentPath = path.getParent()) != null
+            && (parent = parentPath.toString()).length() > 0 // Probably redundant.
+            && parent.indexOf("..") < 0)
+          {
+            parent = parent.replace(System.getProperty("file.separator"), "/");
+            if (parent.startsWith("./"))
+              parent = parent.substring(2);
+            className = parent.equals(".") ? className
+              : Compilation.mangleURI(parent) + "." + className;
+          }
+        else
+          className = comp.classPrefix + className;
       }
-    Path parentPath;
-    String parent;
-    if (getName() == null)
-      setName(fileName);
-    fileName = Compilation.mangleNameIfNeeded(fileName);
-    if (comp.classPrefix.length() == 0
-        && path != null
-        && ! path.isAbsolute()
-        && (parentPath = path.getParent()) != null
-        && (parent = parentPath.toString()).length() > 0 // Probably redundant.
-        && parent.indexOf("..") < 0)
-      {
-        parent = parent.replaceAll(System.getProperty("file.separator"), "/");
-        if (parent.startsWith("./"))
-          parent = parent.substring(2);
-        className = parent.equals(".") ? fileName
-          : Compilation.mangleURI(parent) + "." + fileName;
-      }
-    else
-      className = comp.classPrefix + fileName;
+    if (mname == null)
+      setName(className);
     ClassType clas = new ClassType(className);
     setType(clas);
     if (comp.mainLambda == this)
@@ -555,15 +592,48 @@ public class ModuleExp extends LambdaExp
     return clas;
   }
 
+  void makeDeclInModule2 (Declaration fdecl)
+  {
+    Object fvalue = fdecl.getConstantValue();
+    if (fvalue instanceof FieldLocation)
+      {
+	FieldLocation floc = (FieldLocation) fvalue;
+        Declaration vdecl = floc.getDeclaration();
+        ReferenceExp fref = new ReferenceExp(vdecl);
+        fdecl.setAlias(true);
+        fref.setDontDereference(true);
+        fdecl.setValue(fref);
+        if (vdecl.isProcedureDecl())
+          fdecl.setProcedureDecl(true);
+        if (vdecl.getFlag(Declaration.IS_SYNTAX))
+          fdecl.setSyntax();
+        if (! fdecl.getFlag(Declaration.STATIC_SPECIFIED))
+          {
+            ClassType vtype = floc.getDeclaringClass();
+            String vname = vtype.getName();
+            for (Declaration xdecl = firstDecl();
+                 xdecl != null;  xdecl = xdecl.nextDecl())
+              {
+                if (vname.equals(xdecl.getType().getName())
+                    && xdecl.getFlag(Declaration.MODULE_REFERENCE))
+                  {
+                    fref.setContextDecl(xdecl);
+                    break;
+                  }
+              }
+          }
+      }
+  }
+
   public void writeExternal(ObjectOutput out) throws IOException
   {
     String name = null;
-    if (type != null && type != Compilation.typeProcedure
-	&& ! type.isExisting())
+    if (compiledType != null && compiledType != Compilation.typeProcedure
+	&& ! compiledType.isExisting())
       // The class is (presumably) one we're currently generating.
       // At run-time it may be loaded by a non-system ClassLoader.
       // Thus compiling the class literal needs to use loadClassRef.
-      out.writeObject(type);
+      out.writeObject(compiledType);
     else
       {
 	if (name == null)
@@ -580,8 +650,8 @@ public class ModuleExp extends LambdaExp
     Object name = in.readObject();
     if (name instanceof ClassType)
       {
-	type = (ClassType) name;
-	setName(type.getName());
+	compiledType = (ClassType) name;
+	setName(compiledType.getName());
       }
     else
       setName((String) name);

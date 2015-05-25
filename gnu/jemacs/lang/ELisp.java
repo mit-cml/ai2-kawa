@@ -5,8 +5,9 @@ import gnu.expr.*;
 import gnu.text.*;
 import kawa.standard.Scheme;
 import gnu.bytecode.Type;
-import gnu.kawa.lispexpr.*;
 import gnu.commonlisp.lang.*;
+import gnu.kawa.lispexpr.*;
+import gnu.kawa.functions.Arithmetic;
 
 public class ELisp extends Lisp2
 {
@@ -27,7 +28,7 @@ public class ELisp extends Lisp2
       return gnu.math.IntNum.make(((Char) arg).intValue());
     if (arg instanceof javax.swing.text.Position)
       return gnu.math.IntNum.make(1 + ((javax.swing.text.Position) arg).getOffset());
-    return (gnu.math.Numeric) arg;
+    return Arithmetic.asNumeric(arg);
   }
 
   public static int asChar (Object x)
@@ -117,7 +118,7 @@ public class ELisp extends Lisp2
     defun("defun", new gnu.commonlisp.lang.defun(lambda));
     defun("function", new gnu.commonlisp.lang.function(lambda));
 
-    defun(gnu.kawa.lispexpr.LispLanguage.quote_sym,
+    defun(gnu.kawa.lispexpr.LispLanguage.quote_str,
 	  kawa.lang.Quote.plainQuote);
     defun("defgroup", new defgroup());
     defun("defcustom", new defcustom());
@@ -132,9 +133,9 @@ public class ELisp extends Lisp2
     defun("unwind-protect", new gnu.commonlisp.lang.UnwindProtect());
     defun("save-excursion", new gnu.jemacs.lang.SaveExcursion(false));
     defun("save-current-buffer", new gnu.jemacs.lang.SaveExcursion(true));
-    defun("let", new kawa.standard.fluid_let(false, nilExpr));
+    defun("let", new kawa.standard.fluid_let(false, false, nilExpr));
     defun("%let", kawa.standard.let.let);
-    defun("let*", new kawa.standard.fluid_let(true, nilExpr));
+    defun("let*", new kawa.standard.fluid_let(true, false, nilExpr));
     defProcStFld("concat", "kawa.lib.strings", "string$Mnappend");
     Procedure not = new gnu.kawa.functions.Not(this);
     defun("not", not);
@@ -142,8 +143,8 @@ public class ELisp extends Lisp2
     defun("eq", new gnu.kawa.functions.IsEq(this, "eq"));
     defun("equal", new gnu.kawa.functions.IsEqual(this, "equal"));
     defun("typep", new gnu.kawa.reflect.InstanceOf(this));
-    defun("princ", displayFormat);
-    defun("prin1", writeFormat);
+    defProcStFld("princ", "gnu.jemacs.lang.MiscOps");
+    defProcStFld("prin1", "gnu.jemacs.lang.MiscOps");
     LocationEnumeration e = Scheme.builtin().enumerateAllLocations();
     while (e.hasMoreElements())
       {
@@ -176,8 +177,8 @@ public class ELisp extends Lisp2
     Language.setDefaults(instance);
   }
 
-  static final AbstractFormat writeFormat = new Print(true);
-  static final AbstractFormat displayFormat = new Print(false);
+    public static final AbstractFormat writeFormat = new Print(true);
+    public static final AbstractFormat displayFormat = new Print(false);
 
   public AbstractFormat getFormat(boolean readable)
   {
@@ -196,7 +197,7 @@ public class ELisp extends Lisp2
       name = "gnu.jemacs.buffer.Buffer";
     else if (name == "window")
       name = "gnu.jemacs.buffer.Window";
-    return Scheme.string2Type(name);
+    return super.getTypeFor(name);
   }
 
   public Type getTypeFor (Class clas)
@@ -210,7 +211,7 @@ public class ELisp extends Lisp2
 	      booleanType = new LangPrimType(Type.booleanType, this);
 	    return booleanType;
 	  }
-	return Scheme.getNamedType(name);
+	return getNamedType(name);
       }
     return Type.make(clas);
   }

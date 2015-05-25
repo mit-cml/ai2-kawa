@@ -1,3 +1,26 @@
+2014-02-16  Per Bothner  <per@bothner.com>
+
+	* BRL.java: Make sure Error is uncaught or re-thrown.
+
+2012-10-02  Per Bothner  <per@bothner.com>
+
+	* BRLRead.java (readCommand): New override, needed because of new
+	new "topLevel" behavior of inherited readObject.
+
+2011-07-11  Per Bothner  <per@bothner.com>
+
+	* BRLRead.java:  Use updated LispReader API.
+
+2011-04-17  Per Bothner  <per@bothner.com>
+
+	* BRL.java (<clinit>): Don't call setInitialColonIsKeyword here.
+	(createReadTable): Call it here instead.
+
+2011-01-19  Per Bothner  <per@bothner.com>
+
+	* BRL.java (makeBody): Remove method.
+	(appendBodyValues): New method.
+
 2010-08-19  Per Bothner  <per@bothner.com>
 
 	* BRL.java: Update to use new Environment-setting methods.

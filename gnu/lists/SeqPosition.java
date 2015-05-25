@@ -20,19 +20,20 @@ import java.util.NoSuchElementException;
  * for more information.
  */
 
-public class SeqPosition
+public class SeqPosition<E, ESEQ extends AbstractSequence<E>>
 implements
     /* #ifdef JAVA2 */
-    java.util.ListIterator,
+    java.util.ListIterator<E>,
     /* #endif */
-    java.util.Enumeration
+    java.util.Enumeration<E>
+// Maybe implement Spliterator?
 {
   /**
    * The Sequence relative to which ipos and xpos have meaning.
    * This is normally the same as the Sequence we iterate through.
    * However, if this is a TreePosition, it may an ancestor instead.
    */
-  public AbstractSequence sequence;
+  public ESEQ sequence;
 
   /**
    * An integer that (together with xpos) indicates the current position.
@@ -44,18 +45,18 @@ implements
   {
   }
 
-  public SeqPosition(AbstractSequence seq)
+  public SeqPosition(ESEQ seq)
   {
     this.sequence = seq;
   }
 
-  public SeqPosition(AbstractSequence seq, int offset, boolean isAfter)
+  public SeqPosition(ESEQ seq, int offset, boolean isAfter)
   {
     this.sequence = seq;
     ipos = seq.createPos(offset, isAfter);
   }
 
-  public SeqPosition(AbstractSequence seq, int ipos)
+  public SeqPosition(ESEQ seq, int ipos)
   {
     this.sequence = seq;
     this.ipos = ipos;
@@ -64,22 +65,22 @@ implements
   /** Creates a new SeqPosition, from a position pair.
    * The position pair is copied (using copyPos).
    */
-  public static SeqPosition make(AbstractSequence seq, int ipos)
+  public static <E,ESEQ extends AbstractSequence<E>> SeqPosition<E,ESEQ> make(ESEQ seq, int ipos)
   {
-    return new SeqPosition(seq, seq.copyPos(ipos));
+    return new SeqPosition<E,ESEQ>(seq, seq.copyPos(ipos));
   }
 
-  public SeqPosition copy ()
+  public SeqPosition<E,ESEQ> copy ()
   {
-    return new SeqPosition(sequence, sequence.copyPos(getPos()));
+    return new SeqPosition<E,ESEQ>(sequence, sequence.copyPos(getPos()));
   }
  
-  public final void gotoStart(AbstractSequence seq)
+  public final void gotoStart(ESEQ seq)
   {
     setPos(seq, seq.startPos());
   }
 
-  public final void gotoEnd(AbstractSequence seq)
+  public final void gotoEnd(ESEQ seq)
   {
     setPos(seq, seq.endPos());
   }
@@ -111,6 +112,20 @@ implements
     return sequence.hasNext(getPos());
   }
 
+    // FUTURE: /* #ifdef JAVA8 */
+    // public boolean tryAdvance(java.util.function.Consumer<? super E> action) {
+    //     if (hasNext()) {
+    //         action.accept(next());
+    //         return true;
+    //     }
+    //     return false;
+    // }
+    // public int characteristics() {
+    //     /* Should call sequence.spliterator$characteristics(); */
+    //     return ORDERED | SIZED | SUBSIZED;
+    // }
+    // /* #endif */
+
   /** Return a code (defined in Sequence) for the type of the next element. */
   public int getNextKind()
   {
@@ -124,7 +139,7 @@ implements
   }
 
   /** Get the "tag object" for the next element, if any. */
-  public Object getNextTypeObject()
+  public E getNextTypeObject()
   {
     return sequence.getNextTypeObject(getPos());
   }
@@ -136,12 +151,12 @@ implements
   }
 
   /** See java.util.ListIterator. */
-  public Object next()
+  public E next()
   {
     Object result = getNext();
     if (result == Sequence.eofValue || ! gotoNext())
       throw new NoSuchElementException();
-    return result;
+    return (E) result;
   }
 
   /** Move one element forwards, if possible.
@@ -181,16 +196,17 @@ implements
   }
 
   /** See java.util.ListIterator. */
-  public Object previous()
+  @SuppressWarnings("unchecked")
+  public E previous()
   {
     Object result = getPrevious();
     if (result == Sequence.eofValue || ! gotoPrevious())
       throw new NoSuchElementException();
-    return result;
+    return (E) result;
   }
 
   /** See java.util.Enumeration. */
-  public final Object nextElement()
+  public final E nextElement()
   {
     return next();
   }
@@ -248,7 +264,7 @@ implements
     return sequence.isAfterPos(getPos());
   }
 
-  public final void set(Object value)
+  public final void set(E value)
   {
     if (isAfter())
       setPrevious(value);
@@ -256,12 +272,12 @@ implements
       setNext(value);
   }
 
-  public void setNext (Object value)
+  public void setNext (E value)
   {
     sequence.setPosNext(getPos(), value);
   }
 
-  public void setPrevious (Object value)
+  public void setPrevious (E value)
   {
     sequence.setPosPrevious(getPos(), value);
   }
@@ -271,7 +287,7 @@ implements
     sequence.removePos(getPos(), isAfter() ? -1 : 1);
   }
 
-  public void add(Object o)
+  public void add(E o)
   { 
     setPos(sequence.addPos(getPos(), o));
   }
@@ -288,7 +304,7 @@ implements
     return ipos;
   }
 
-  public void setPos (AbstractSequence seq, int ipos)
+  public void setPos (ESEQ seq, int ipos)
   {
     if (sequence != null)
       sequence.releasePos(getPos());
@@ -303,7 +319,7 @@ implements
     this.ipos = ipos;
   }
 
-  public void set (AbstractSequence seq, int index, boolean isAfter)
+  public void set (ESEQ seq, int index, boolean isAfter)
   {
     if (sequence != null)
       sequence.releasePos(ipos);
@@ -311,7 +327,7 @@ implements
     ipos = seq.createPos(index, isAfter);
   }
 
-  public void set (SeqPosition pos)
+  public void set (SeqPosition<E,ESEQ> pos)
   {
     if (sequence != null)
       sequence.releasePos(ipos);
@@ -366,9 +382,3 @@ implements
     return sbuf.toString();
   }
 }
-// This is for people using the Emacs editor:
-// Local Variables:
-// c-file-style: "gnu"
-// tab-width: 8
-// indent-tabs-mode: t
-// End:

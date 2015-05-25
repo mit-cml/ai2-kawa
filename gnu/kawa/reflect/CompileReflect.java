@@ -43,13 +43,11 @@ public class CompileReflect
 	Type type = language.getTypeFor(args[carg]);
 	if (! (type instanceof Type))
 	  return exp;
-        checkKnownClass(type, comp);
-	Expression[] nargs = new Expression[args.length];
-	System.arraycopy(args, 0, nargs, 0, args.length);
-	nargs[carg] = new QuoteExp(type);
-	ApplyExp nexp = new ApplyExp(exp.getFunction(), nargs);
-        nexp.setLine(exp);
-        return nexp;
+        if (checkKnownClass(type, comp) >= 0)
+          {
+            args[carg] = new QuoteExp(type);
+            return exp;
+          }
       }
     return exp;
   }
@@ -57,6 +55,7 @@ public class CompileReflect
   public static Expression validateApplyInstanceOf
   (ApplyExp exp, InlineCalls visitor, Type required, Procedure proc)
   {
+    Expression origTypeExp = exp.getArgCount() >= 2 ? exp.getArg(1) : null;
     exp.visitArgs(visitor);
     exp = inlineClassName(exp, 1, visitor);
     Expression[] args = exp.getArgs();
@@ -75,7 +74,7 @@ public class CompileReflect
                 if (value instanceof QuoteExp)
                   return type.isInstance(((QuoteExp) value).getValue())
                     ? QuoteExp.trueExp : QuoteExp.falseExp;
-                if (! value.side_effects())
+                if (! value.side_effects() && type instanceof ClassType)
                   {
                     int comp = type.compare(value.getType());
                     if (comp == 1 || comp == 0)
@@ -85,6 +84,10 @@ public class CompileReflect
                   }
               }
           }
+        Type texpType = texp.getType();
+        if (Compilation.typeType.isCompatibleWithValue(texpType) < 0
+            && Type.javalangClassType.isCompatibleWithValue(texpType) < 0)
+            visitor.getCompilation().error('w', "not a type or class expression", origTypeExp);
       }
     return exp;
   }
@@ -133,9 +136,15 @@ public class CompileReflect
           }
       }
     else
-      type = arg0.getType();
-    if (type instanceof ArrayType)
-      return exp;
+      {
+        type = arg0.getType();
+        if (type instanceof ArrayType && "length".equals(name))
+          {
+            exp.setType(Type.intType);
+            return exp;
+          }
+      }
+    Type rtype = null;
     if (type instanceof ObjectType)
       {
 	ObjectType ctype = (ObjectType) type;
@@ -154,8 +163,23 @@ public class CompileReflect
                 && ! caller.isAccessible(field, ctype))
 	      return new ErrorExp("field "+field.getDeclaringClass().getName()
                                   +'.'+name+" is not accessible here", comp);
+            // FIXME Also inline to constant for Java "compile-time-constant"
+            // - i.e. static final field that has a "ConstantValue" attribute.
+            // See SlotGet#compile.
+            if (isStatic &&
+                (modifiers & (Access.ENUM|Access.FINAL)) == (Access.ENUM|Access.FINAL))
+              {
+                try
+                  {
+                    return new QuoteExp(field.getReflectField().get(null),
+                                        field.getType());
+                  }
+                catch (Exception ex)
+                  {
+                  }
+              }
+            rtype = field.getType();
           }
-
         else if (part instanceof gnu.bytecode.Method)
           {
             gnu.bytecode.Method method = (gnu.bytecode.Method) part;
@@ -168,6 +192,18 @@ public class CompileReflect
 	    if (caller != null && ! caller.isAccessible(dtype, ctype, modifiers))
 	      return new ErrorExp( "method "+method +" is not accessible here", 
                                    comp);
+            rtype = method.getReturnType();
+          }
+        else if (part instanceof ClassType && ((ClassType) part).getStaticFlag())
+          {
+            Object result = part;
+            if (arg0.valueIfConstant() instanceof Class)
+              {
+                Class cls = ((ClassType) part).getReflectClass();
+                if (cls != null)
+                  result = cls;
+              }
+            return QuoteExp.getInstance(result);
           }
         if (part != null)
           {
@@ -175,8 +211,29 @@ public class CompileReflect
               = new Expression[] { arg0, new QuoteExp(part) };
             ApplyExp nexp = new ApplyExp(exp.getFunction(), nargs);
             nexp.setLine(exp);
+            nexp.setType(rtype);
             return nexp;
           }
+
+        if (part == null && type instanceof ClassType && isStatic)
+          {
+            ClassType mcl = ((ClassType) type).getDeclaredClass(name);
+            if (mcl != null)
+              {
+                if (arg0.valueIfConstant() instanceof Class)
+                  {
+                    try
+                      {
+                        return new QuoteExp(mcl.getReflectClass());
+                      }
+                    catch (Exception ex)
+                      {
+                      }
+                  }
+                return new QuoteExp(mcl);
+              }
+          }
+
         if (type != Type.pointer_type && comp.warnUnknownMember())
           comp.error('e', "no slot `"+name+"' in "+ctype.getName());
       }
@@ -200,24 +257,69 @@ public class CompileReflect
                        QuoteExp.getInstance(isName),
                        QuoteExp.getInstance(language)});
     nexp.setLine(exp);
-    return visitor.visitApplyOnly(nexp, null); // FIXME
+    return visitor.visitApplyOnly(nexp, required);
   }
 
   public static Expression validateApplySlotSet
   (ApplyExp exp, InlineCalls visitor, Type required, Procedure proc)
   {
-    exp.visitArgs(visitor);
+    Expression[] args = exp.getArgs();
     SlotSet sproc = (SlotSet) proc;
-    // Unlike, for SlotGet, we do the field-lookup at compile time
-    // rather than inline time.  The main reason is that optimizing
-    // (set! CLASS-OR-OBJECT:FIELD-NAME VALUE) is tricky, since (currently)
-    // afte we've inlined setter, this method doesn't get called.
     boolean isStatic = sproc.isStatic;
+    args[0] = visitor.visit(args[0], null);
+    args[1] = visitor.visit(args[1], null);
+    Type type = isStatic ? kawa.standard.Scheme.exp2Type(args[0])
+      : args[0].getType();
+    Object val1 = args[1].valueIfConstant();
+    String name = null;
+    Compilation comp = visitor.getCompilation();
+    ClassType caller = comp.curClass != null ? comp.curClass : comp.mainClass;
+    if (val1 instanceof String
+        || val1 instanceof FString
+        || val1 instanceof SimpleSymbol)
+      {
+        name = val1.toString();
+        if (type instanceof ClassType)
+          {
+            ClassType ctype = (ClassType) type;
+
+            Member part = SlotSet.lookupMember(ctype, name, caller);
+            if (part == null)
+              {
+                if (type != Type.pointer_type && comp.warnUnknownMember())
+                  comp.error('w', "no slot `"+name+"' in "+ctype.getName());
+              }
+            else
+              {
+                return visitor.visit(makeSetterCall(args[0], part, args[2]), Type.voidType);
+              }
+          }
+      }
+    else if (val1 instanceof Member)
+      {
+        Member part = (Member) val1;
+        name = part.getName();
+        ClassType ctype = part.getDeclaringClass();
+        if (caller != null
+            && ! caller.isAccessible(part, ctype))
+                  return new ErrorExp("slot '"+name
+                                      +"' in "+ctype.getName()
+                                      +" not accessible here", comp);
+        if (part instanceof Field)
+          {
+            Field field = (Field) part;
+            boolean isStaticField = field.getStaticFlag();
+            Type ftype = comp.getLanguage().getLangTypeFor(((Field) val1).getType());
+              if (isStatic && ! isStaticField)
+                return new ErrorExp("cannot access non-static field `" + name
+                                    + "' using `" + proc.getName() + '\'', comp);
+            args[2] = visitor.visit(args[2], ftype);
+          }
+      }
+    args[2] = visitor.visit(args[2], null);
     if (isStatic && visitor.getCompilation().mustCompile)
       exp = inlineClassName (exp, 0, visitor);
-    exp.setType(sproc.returnSelf && exp.getArgCount() == 3
-                ? exp.getArg(0).getType()
-                : Type.voidType);
+    exp.setType(Type.voidType);
     return exp;
   }
 
@@ -238,4 +340,30 @@ public class CompileReflect
       }
     return exp;
   }
+
+ public static Expression makeSetterCall (Expression receiver, Object slot, Expression newValue)
+  {
+    Procedure p;
+    if (slot instanceof Field)
+      {
+        p = SlotSet.set$Mnfield$Ex;
+      }
+    else
+      {
+        // Slot may be result from SlotSet#lookupMember, which does
+        // not handle overload resolution.  Use Invoke to handle that.
+        slot = ((Member) slot).getName();
+        p = Invoke.invoke;
+      }
+    Expression[] sargs = { receiver, new QuoteExp(slot), newValue};
+    return new ApplyExp(p, sargs);
+  }
+
+    public static Expression validateThrow
+            (ApplyExp exp, InlineCalls visitor, Type required, Procedure proc) {
+        Expression[] args = exp.getArgs();
+        args[0] = visitor.visit(args[0], Type.javalangThrowableType);
+        exp.setType(Type.neverReturnsType);
+        return exp;
+    }
 }

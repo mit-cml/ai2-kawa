@@ -6,6 +6,8 @@ import gnu.text.*;
 import gnu.mapping.*;
 import gnu.bytecode.Type;
 import gnu.lists.*;
+import gnu.kawa.io.InPort;
+import gnu.kawa.io.OutPort;
 import gnu.kawa.util.GeneralHashTable;
 /* #ifdef use:java.util.regex */
 import java.util.regex.*;
@@ -38,7 +40,7 @@ public class ReaderDispatchMisc extends ReadTableEntry
   {
     LispReader reader = (LispReader) in;
     char saveReadState = '\0';
-    LineBufferedReader port;
+    InPort port;
     int length;
     String name;
     if (code >= 0)
@@ -48,23 +50,30 @@ public class ReaderDispatchMisc extends ReadTableEntry
       case ':':
 	// Handle Guile-style keyword syntax: '#:KEYWORD'
 	// Note this conflicts with Common Lisp uninterned symbols.  FIXME
-	int startPos = reader.tokenBufferLength;
-	reader.readToken(reader.read(), 'P', ReadTable.getCurrent());
-	length = reader.tokenBufferLength - startPos;
-	name = new String(reader.tokenBuffer, startPos, length);
-	reader.tokenBufferLength = startPos;
-	return gnu.expr.Keyword.make(name.intern());
+        name = reader.readTokenString(-1, ReadTable.getCurrent());
+        return gnu.expr.Keyword.make(name.intern());
       case '\\':
 	return LispReader.readCharacter(reader);
       case '!':
 	return LispReader.readSpecial(reader);
       case 'T':
-	return Boolean.TRUE;
       case 'F':
-	ch = in.peek();
-	if (Character.isDigit((char) ch))
-	  return LispReader.readSimpleVector(reader, 'F');
-	return Boolean.FALSE;
+          name = reader.readTokenString(ch, ReadTable.getCurrent());
+          String nameLC = name.toLowerCase();
+          if (nameLC.equals("t") || nameLC.equals("true"))
+              return Boolean.TRUE;
+          if (nameLC.equals("f") || nameLC.equals("false"))
+              return Boolean.FALSE;
+          int size;
+          if (nameLC.equals("f32")) size = 32;
+          else if (nameLC.equals("f64")) size = 64;
+          else
+            {
+              in.error("unexpected characters following '#'");
+              return Boolean.FALSE;
+            }
+          return LispReader.readSimpleVector(reader, 'F',
+                                             reader.read(), size);
       case 'S':
       case 'U':
 	return LispReader.readSimpleVector(reader, (char) ch);
@@ -93,21 +102,7 @@ public class ReaderDispatchMisc extends ReadTableEntry
       return readRegex(in, ch, count);
       /* #endif */
       case '|':
-	port = reader.getPort();
-	if (port instanceof InPort)
-	  {
-	    saveReadState = ((InPort) port).readState;
-	    ((InPort) port).readState = '|';
-	  }
-	try
-	  {
-	    reader.readNestedComment('#', '|');
-	  }
-	finally
-	  {
-	    if (port instanceof InPort)
-	      ((InPort) port).readState = saveReadState;
-	  }
+        readNestedComment(reader);
 	return Values.empty;
       case ';':
 	port = reader.getPort();
@@ -127,91 +122,52 @@ public class ReaderDispatchMisc extends ReadTableEntry
 	  }
 	return Values.empty;
       case ',':
-	port = reader.getPort();
-        Object list;
-        if (port.peek() == '('
-            && ((length
-                 = LList.listLength(list = reader.readObject(), false))
-                > 0)
-            && ((Pair) list).getCar() instanceof Symbol)
-          {
-            name = ((Pair) list).getCar().toString();
-            Object proc = ReadTable.getCurrent().getReaderCtor(name);
-            if (proc == null)
-              in.error("unknown reader constructor "+name);
-            else if (! (proc instanceof Procedure || proc instanceof Type))
-              in.error("reader constructor must be procedure or type name");
-            else
-              {
-                length--;  // Subtract 1 for the constructor name.
-                int parg = proc instanceof Type ? 1 : 0;
-                Object[] args = new Object[parg+length];
-                Object argList = ((Pair) list).getCdr();
-                for (int i = 0;  i < length;  i++)
-                  {
-                    Pair pair = (Pair) argList;
-                    args[parg+i] = pair.getCar();
-                    argList = pair.getCdr();
-                  }
-                try
-                  {
-                    if (parg > 0)
-                      {
-                        args[0] = proc;
-                        return gnu.kawa.reflect.Invoke.make.applyN(args);
-                      }
-                    return ((Procedure) proc).applyN(args);
-                  }
-                catch (Throwable ex)
-                  {
-                    in.error("caught "+ex+" applying reader constructor "+name);
-                  }
-              }
-          }
-        else
-          in.error("a non-empty list starting with a symbol must follow #,");
-	return Boolean.FALSE;
+        return ReaderDispatchSyntaxQuote.readNamedConstructor(reader);
       case '=':
-        Object object = reader.readObject();
-        if (in instanceof LispReader)
-          {
-            LispReader lin = (LispReader) in;
-            GeneralHashTable<Integer,Object> map = lin.sharedStructureTable;
-            if (map == null)
-              {
-                map = new GeneralHashTable<Integer,Object>();
-                lin.sharedStructureTable = map;
-              }
-            map.put(Integer.valueOf(count), object);
-          }
-        return object;
+        return reader.readObject(count, false);
       case '#':
         if (in instanceof LispReader)
           {
-            LispReader lin = (LispReader) in;
-            GeneralHashTable<Integer,Object> map = lin.sharedStructureTable;
+            GeneralHashTable<Integer,Object> map
+                = ((LispReader) in).sharedStructureTable;
             if (map != null)
               {
                 Integer key = Integer.valueOf(count);
-                object = map.get(key, in);
+                Object object = map.get(key, in);
                 if (object != in)
                   return object;
               }
           }
         in.error("an unrecognized #n# back-reference was read");
-	return Values.empty;
+	return Boolean.FALSE;
       default:
 	in.error("An invalid #-construct was read.");
 	return Values.empty;
       }
   }
 
+    public static void readNestedComment(LispReader reader)
+            throws java.io.IOException, SyntaxException {
+	InPort port = reader.getPort();
+        char saveReadState = '\0';
+	if (port instanceof InPort) {
+	    saveReadState = ((InPort) port).readState;
+	    ((InPort) port).readState = '|';
+        }
+	try {
+	    reader.readNestedComment('#', '|');
+        } finally {
+	    if (port instanceof InPort)
+                ((InPort) port).readState = saveReadState;
+        }
+    }
+
   /* #ifdef use:java.util.regex */
   public static Pattern readRegex (Lexer in, int ch, int count)
     throws java.io.IOException, SyntaxException
   {
     int startPos = in.tokenBufferLength;
-    LineBufferedReader port = in.getPort();
+    InPort port = in.getPort();
     char saveReadState = '\0';
     int flags = 0;
     if (port instanceof InPort)

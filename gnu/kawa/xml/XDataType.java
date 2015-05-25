@@ -9,10 +9,10 @@ import gnu.expr.*;
 import gnu.text.Printable;
 import gnu.math.*;
 import java.math.BigDecimal;
+import gnu.kawa.io.URIPath;
 import gnu.lists.SeqPosition;
 import gnu.lists.Consumer;
 import gnu.xml.TextUtils;
-import gnu.text.URIPath;
 
 /** An atomic type as used in XML Schema and related languages.
  * For example the {code xs:decimal} type is {@code XDataType.decimalType}.
@@ -141,7 +141,7 @@ public class XDataType extends Type implements TypeValue
                   BOOLEAN_TYPE_CODE);
 
   public static final XDataType anyURIType =
-    new XDataType("anyURI", ClassType.make("gnu.text.Path"), ANY_URI_TYPE_CODE);
+    new XDataType("anyURI", ClassType.make("gnu.kawa.io.Path"), ANY_URI_TYPE_CODE);
 
   public static final XDataType NotationType =
     new XDataType("NOTATION",
@@ -271,7 +271,7 @@ public class XDataType extends Type implements TypeValue
       case UNTYPED_ATOMIC_TYPE_CODE:
         return obj instanceof gnu.kawa.xml.UntypedAtomic;
       case ANY_URI_TYPE_CODE:
-        return obj instanceof gnu.text.Path;
+        return obj instanceof gnu.kawa.io.Path;
       case BOOLEAN_TYPE_CODE:
         return obj instanceof java.lang.Boolean;
       case FLOAT_TYPE_CODE:
@@ -322,7 +322,7 @@ public class XDataType extends Type implements TypeValue
         cast(value);
         return true;
       }
-    catch (Throwable ex)
+    catch (Exception ex)
       {
         return false;
       }
@@ -351,7 +351,7 @@ public class XDataType extends Type implements TypeValue
         if (value instanceof Boolean)
           return (((Boolean)value).booleanValue() ? Boolean.TRUE
                   : Boolean.FALSE);
-        if (value instanceof Number)
+        if (RealNum.isReal(value))
           {
             double d = ((Number) value).doubleValue();
             return d == 0.0 || Double.isNaN(d) ? Boolean.FALSE : Boolean.TRUE;
@@ -363,15 +363,8 @@ public class XDataType extends Type implements TypeValue
           return value;
         if (value instanceof gnu.math.RealNum)
           return ((gnu.math.RealNum) value).asBigDecimal();
-        if (value instanceof Float || value instanceof Double)
-          {
-            double d = ((Number) value).doubleValue();
-            /* #ifdef JAVA5 */
-            return BigDecimal.valueOf(d);
-            /* #else */
-            // return new BigDecimal(d);
-            /* #endif */
-          }
+        if (RealNum.isReal(value))
+          return BigDecimal.valueOf(((Number) value).doubleValue());
         if (value instanceof Boolean)
           return cast(((Boolean)value).booleanValue() ? IntNum.one()
                       : IntNum.zero());
@@ -379,8 +372,7 @@ public class XDataType extends Type implements TypeValue
       case FLOAT_TYPE_CODE:
         if (value instanceof java.lang.Float)
           return value;
-        if (value instanceof java.lang.Number)
-          // Wrong for complex numbers with non-zero imaginary part.  FIXME.
+        if (RealNum.isReal(value))
           return makeFloat(((Number) value).floatValue());
         if (value instanceof Boolean)
           return ((Boolean)value).booleanValue() ? FLOAT_ONE : FLOAT_ZERO;
@@ -388,8 +380,7 @@ public class XDataType extends Type implements TypeValue
       case DOUBLE_TYPE_CODE:
         if (value instanceof java.lang.Double)
           return value;
-        if (value instanceof java.lang.Number)
-          // Wrong for complex numbers with non-zero imaginary part.  FIXME.
+        if (RealNum.isReal(value))
           return makeDouble(((Number) value).doubleValue());
         if (value instanceof Boolean)
           return ((Boolean)value).booleanValue() ? DOUBLE_ONE : DOUBLE_ZERO;
@@ -540,6 +531,10 @@ public class XDataType extends Type implements TypeValue
     // return new Double(value);
     /* #endif */
   }
+
+    /* #ifndef JAVA8 */
+    public String encodeType(Language language) { return null; }
+    /* #endif */
 
   public static final Double DOUBLE_ZERO = makeDouble(0);
   public static final Double DOUBLE_ONE = makeDouble(1);

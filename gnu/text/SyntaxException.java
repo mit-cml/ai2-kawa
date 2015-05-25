@@ -9,7 +9,7 @@ package gnu.text;
  * or well-formedness errors when reading an XML document.
  */
 
-public class SyntaxException extends Exception
+public class SyntaxException extends RuntimeException
 {
   /** If non-null, an extra one-line message printed before the messages.
    * Can be used to provide extra context.  */
@@ -54,15 +54,18 @@ public class SyntaxException extends Exception
 
   public String getMessage ()
   {
+    int max = messages.adjustDisplayMax(maxToPrint);
     StringBuffer buffer = new StringBuffer ();
     if (header != null)
       buffer.append(header);
-    int max = maxToPrint;
     for (SourceError err = messages.firstError;
-	 err != null && --max >= 0;  err = err.next)
+	 err != null;  err = err.next)
       {
+        if (messages.skipDisplayMessage(max, err))
+          continue;
 	buffer.append('\n');
 	buffer.append(err);
+        max -= 2;
       }
     return buffer.toString();
   }

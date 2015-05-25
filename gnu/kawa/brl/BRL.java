@@ -4,6 +4,7 @@ import kawa.standard.Scheme;
 import gnu.lists.*;
 import gnu.xml.*;
 import gnu.expr.*;
+import gnu.kawa.io.InPort;
 import gnu.kawa.lispexpr.ReadTable;
 
 public class BRL extends Scheme
@@ -26,7 +27,6 @@ public class BRL extends Scheme
     krl_instance = new BRL(brlEnvironment);
     brl_instance = new BRL(brlEnvironment);
     brl_instance.setBrlCompatible(true);
-    brl_instance.defaultReadTable.setInitialColonIsKeyword(true);
     Environment saveEnv = Environment.setSaveCurrent(brlEnvironment);
     try
       {
@@ -52,7 +52,7 @@ public class BRL extends Scheme
 	loadClass("gnu.kawa.brl.progfun");
 	loadClass("gnu.kawa.servlet.HTTP");
       }
-    catch (Throwable ex)
+    catch (Exception ex)
       {
 	System.err.println("caught "+ex);
       }
@@ -78,7 +78,9 @@ public class BRL extends Scheme
   public boolean isBrlCompatible() { return brlCompatible; }
   public void setBrlCompatible(boolean compat) {  brlCompatible = compat; }
 
-  public gnu.text.Lexer getLexer(InPort inp, gnu.text.SourceMessages messages)
+  public boolean appendBodyValues () { return ! isBrlCompatible(); }
+
+  public gnu.kawa.lispexpr.LispReader getLexer(InPort inp, gnu.text.SourceMessages messages)
   {
     Compilation.defaultCallConvention = Compilation.CALL_WITH_CONSUMER;
     BRLRead lexer = new BRLRead(inp, messages);
@@ -99,16 +101,11 @@ public class BRL extends Scheme
     Language.setDefaults(getKrlInstance());
   }
 
-  public Expression makeBody(Expression[] exps)
-  {
-    if (isBrlCompatible())
-      return super.makeBody(exps);
-    return new ApplyExp(gnu.kawa.functions.AppendValues.appendValues, exps);
-  }
-
   public ReadTable createReadTable ()
   {
     ReadTable rt = super.createReadTable();
+    if (isBrlCompatible())
+      rt.setInitialColonIsKeyword(true);
     rt.setBracketMode(1);
     rt.set(']', brlReader);
     return rt;

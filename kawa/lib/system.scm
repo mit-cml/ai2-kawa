@@ -2,6 +2,7 @@
 (require <kawa.lib.std_syntax>)
 (require <kawa.lib.syntax>)
 (require <kawa.lib.vectors>)
+(require <kawa.lib.exceptions>)
 
 (define (make-process args env)
   (let* ((arargs
@@ -99,10 +100,50 @@
     (if (invoke messages 'seenErrors)
 	(primitive-throw (make <gnu.text.SyntaxException> messages)))))
 
-(define (catch key (thunk :: <procedure>) (handler :: <procedure>))
-  (try-catch (thunk)
-	     (ex <kawa.lang.NamedException>
-		 (invoke ex 'applyHandler key handler))))
-
 (define (process-command-line-assignments)
   (gnu.expr.ApplicationMainSupport:processSetProperties))
+
+(define (get-environment-variable name::string)
+  (let ((r (java.lang.System:getenv (name:toString))))
+    (if (eq? r #!null) #f r)))
+
+(define (get-environment-variables)
+  (let ((it (((java.lang.System:getenv):entrySet):iterator)))
+    (let loop ((r '()))
+      (if (it:hasNext)
+          (let ((e (it:next)))
+            (loop (cons (cons (e:getKey) (e:getValue)) r)))
+          r))))
+
+(define (current-second) ::double
+  (* (java.lang.System:currentTimeMillis) 0.001))
+
+(define (current-jiffy) ::long
+  (java.lang.System:nanoTime))
+
+(define (jiffies-per-second) ::long
+  1000000000)
+
+(define-simple-constructor cmd run-process $string-with-delimiter-marks$)
+(define-simple-constructor sh run-process-using-sh $string-with-delimiter-marks$)
+(define-syntax run-process-using-sh
+  (syntax-rules ()
+    ((run-process-using-sh . args)
+     (run-process shell: #t . args))))
+
+(define-syntax pipe-process
+  (syntax-rules ()
+    ((_ e0) e0)
+    ((_ e0 e1 . rest)
+     (pipe-process (%pipe-process e0 e1) . rest))))
+
+(define-procedure %pipe-process
+  validate-apply: "kawa.lib.compile_misc:pipeProcessValidateApply"
+  (lambda (e1 e2)
+    (java.lang.RuntimeException "%pipe-process called")))
+
+(define (process-exit-wait process::java.lang.Process) ::int
+  ((->java.lang.Process process):waitFor))
+
+(define (process-exit-ok? process::java.lang.Process) ::boolean
+  (= ((->java.lang.Process process):waitFor) 0))

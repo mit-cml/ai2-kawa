@@ -30,7 +30,8 @@ public class ProcInitializer extends Initializer
     Declaration pdecl = proc.nameDecl;
     Object pname = pdecl == null ? proc.getName() : pdecl.getSymbol();
     ModuleMethod oldproc = null;
-    if (comp.immediate && pname != null && pdecl != null)
+    if (comp.immediate && pname != null
+        && pdecl != null && pdecl.context instanceof ModuleExp)
       {
         // In interactive mode allow dynamic rebinding of procedures.
         // If there is an existing ModuleMethod binding, re-use it.
@@ -39,24 +40,30 @@ public class ProcInitializer extends Initializer
           : Symbol.make("", pname.toString().intern());
         Object property = comp.getLanguage().getEnvPropertyFor(proc.nameDecl);
         Object old = env.get(sym, property, null);
-        if (old instanceof ModuleMethod)
-          oldproc = (ModuleMethod) old;
+        if (old instanceof ModuleMethod) {
+                String moduleName =
+                    ((ModuleMethod) old).module.getClass().getName();
+                if (moduleName.startsWith(ModuleManager.interactiveClassPrefix)
+                    || moduleName.equals(comp.moduleClass.getName()))
+                    oldproc = (ModuleMethod) old;
+            }
       }
     CodeAttr code = comp.getCode();
-    ClassType procClass = Compilation.typeModuleMethod;
-    String initName;
+    ClassType procClass = proc.usingCallContext()
+        ? Compilation.typeModuleMethodWithContext
+        : Compilation.typeModuleMethod;
+    Method initModuleMethod;
     if (oldproc == null)
       {
         code.emitNew(procClass);
         code.emitDup(1);
-        initName = "<init>";
+        initModuleMethod = procClass.getDeclaredMethod("<init>", 4);
       }
     else
       {
         comp.compileConstant(oldproc, Target.pushValue(procClass));
-        initName = "init";
+        initModuleMethod = Compilation.typeModuleMethod.getDeclaredMethod("init", 4);
       }
-    Method initModuleMethod = procClass.getDeclaredMethod(initName, 4);
     LambdaExp owning = proc.getNeedsClosureEnv() ? proc.getOwningLambda()
       : comp.getModule();
     if (owning instanceof ClassExp && owning.staticLinkField != null)
@@ -67,7 +74,7 @@ public class ProcInitializer extends Initializer
       code.emitPushThis();
     else
       {
-	if (comp.moduleInstanceVar == null)
+        if (comp.moduleInstanceVar == null || comp.moduleInstanceVar.dead())
 	  {
 	    comp.moduleInstanceVar
 	      = code.locals.current_scope.addVariable(code,

@@ -3,6 +3,7 @@ import kawa.lang.*;
 import gnu.lists.*;
 import gnu.expr.*;
 import gnu.mapping.Symbol;
+import gnu.bytecode.ClassType;
 
 public class define_class extends Syntax
 {
@@ -27,8 +28,8 @@ public class define_class extends Syntax
     this.isSimple = isSimple;
   }
 
-  public boolean scanForDefinitions (Pair st, java.util.Vector forms,
-                                     ScopeExp defs, Translator tr)
+  @Override
+  public boolean scanForDefinitions(Pair st, ScopeExp defs, Translator tr)
   {
     Object st_cdr = st.getCdr();
     SyntaxForm nameSyntax = null;
@@ -37,25 +38,29 @@ public class define_class extends Syntax
 	nameSyntax = (SyntaxForm) st_cdr;
 	st_cdr = nameSyntax.getDatum();
       }
-    if (! (st_cdr instanceof Pair))
-      return super.scanForDefinitions(st, forms, defs, tr);
-    Pair p = (Pair) st_cdr;
-    Object name = p.getCar();
-    while (name instanceof SyntaxForm)
+    Object name;
+    if (st_cdr instanceof Pair)
       {
-	nameSyntax = (SyntaxForm) name;
-	name = nameSyntax.getDatum();
+        name = ((Pair) st_cdr).getCar();
+        while (name instanceof SyntaxForm)
+          {
+            nameSyntax = (SyntaxForm) name;
+            name = nameSyntax.getDatum();
+          }
+        name = tr.namespaceResolve(name);
       }
-    name = tr.namespaceResolve(name);
+    else
+      name = null;
     if (! (name instanceof String || name instanceof Symbol))
       {
 	tr.error('e', "missing class name");
 	return false;
       }
+    Pair p = (Pair) st_cdr;
     Declaration decl = tr.define(name, nameSyntax, defs);
     if (p instanceof PairWithPosition)
       decl.setLocation((PairWithPosition) p);
-    ClassExp oexp = new ClassExp(isSimple);
+    ClassExp oexp = new ClassExp(isSimple, null);
     decl.noteValue(oexp);
     decl.setFlag(Declaration.IS_CONSTANT|Declaration.EARLY_INIT);
     decl.setType(isSimple ? Compilation.typeClass : Compilation.typeClassType);
@@ -86,30 +91,42 @@ public class define_class extends Syntax
     Object[] saved = objectSyntax.scanClassDef(p, oexp, tr);
     if (nameSyntax != null)
       tr.setCurrentScope(save_scope);
+    ClassType mtype = tr.getModule().classFor(tr);
+    String clname = oexp.getClassName(tr);
+    String mname = mtype.getName();
+    ClassType ctype;
+    if (clname.equals(mname))
+      {
+        ctype = mtype;
+        tr.getModule().setFlag(ModuleExp.USE_DEFINED_CLASS);
+      }
+    else
+      ctype = new ClassType(clname);
+    oexp.setClassType(ctype);
     if (saved == null)
 	return false;
     st = Translator.makePair(st, this, Translator.makePair(p, decl, saved));
-    forms.addElement (st);
+    tr.pushForm(st);
     return true;
   }
 
   public Expression rewriteForm (Pair form, Translator tr)
   {
-    //FIXME needs work
-    Declaration decl = null;
     Object form_cdr = form.getCdr();
     if (form_cdr instanceof Pair)
       {
         form = (Pair) form_cdr;
         Object form_car = form.getCar();
-	if (! (form_car instanceof Declaration))
-	  return tr.syntaxError(this.getName() + " can only be used in <body>");
-	decl = (Declaration) form_car;
+        if (form_car instanceof Declaration)
+          {
+            Declaration decl = (Declaration) form_car;
+            ClassExp oexp = (ClassExp) decl.getValue();
+            objectSyntax.rewriteClassDef((Object[]) form.getCdr(), tr);
+            SetExp sexp = new SetExp(decl, oexp);
+            sexp.setDefining (true);
+            return sexp;
+          }
       }
-    ClassExp oexp = (ClassExp) decl.getValue();
-    objectSyntax.rewriteClassDef((Object[]) form.getCdr(), tr);
-    SetExp sexp = new SetExp(decl, oexp);
-    sexp.setDefining (true);
-    return sexp;
+    return tr.syntaxError(this.getName() + " can only be used in <body>");
   }
 }

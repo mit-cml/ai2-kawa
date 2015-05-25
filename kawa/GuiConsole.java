@@ -1,10 +1,12 @@
 package kawa;
 
+import gnu.kawa.io.InPort;
+import gnu.kawa.io.OutPort;
+import gnu.mapping.*;
+import gnu.expr.Language;
 import java.awt.*;
 import javax.swing.*;
 import java.awt.event.*;
-import gnu.mapping.*;
-import gnu.expr.Language;
 
 /** A Frame containing a Kawa read-eval-print loop.
   * @author Albert Ting <alt@artisan.com> (original base)
@@ -25,7 +27,7 @@ public class GuiConsole extends JFrame
   ReplDocument document;
 
   public static void main(String[] args) {
-    repl.noConsole = false;
+    InPort.noConsole = false;
     int iArg = repl.processArgs(args, 0, args.length);
     repl.getLanguage();
     repl.setArgs(args, iArg);

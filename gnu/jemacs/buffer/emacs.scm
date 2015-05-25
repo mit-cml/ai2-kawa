@@ -23,8 +23,12 @@
 
 ;;; MINIBUFFERS
 
+(define (message msg) :: <string>
+  ((window-frame):showInfoMessage msg)
+  msg)
+
 (define (read-dialog prompt) :: <string>
-  (invoke (as <frame> (window-frame)) 'ask prompt))
+  ((window-frame):ask prompt))
 
 (define read-from-minibuffer read-dialog)
 
@@ -142,6 +146,10 @@
 
 ;;; BUFFERS
 
+(define (eval-last-sexp #!optional (marker :: <marker> (make-marker)))
+  (invoke marker 'setBuffer (current-buffer))
+  (message
+   (invoke marker 'evalLastSexp)))
 (define (pop-to-buffer buffer
 		       #!optional (not-this-window-p :: <boolean>)
 		       (on-frame :: <frame> #!null))
@@ -158,6 +166,9 @@
 ;; Emacs allows a buffer name as well as a buffer.
 (define (set-buffer buffer)
   (invoke-static <buffer> 'setCurrent buffer))
+
+(define (about-jemacs)
+  ((window-frame):showAboutMessage))
 
 ;; Emacs returns an Emacs string, not a Java string. 
 (define (buffer-name #!optional (buffer (current-buffer)))
@@ -449,7 +460,7 @@
   (let ((buffer :: <buffer> (current-buffer)))
     (invoke buffer 'insertAll args #!null)))
 
-(define (erase-buffer #!optional buffer '())
+(define (erase-buffer #!optional (buffer '()))
   (let ((buf :: <buffer> (if (eq? buffer '()) (current-buffer)
                              (get-buffer buffer))))
     (invoke buf 'removeAll)))
@@ -482,7 +493,7 @@
 ;;; PROCESSES
 
 (define (process? obj)
-  (instance? x <process>))
+  (instance? obj <process>))
 
 (define (process-send-string (process :: <process>) string)
   (invoke process 'writeToInferior string))
@@ -520,6 +531,7 @@
 (define-key global-map "\C-f" forward-char)
 (define-key global-map "\C-x\C-w" write-file)
 (define-key global-map "\C-x\C-s" save-buffer)
+(define-key global-map "\C-x\C-e" eval-last-sexp)
 (define-key global-map "\C-x0" delete-window)
 (define-key global-map "\C-x1" delete-other-windows)
 (define-key global-map "\C-x2" split-window-vertically)
@@ -555,9 +567,18 @@
    (list "Help"
 	 #( "About JEmacs..." about-jemacs ) )))
 
+(define (load-init-file) ::void
+  (let ((msg (kawa.repl:evalInitFileWithErrorMessage)))
+    (if (not (eq? msg #!null))
+        (let ((err-buffer (get-buffer-create "*error*")))
+          (split-window)
+          (switch-to-buffer err-buffer)
+          (invoke err-buffer 'insert msg #!null)))))
+
 (define (emacs)
   (set-buffer (get-buffer-create "*scratch*"))
-  (make-frame))
+  (make-frame)
+  (load-init-file))
 
 ;;; TELNET
 
@@ -620,4 +641,3 @@
     (try-finally
      (set symbol value)
      (<buffer>:setCurrent save))))
-  

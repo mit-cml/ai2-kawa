@@ -1,5 +1,6 @@
 package gnu.xquery.util;
 import gnu.mapping.*;
+import gnu.kawa.io.OutPort;
 import gnu.xml.XMLPrinter;
 
 public class Debug
@@ -20,9 +21,9 @@ public class Debug
             out = new OutPort(new java.io.FileOutputStream(traceFilename,
                                                            traceShouldAppend));
           }
-        catch (Throwable ex)
+        catch (Exception ex)
           {
-            new WrappedException("Could not open '"+traceFilename
+            throw new WrappedException("Could not open '"+traceFilename
                                  +"' for fn:trace output", ex);
           }
         tracePort = out;

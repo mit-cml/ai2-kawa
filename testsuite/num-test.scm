@@ -1,4 +1,4 @@
-(test-begin "numbers" 1802)
+(test-begin "num" 1881)
 
 (test-equal 7 (+ 3 4))
 (test-equal 3 (+ 3))
@@ -104,7 +104,6 @@
 (test-approximate -1.5707963267948965 (atan -inf.0) 0.00000001)
 (test-approximate 1.5707963267948965 (atan +inf.0) 0.00000001)
 (test-equal 0.0+3.141592653589793i (log -1.0+0.0i))
-(test-expect-fail 1)
 (test-equal 0.0-3.141592653589793i (log -1.0-0.0i))
 
 (test-equal 0.0+2.23606797749979i (sqrt -5))
@@ -116,6 +115,9 @@
    #t (test-read-eval-string "0.0.0"))
 (test-assert
  (eq? 3 3))
+
+(test-equal '(2 0) (call-with-values (lambda () (exact-integer-sqrt 4)) list))
+(test-equal '(2 1) (call-with-values (lambda () (exact-integer-sqrt 5)) list))
 
 ;; A problem posed by Ken Dickey (kend@data.UUCP) on comp.lang.lisp
 ;; to check numerical exactness of Lisp implementations.
@@ -148,6 +150,19 @@
 	  (- 1250137720722158536144460577767424 17280012451545786657095548928))
 (test-eqv -1250120440709706990357803482218496
 	  (- 17280012451545786657095548928 1250137720722158536144460577767424))
+
+(test-eqv #t (zero? +0.0))
+(test-eqv #t (zero? -0.0))
+(test-eqv #f (zero? +nan.0))
+(test-eqv #t (positive? +inf.0))
+(test-eqv #t (negative? -inf.0))
+(test-eqv #f (positive? +nan.0))
+(test-eqv #f (negative? +nan.0))
+(test-eqv #f (finite? +inf.0))
+(test-eqv #t (finite? 5))
+(test-eqv #t (finite? 5.0))
+(test-eqv #f (infinite? 5.0))
+(test-eqv #t (infinite? +inf.0))
 
 (test-group "expt"
 	    (test-eqv 9223372036854775808 (expt 2 63)))
@@ -234,6 +249,66 @@
 (test-eqv 2874009600 (gcd 1307674368000 2874009600))
 (test-end "gcd")
 
+(test-begin "numerical operations")
+(test-eqv #t (complex? 3+4i))
+(test-eqv #t (complex? 3))
+(test-eqv #t (real? 3))
+(test-eqv #f (real? -2.5+0.0i))
+(test-eqv #t (real? -2.5+0i))
+(test-eqv #t (real? -2.5))
+(test-eqv #t (real? #e1e10))
+(test-eqv #t (rational? 6/10))
+(test-eqv #t (rational? 6/3))
+(test-eqv #t (rational? 2))
+(test-eqv #t (integer? 3+0i))
+(test-eqv #t (integer? 3.0))
+(test-eqv #t (integer? 8/4))
+
+(test-eqv #t (number? +nan.0))
+(test-eqv #t (complex? +nan.0))
+(test-eqv #t (real? +nan.0))
+(test-eqv #f (rational? +nan.0))
+(test-eqv #t (complex? +inf.0))
+(test-eqv #t (real? -inf.0))
+(test-eqv #f (rational? -inf.0))
+(test-eqv #f (integer? -inf.0))
+
+(test-eqv #t (real-valued? +nan.0))
+(test-eqv #t (real-valued? +nan.0+0i))
+(test-eqv #t (real-valued? -inf.0))
+(test-eqv #t (real-valued? 3))
+
+(test-eqv #t (real-valued? -2.5+0.0i))
+(test-eqv #t (real-valued? -2.5+0i))
+(test-eqv #t (real-valued? -2.5))
+(test-eqv #t (real-valued? #e1e10))
+
+(test-eqv #f (rational-valued? +nan.0))
+(test-eqv #f (rational-valued? -inf.0))
+(test-eqv #t (rational-valued? 6/10))
+(test-eqv #t (rational-valued? 6/10+0.0i))
+(test-eqv #t (rational-valued? 6/10+0i))
+(test-eqv #t (rational-valued? 6/3))
+
+(test-eqv #t (integer-valued? 3+0i))
+(test-eqv #t (integer-valued? 3+0.0i))
+(test-eqv #t (integer-valued? 3.0))
+(test-eqv #t (integer-valued? 3.0+0.0i))
+(test-eqv #t (integer-valued? 8/4))
+
+(test-eqv #t (exact? 5))
+(test-eqv #t (inexact? +inf.0))
+
+(test-eqv #t (integer? (java.math.BigDecimal "345")))
+(test-eqv #f (integer? (java.math.BigDecimal "345.01")))
+(test-eqv #t (integer? (java.lang.Long "345")))
+(test-eqv #t (integer? (java.lang.Double "345")))
+(test-eqv #t (exact-integer? (java.lang.Short "345")))
+(test-eqv #f (exact-integer? (java.lang.Double "345")))
+(test-eqv #f (exact-integer? (java.math.BigDecimal "345")))
+
+(test-end "numerical operations")
+
 (test-begin "logop")
 
 ;; A Boolean 1-bit version of logop.
@@ -243,8 +318,8 @@
 (define (logop-compare result op x y)
   (do ((i 0 (+ i 1)))
       ((or (= i 100)
-	   (not (eq? (logop-bits op (logbit? x i) (logbit? y i))
-		     (logbit? result i))))
+	   (not (eq? (logop-bits op (bitwise-bit-set? x i) (bitwise-bit-set? y i))
+		     (bitwise-bit-set? result i))))
        i)
     #t))
 
@@ -329,13 +404,13 @@
 (set! v (vector 1 0.5 5/2 8 2.5))
 (java.util.Collections:sort v)
 (test-equal  "sort-v-3" #(0.5 1 5/2 2.5 8) v)
-(set! v #("abc" "aa" "zy" ""))
+(set! v (vector "abc" "aa" "zy" ""))
 (java.util.Collections:sort v)
 (test-equal "sort-v-4" #("" "aa" "abc" "zy") v)
-(set! v #f32(1.2 -1.2 8.9 100.0 8.9))
+(set! v (f32vector 1.2 -1.2 8.9 100.0 8.9))
 (java.util.Collections:sort v)
 (test-equal "sort-v-5" #f32(-1.2 1.2 8.9 8.9 100.0) v)
-(set! v #(#s64(3 5) #s64(3 4 5) #s64(-1) #s64(-5)
+(set! v (vector #s64(3 5) #s64(3 4 5) #s64(-1) #s64(-5)
 	  #s64(-1 20) #s64() #s64(-1 10)))
 (java.util.Collections:sort v)
 (test-equal
@@ -345,7 +420,7 @@
 (set! v '("abc" "aa" "zy" ""))
 (java.util.Collections:sort v)
 (test-assert "sort-v-7" (equal? '("" "aa" "abc" "zy") v))
-(set! v #((b 3) (a 1) (b 2) (a 2) (b -1) (a)))
+(set! v (vector '(b 3) '(a 1) '(b 2) '(a 2) '(b -1) '(a)))
 (java.util.Collections:sort v)
 (test-equal "sort-v-8" #((a) (a 1) (a 2) (b -1) (b 2) (b 3)) v)
 
@@ -367,5 +442,28 @@
 (test-equal "java.math.BigDecimal" (invoke (invoke 12.5l2 'getClass) 'getName))
 (test-equal "gnu.math.DFloNum" (invoke (invoke 12.5e2 'getClass) 'getName))
 (test-equal "gnu.math.DFloNum" (invoke (invoke 12.5 'getClass) 'getName))
+
+(test-assert (= 0.0s0 0.0s0))
+(test-assert (eqv? 0.0s0 0.0s0))
+(test-assert (equal? 0.0s0 0.0s0))
+(test-assert (= 0.0s0 0.0d0))
+(test-eqv #f (eqv? 0.0s0 0.0d0))
+(test-eqv #f (equal? 0.0s0 0.0d0))
+(test-assert (= java.lang.Double:POSITIVE_INFINITY 
+                java.lang.Float:POSITIVE_INFINITY))
+(test-eqv #f (equal? java.lang.Double:POSITIVE_INFINITY 
+                     java.lang.Float:POSITIVE_INFINITY))
+
+(test-assert (> 1/0 -1/0))
+(test-assert (< -1/0 1/0))
+(test-assert (> 4/5 -1/0))
+(test-assert (< 4/5 1/0))
+(test-assert (< 0 1/0))
+(test-assert (> 4.5 -1/0))
+
+(define (circle-area radius) (* java.lang.Math:PI (expt radius 2)))
+(test-approximate 28.27 (circle-area 3) 0.1)
+
+(test-assert (not (gnu.math.Complex:equals 3+4i 3+5i)))
 
 (test-end)

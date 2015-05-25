@@ -111,7 +111,7 @@ public class SimpleEnvironment extends Environment
   }
 
   // Rename to newEntry? FIXME
-  NamedLocation newLocation (Symbol name, Object property)
+  protected NamedLocation newLocation (Symbol name, Object property)
   {
     if ((flags & THREAD_SAFE) != 0)
       return new SharedLocation(name, property, currentTimestamp);
@@ -179,9 +179,9 @@ public class SimpleEnvironment extends Environment
   // FIXME rename to define
   NamedLocation addLocation (Symbol name, Object property, int hash, Location loc)
   {
-    if (loc instanceof ThreadLocation
-        && ((ThreadLocation) loc).property == property)
-      loc = ((ThreadLocation) loc).getLocation();
+    if (loc instanceof DynamicLocation
+        && ((DynamicLocation) loc).property == property)
+      loc = ((DynamicLocation) loc).getLocation();
     NamedLocation nloc = lookupDirect(name, property, hash);
     if (loc == nloc)
       return nloc;

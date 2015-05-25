@@ -111,6 +111,48 @@
 ;;; Enough introductory blather. On to the source code. (But see the end of
 ;;; the file for further notes on porting & performance tuning.)
 
+;;; Require SRFI-14 for char-sets
+(require 'srfi-14 "srfi14.scm")
+
+;;; check-arg taken from comments above
+(define-private (check-arg pred val proc)
+  (if (pred val) val (error "Bad arg" val pred proc)))
+
+;;; [:optional and let-optionals* are derived from their usage here
+;;; and are most likely missing functionality present in more general
+;;; implementations. -JRH]
+(define-syntax :optional
+  (syntax-rules ()
+    ((_ rest-list default pred?)
+     (if (null? rest-list) default
+         (let ((x (car rest-list)))
+           (if (pred? x) x default))))))
+
+(define-syntax (let-optionals* form)
+  (syntax-case form ()
+    ((_ rest-arg () e ...)
+     #`(if (null? rest-arg)
+           (let () e ...)
+           (error "too many arguments" rest-arg)))
+    ((_ rest-arg (rest) e ...) (identifier? (syntax rest))
+     #`(let ((rest rest-arg)) e ...))
+    ((_ rest-arg ((var default) bindings ...) e ...)
+     (identifier? (syntax var))
+     #`(let-optionals* rest-arg ((var default #t) bindings ...) e ...))
+    ((_ rest-arg ((var default expr) bindings ...) e ...)
+     (identifier? (syntax var))
+     #`(let ((var (if (not (null? rest-arg)) (car rest-arg) default)))
+         (when (not expr) (set! var default))
+         (let-optionals*
+          (if (not (null? rest-arg)) (cdr rest-arg) rest-arg)
+          (bindings ...) e ...)))
+    ((_ rest-arg (((var1 var2 ...) proc) bindings ...) e ...)
+     #`(receive (r var1 var2 ...) (proc rest-arg)
+                (let-optionals* r (bindings ...) e ...)))))
+
+(define-private (char-cased? (c ::character)) ::boolean
+  (not (char=? (char-upcase c) (char-downcase c))))
+
 
 ;;; Support for START/END substring specs
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -189,12 +231,13 @@
   (if (not (substring-spec-ok? s start end))
       (error "Illegal substring spec." proc s start end)))
 
+#|
 (define-private (%check-substring-spec proc (s :: string) (start :: int) (end :: int))
   (if (or (> 0 start)
 	  (> start end)
 	  (> end (string-length s)))
       (error "Illegal substring spec." proc s start end)))
-
+|#
 
 ;;; Defined by R5RS, so commented out here.
 ;(define (string . chars)
@@ -235,9 +278,12 @@
   (if (and (zero? start) (= end (string-length s))) s
       (substring s start end)))
 
+#|
 (define (string-copy s . maybe-start+end)
   (let-string-start+end (start end) string-copy s maybe-start+end
     (substring s start end)))
+|#
+(define-alias string-copy kawa.lib.strings:string-copy)
 
 ;This library uses the R5RS SUBSTRING, but doesn't export it.
 ;Here is a definition, just for completeness.
@@ -464,7 +510,9 @@
 	      ans))))))
 
 
-(define (string-for-each proc s . maybe-start+end)
+(define-alias string-for-each srfi-13-string-for-each)
+#|
+(define (string-for-each proc s . maybe-start+end) ;; FIXME
   (check-arg procedure? proc string-for-each)
   (let-string-start+end (start end) string-for-each s maybe-start+end
     (let lp ((i start))
@@ -477,6 +525,7 @@
   (let-string-start+end (start end) string-for-each-index s maybe-start+end
     (let lp ((i start))
       (if (< i end) (begin (proc i) (lp (+ i 1)))))))
+|#
 
 (define (string-every criterion s . maybe-start+end)
   (let-string-start+end (start end) string-every s maybe-start+end
@@ -1029,7 +1078,7 @@
   (let-optionals* criterion+start+end ((criterion char-set:whitespace) rest)
     (let-string-start+end (start end) string-trim-right s rest
       (cond ((string-skip-right s criterion start end) =>
-	     (lambda (i) (%substring/shared s 0 (+ 1 i))))
+	     (lambda (i) (%substring/shared s start (+ 1 i))))
 	    (else "")))))
 
 (define (string-trim-both s . criterion+start+end)
@@ -1266,13 +1315,19 @@
 ;;; string-copy! to tstart from [fstart fend]
 ;;; 	Guaranteed to work, even if s1 eq s2.
 
+(define-alias string-fill! kawa.lib.strings:string-fill!)
+#|
 (define (string-fill! s char . maybe-start+end)
   (check-arg char? char string-fill!)
   (let-string-start+end (start end) string-fill! s maybe-start+end
     (do ((i (- end 1) (- i 1)))
 	((< i start))
       (string-set! s i char))))
+|#
 
+(define-alias string-copy! kawa.lib.strings:string-copy!)
+(define-alias %string-copy! kawa.lib.strings:string-copy!)
+#|
 (define (string-copy! to (tstart :: int) (from :: string)
 		      #!optional (fstart :: int 0)
 		      (fend :: int (from:length)))
@@ -1295,6 +1350,7 @@
 	    ((< i fstart))
 	  (string-set! to j (string-ref from i))
 	  (set! j (- j 1))))))
+|#
 
 ;;; Returns starting-position in STRING or #f if not true.
 ;;; This implementation is slow & simple. It is useful as a "spec" or for
@@ -1529,13 +1585,14 @@
 
 ;(define (string->list s . maybe-start+end)
 ;  (apply string-fold-right cons '() s maybe-start+end))
-
+(define-alias string->list kawa.lib.strings:string->list)
+#|
 (define (string->list s . maybe-start+end)
   (let-string-start+end (start end) string->list s maybe-start+end
     (do ((i (- end 1) (- i 1))
 	 (ans '() (cons (string-ref s i) ans)))
 	((< i start) ans))))
-
+|#
 ;;; Defined by R5RS, so commented out here.
 ;(define (list->string lis) (string-unfold null? car cdr lis))
 

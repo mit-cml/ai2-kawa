@@ -1,4 +1,5 @@
 package gnu.kawa.brl;
+import gnu.kawa.io.InPort;
 import gnu.kawa.lispexpr.*;
 import gnu.text.SyntaxException;
 import gnu.mapping.*;
@@ -34,6 +35,11 @@ public class BRLRead extends LispReader
     init();
   }
   
+    @Override
+    public Object readCommand () throws java.io.IOException, SyntaxException {
+        return readObject();
+    }
+
   public Object readObject ()
       throws java.io.IOException, SyntaxException
   {
@@ -68,7 +74,7 @@ public class BRLRead extends LispReader
 		else
 		  {
 		    nesting++;
-		    Object value = readValues(ch, ReadTable.getCurrent());
+		    Object value = readValues(ch, ReadTable.getCurrent(), -1);
 		    if (value != Values.empty)
 		      {
 			if (value == gnu.expr.QuoteExp.voidExp)

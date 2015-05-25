@@ -3,7 +3,7 @@
 
 package gnu.kawa.lispexpr;
 import gnu.text.*;
-import gnu.mapping.InPort;
+import gnu.kawa.io.InPort;
 
 public class ReaderString extends ReadTableEntry
 {
@@ -23,7 +23,7 @@ public class ReaderString extends ReadTableEntry
     throws java.io.IOException, SyntaxException
   {
     int startPos = in.tokenBufferLength;
-    LineBufferedReader port = in.getPort();
+    InPort port = in.getPort();
     char saveReadState = '\0';
     int c = ch;
     int prev;

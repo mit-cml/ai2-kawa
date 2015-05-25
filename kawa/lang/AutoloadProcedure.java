@@ -72,15 +72,7 @@ public class AutoloadProcedure extends Procedure implements Externalizable
 				+ (name == null ? "" : name.toString ()));
   }
 
-  static final Class classModuleBody;
-  static {
-    /* #ifdef JAVA5 */
-    classModuleBody = gnu.expr.ModuleBody.class;
-    /* #else */
-    // try { classModuleBody = Class.forName("gnu.expr.ModuleBody"); }
-    // catch (Throwable ex) { throw new Error(ex); }
-    /* #endif */
-  }
+  static final Class classModuleBody = gnu.expr.ModuleBody.class;
 
   /** Load the class named in className. */
   void load ()
@@ -111,11 +103,11 @@ public class AutoloadProcedure extends Procedure implements Externalizable
                     // Not a static module - create a new instance.
                     mod = procClass.newInstance();
                   }
-                ClassMemberLocation.defineAll(mod, lang, env);
-                if (mod instanceof ModuleBody)
-                  ((ModuleBody)mod).run();
-
               }
+            ClassMemberLocation.defineAll(mod, lang, env);
+            if (mod instanceof ModuleBody)
+              ((ModuleBody)mod).run();
+
             Object value = env.getFunction(sym, null);
             if (value == null
                 || !(value instanceof Procedure))
@@ -146,7 +138,7 @@ public class AutoloadProcedure extends Procedure implements Externalizable
           loaded.setSymbol(name);
       }
     catch (ClassNotFoundException ex)
-      {	throw_error ("failed to find class "); }
+      { throw_error ("failed to find class "); }
     catch (InstantiationException ex)
       { throw_error ("failed to instantiate class "); }
     catch (IllegalAccessException ex)

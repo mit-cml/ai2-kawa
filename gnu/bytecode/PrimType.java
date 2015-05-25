@@ -50,6 +50,10 @@ public class PrimType extends Type {
 				 + getName());
   }
 
+    public Object convertToRaw(Object obj) {
+        return obj;
+    }
+
   /** Coerce value to a char.
    * Only defined if getSignature() is "C". */
   public char charValue (Object value)
@@ -78,10 +82,39 @@ public class PrimType extends Type {
       case 'J':  cname = "java.lang.Long";      break;
       case 'F':  cname = "java.lang.Float";     break;
       case 'D':  cname = "java.lang.Double";    break;
+      case 'V':  cname = "java.lang.Void";    break;
       default:   cname = null; // Should never happen.
       }
     return ClassType.make(cname);
  }
+
+  public static PrimType unboxedType(Type type)
+  {
+    if (type instanceof PrimType)
+      return (PrimType) type;
+    if (!(type instanceof ClassType))
+      return null;
+    String name = type.getName();
+    if ("java.lang.Boolean".equals(name))
+      return Type.booleanType;
+    else if ("java.lang.Character".equals(name))
+      return Type.charType;
+    else if ("java.lang.Byte".equals(name))
+      return Type.byteType;
+    else if ("java.lang.Short".equals(name))
+      return Type.shortType;
+    else if ("java.lang.Integer".equals(name))
+      return Type.intType;
+    else if ("java.lang.Long".equals(name))
+      return Type.longType;
+    else if ("java.lang.Float".equals(name))
+      return Type.floatType;
+    else if ("java.lang.Double".equals(name))
+      return Type.doubleType;
+    else if ("java.lang.Void".equals(name))
+      return Type.voidType;
+    else return null;
+  }
 
   public void emitCoerceToObject (CodeAttr code)
   {

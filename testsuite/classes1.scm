@@ -1,4 +1,4 @@
-(module-static counter get-new-count <IdClass1> <IdClass2> call-lambda)
+(module-static counter get-new-count <IdClass1> <IdClass2> my-id-class-2 call-lambda)
 
 ;; Based on a test-case from Jamison Hope <jrh@theptrgroup.com>
 (define-syntax (import-class form)
@@ -6,7 +6,7 @@
     ((import-class fqcn)
      (let* ((cls :: java.lang.Class (eval (syntax fqcn)))
 	    (name (string->symbol (java.lang.Class:getSimpleName cls))))
-       #`(define-alias ,(datum->syntax-object form name) fqcn)))))
+       #`(define-alias #,(datum->syntax-object form name) fqcn)))))
 
 (import-class java.util.Date)
 
@@ -47,6 +47,9 @@
    (+ xx a))
   ((f (y :: <int>)) :: <int>
    (if (equal? hyphenated-field? "yes") (+ (g) b y) 999))
+
+  ((withVarArg a #!rest b)
+   (format "a:~a b:~b" a b))
 
   ((asText (i ::int))::string (java.lang.Integer:toString i))
   ((asText (t ::java.lang.CharSequence))::string (t:toString))
@@ -92,6 +95,10 @@
   ((get-year) :: <int>
    (+ (invoke-special <java.util.Date> (this) 'get-year)
       (invoke-static <SimpleA> 'x1900))))
+
+;; Test separate compilation of type-alias for simple class.
+;; Make it a forward declaration for a better test.
+(define-alias my-id-class-2 <IdClass2>)
 
 (define-simple-class <IdClass1> ()
   (var0 allocation: 'class init: (get-new-count))

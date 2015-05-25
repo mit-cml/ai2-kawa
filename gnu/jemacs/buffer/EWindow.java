@@ -107,9 +107,9 @@ public abstract class EWindow
   /** Link a new window after this. */
   protected final void linkSibling (EWindow window, boolean horizontal)
   {
+    EWindow next = nextWindow;
     this.nextWindow = window;
     window.prevWindow = this;
-    EWindow next = nextWindow;
     window.nextWindow = next;
     // next is non-null, since the order is cyclic.
     next.prevWindow = window;
@@ -191,13 +191,13 @@ public abstract class EWindow
 
   public void deleteOtherWindows()
   {
-    for (EWindow cur = frame.getFirstWindow(); cur != null; )
+    for (EWindow cur = getNextWindow(true); cur != this; )
       {
         EWindow next = cur.getNextWindow(true);
-        if (cur != this)
-          cur.deleteNoValidate();
+        cur.deleteNoValidate();
         cur = next;
       }
+    requestFocus();
     frame.validate();
   }
 
@@ -303,9 +303,24 @@ public abstract class EWindow
 	      }
             else if (interactive == LList.Empty)
               proc.apply0();
+            else if (interactive instanceof Procedure)
+              {
+                Object args = ((Procedure) interactive).apply0();
+                int nargs = LList.listLength(args, false);
+                if (nargs < 0)
+                    throw new IllegalArgumentException("'interactive' returns non-list");
+                Object[] xargs = new Object[nargs];
+                for (int iarg  = nargs;  --iarg >= 0;  )
+                  {
+                    Pair p = (Pair) args;
+                    xargs[iarg] = p.getCar();
+                    args = p.getCdr();
+                  }
+                proc.applyN(xargs);
+              }
 	    else
-	      {
-		System.err.println("not implemented: interactive not a string");
+              {
+		System.err.println("not implemented: interactive not a string or procedure");
 		proc.apply0();
 	      }
 	  }
@@ -319,17 +334,9 @@ public abstract class EWindow
       {
 	// Do nothing.
       }
-    catch (RuntimeException ex)
-      {
-	throw ex;
-      }
-    catch (Error ex)
-      {
-	throw ex;
-      }
     catch (Throwable ex)
       {
-	throw new WrappedException(ex);
+        WrappedException.rethrow(ex);
       }
 
   }

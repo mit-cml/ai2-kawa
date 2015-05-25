@@ -2,13 +2,19 @@ package gnu.xquery.testsuite;
 import java.io.*;
 import java.util.*;
 import gnu.lists.*;
-import gnu.text.*;
 import gnu.mapping.*;
 import gnu.expr.*;
 import gnu.xml.*;
+import gnu.kawa.io.CharArrayOutPort;
+import gnu.kawa.io.FilePath;
+import gnu.kawa.io.InPort;
+import gnu.kawa.io.Path;
 import gnu.kawa.xml.*;
 import gnu.mapping.Symbol;
 import gnu.xquery.lang.*;
+import gnu.text.SourceError;
+import gnu.text.SourceMessages;
+import gnu.text.SyntaxException;
 import org.xml.sax.helpers.AttributesImpl;
 import gnu.xquery.util.NodeUtils;
 
@@ -64,7 +70,7 @@ public class RunXQTS extends FilterConsumer
   XMLPrinter xqlog;
 
   String collectionID;
-  Values collectionDocuments;
+  Values.FromTreeList collectionDocuments;
 
   private void summaryReport (int count, String label)
   {
@@ -168,10 +174,9 @@ public class RunXQTS extends FilterConsumer
             xqlog.setPrintXMLdecl(true);
             xqlog.setStyle("xml");
             xqlog.useEmptyElementTag = 1;
-            Object saveIndent = XMLPrinter.indentLoc.get(null);
-            XMLPrinter.indentLoc.set("pretty");
+            Object saveIndent = XMLPrinter.indentLoc.setWithSave("pretty");
             xqlog.startDocument();
-            XMLPrinter.indentLoc.set(saveIndent);
+            XMLPrinter.indentLoc.setRestore(saveIndent);
 
 	    Document.parse(runner.catalog, runner);
             xqlog.endDocument();
@@ -260,8 +265,6 @@ public class RunXQTS extends FilterConsumer
     /* #endif */
     // RunXQTS failures rather than Qexo errors:
     // Some work under gcj but not JDK 1.4.x or 1.5.0_05:
-    expectFailures("vardeclerr|K-InternalVariablesWith-17|K-InternalVariablesWith-18",
-                   "missing check for circular definitions");
     expectFailures("K-TimeAddDTD-1|K-TimeAddDTD-2|K-TimeSubtractDTD-1",
                    "bad interaction between fields and millis");
     expectFailures("op-time-greater-than-2",
@@ -418,7 +421,7 @@ public class RunXQTS extends FilterConsumer
     else if (tagMatches("collection"))
       {
         collectionID = attributes.getValue("ID");
-        collectionDocuments = new Values();
+        collectionDocuments = new Values.FromTreeList();
         sources.put(collectionID, collectionDocuments);
       }
     inStartTag = false;
@@ -988,7 +991,11 @@ public class RunXQTS extends FilterConsumer
 
   boolean isSelected (String testName)
   {
+    // it's too slow - slow implementation of indexing of large sequence.
     if ("Constr-cont-document-3".equals(testName))
+      return false;
+    // infinite recursion
+    if ("K2-InternalVariablesWithout-9".equals(testName))
       return false;
     return selectedTest == null || selectedTest.equals(testName);
   }

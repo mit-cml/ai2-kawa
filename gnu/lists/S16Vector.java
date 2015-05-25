@@ -96,11 +96,10 @@ public class S16Vector extends SimpleVector
     return Convert.toObject(data[index]);
   }
 
-  public Object setBuffer(int index, Object value)
+  @Override
+  public void setBuffer(int index, Object value)
   {
-    short old = data[index];
     data[index] = Convert.toShort(value);
-    return Convert.toObject(old);
   }
 
   public final void setShortAt(int index, short value)
@@ -127,15 +126,6 @@ public class S16Vector extends SimpleVector
   }
 
   public String getTag() { return "s16"; }
-
-  public boolean consumeNext (int ipos, Consumer out)
-  {
-    int index = ipos >>> 1;
-    if (index >= size)
-      return false;
-    out.writeInt(data[index]);
-    return true;
-  }
 
   public void consumePosRange (int iposStart, int iposEnd, Consumer out)
   {
