@@ -504,22 +504,22 @@ public class repl extends Procedure0or1
 	    if (iArg >= maxArg)
 	      bad_option (arg);
             /* #ifdef use:com.sun.net.httpserver */
-            try
-              {
-                gnu.kawa.servlet.KawaHttpHandler.addAutoHandler(args[iArg-1], args[iArg]);
-              }
-            catch (java.io.IOException ex)
-              {
-                throw new RuntimeException(ex);
-              }
-            catch (NoClassDefFoundError ex)
-              {
-                System.err.println("kawa: HttpServer classes not found");
-                System.exit(-1);
-              }
+            // try
+            //   {
+            //     gnu.kawa.servlet.KawaHttpHandler.addAutoHandler(args[iArg-1], args[iArg]);
+            //   }
+            // catch (java.io.IOException ex)
+            //   {
+            //     throw new RuntimeException(ex);
+            //   }
+            // catch (NoClassDefFoundError ex)
+            //   {
+            //     System.err.println("kawa: HttpServer classes not found");
+            //     System.exit(-1);
+            //   }
             /* #else */
-            // System.err.println("kawa: HttpServer classes not found");
-            // System.exit(-1);
+            System.err.println("kawa: HttpServer classes not found");
+            System.exit(-1);
             /* #endif */
           }
         else if (arg.equals("--http-start"))
@@ -528,33 +528,33 @@ public class repl extends Procedure0or1
 	    if (iArg >= maxArg)
 	      bad_option("missing httpd port argument");
             /* #ifdef use:com.sun.net.httpserver */
-            int port;
-            try
-              {
-                port = Integer.parseInt(args[iArg]);
-              }
-            catch (NumberFormatException ex)
-              {
-                bad_option("malformed server port#");
-                port = -1; // never seen.
-              }
-            try
-              {
-                gnu.kawa.servlet.KawaHttpHandler.startServer(port);
-              }
-            catch (NoClassDefFoundError ex)
-              {
-                System.err.println("kawa: HttpServer classes not found");
-                System.exit(-1);
-              }
-            catch (IOException ex)
-              {
-                throw new RuntimeException(ex);
-              }
-	    something_done = true;
+            // int port;
+            // try
+            //   {
+            //     port = Integer.parseInt(args[iArg]);
+            //   }
+            // catch (NumberFormatException ex)
+            //   {
+            //     bad_option("malformed server port#");
+            //     port = -1; // never seen.
+            //   }
+            // try
+            //   {
+            //     gnu.kawa.servlet.KawaHttpHandler.startServer(port);
+            //   }
+            // catch (NoClassDefFoundError ex)
+            //   {
+            //     System.err.println("kawa: HttpServer classes not found");
+            //     System.exit(-1);
+            //   }
+            // catch (IOException ex)
+            //   {
+            //     throw new RuntimeException(ex);
+            //   }
+	    // something_done = true;
             /* #else */
-            // System.err.println("kawa: HttpServer classes not found");
-            // System.exit(-1);
+            System.err.println("kawa: HttpServer classes not found");
+            System.exit(-1);
             /* #endif */
           }
         else if (arg.equals("--main"))
