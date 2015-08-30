@@ -54,6 +54,11 @@
   -->
   <property name="preprocess.overwrite" value="false"/>
 
+  <!--
+      MIT App Inventor 2 : Build Kawa
+  -->
+  <target name="appinventor" depends="select-java5, select-android, classes, jar" />
+
   <target name="all" depends="classes, jar"/>
 
   <target name="default" depends="select-java-auto, classes, jar"/>
