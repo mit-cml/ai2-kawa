@@ -91,22 +91,53 @@ public class ObjectType extends Type
   {
     /* #ifdef JAVA2 */
     /* Specifies optional 'initialize' argument. */
-    // start Google
+    /* start Google */
     try
       {
         return Class.forName(cname, false,  ObjectType.class.getClassLoader());
       }
     catch (java.lang.ClassNotFoundException ex)
       {
-    return Class.forName(cname, false, getContextClassLoader());
+        /* #ifdef Android */
+        try
+          {
+            return Class.forName(cname, false, getThreadContextClassLoader());
+          }
+        catch (java.lang.ClassNotFoundException ex2)
+          {
+            return Class.forName(cname, false, getContextClassLoader());
+          }
+        /* #else */
+        // return Class.forName(cname, false, getContextClassLoader());
+        /* #endif */
       }
-    // instead of
-    // return Class.forName(cname, false, getContextClassLoader());
-    // end Google
+    /* instead of */
+    /* return Class.forName(cname, false, getContextClassLoader()); */
+    /* end Google */
     /* #else */
     // return Class.forName(cname);
     /* #endif */
   }
+
+  /* #ifdef JAVA2 */
+  public static ClassLoader getThreadContextClassLoader ()
+  {
+    try
+      {
+        return Thread.currentThread().getContextClassLoader();
+      }
+    catch (java.lang.SecurityException ex)
+      {
+        /* The .class syntax below also works for JDK 1.4, but it's just
+           syntactic sugar, so there is no benefit in using it. */
+        /* #ifdef JAVA5 */
+        return ObjectType.class.getClassLoader();
+        /* #else */
+        // return thisClassLoader;
+        /* #endif */
+      }
+  }
+  /* #endif */
 
   /* #ifdef JAVA2 */
   public static ClassLoader getContextClassLoader ()
@@ -114,9 +145,9 @@ public class ObjectType extends Type
     try
       {
         /* #ifdef Android */
-        // return ClassLoader.getSystemClassLoader();
+        return ClassLoader.getSystemClassLoader();
         /* #else */
-        return Thread.currentThread().getContextClassLoader();
+        // return Thread.currentThread().getContextClassLoader();
         /* #endif */
       }
     catch (java.lang.SecurityException ex)

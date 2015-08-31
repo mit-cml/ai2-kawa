@@ -1,6 +1,8 @@
 NOTE: This Version of Kawa is Modified for App Inventor
 -------------------------------------------------------
 
+To compile and build Kawa for App Inventor run "ant appinventor".
+
 KAWA, THE JAVA-BASED SCHEME SYSTEM
 ----------------------------------
 
