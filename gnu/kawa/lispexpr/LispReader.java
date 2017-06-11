@@ -5,6 +5,8 @@ import gnu.lists.*;
 import gnu.math.*;
 import gnu.expr.*;
 import gnu.kawa.util.GeneralHashTable;
+import java.math.BigDecimal;
+import java.math.BigInteger;
 
 /** A Lexer for reading S-expressions in generic Lisp-like syntax.
  * This class may have outlived its usefulness: It's mostly just a
@@ -766,10 +768,32 @@ public class LispReader extends Lexer
               {
                 int prefix = exp_seen - digits_start;
                 str = str.substring(0, prefix)+'e'+str.substring(prefix+1);
+                BigDecimal bigNum = null;
+                if (decimal_point >= 0)
+                  {
+                    // Parse the digit string sans decimal point as BigInteger
+                    int decimal_point_adj = decimal_point - digits_start;
+                    StringBuilder sb = new StringBuilder(str.substring(0, decimal_point_adj));
+                    sb.append(str.substring(decimal_point_adj + 1, prefix));
+                    // Create BigDecimal by adjusting scale for number of decimal places
+                    bigNum = new BigDecimal(new BigInteger(sb.toString(), radix == 0 ? 10 : radix),
+                        -(Integer.valueOf(str.substring(prefix+1)) - (prefix - decimal_point_adj - 1)));
+                  }
+                else
+                  {
+                    // No decimal point, use power as provided
+                    bigNum = new BigDecimal(new BigInteger(str.substring(0, prefix)), -Integer.valueOf(str.substring(prefix+1)));
+                  }
+                if (negative)
+                  bigNum = bigNum.negate();
+                number = RatNum.valueOf(bigNum);
               }
           }
-	double d = Convert.parseDouble(str);
-	number = new DFloNum(negative ? - d : d);
+        if (number == null)
+          {
+            double d = Convert.parseDouble(str);
+            number = new DFloNum(negative ? - d : d);
+          }
       }
     else
       {
@@ -882,6 +906,18 @@ public class LispReader extends Lexer
             return Double.valueOf(d);
           case 'l':
             return java.math.BigDecimal.valueOf(d);
+          }
+      }
+    else if (number instanceof RatNum && exp_char > 0 && exp_char != 'e')
+      {
+        switch (exp_char)
+          {
+          case 'f': case 's':
+            return Float.valueOf((float) number.doubleValue());
+          case 'd':
+            return Double.valueOf(number.doubleValue());
+          case 'l':
+            return number.asBigDecimal();
           }
       }
     return number;
