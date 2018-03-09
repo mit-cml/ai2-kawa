@@ -43,14 +43,13 @@ public class ApplyExp extends Expression
     return func instanceof QuoteExp ? ((QuoteExp) func).getValue() : null;
   }
 
-  public ApplyExp (Expression f, Expression[] a) { func = f; args = a; }
+  public ApplyExp (Expression f, Expression... a) { func = f; args = a; }
 
-  public ApplyExp (Procedure p, Expression[] a) { func = new QuoteExp(p); args = a; }
+  public ApplyExp (Procedure p, Expression... a) { func = new QuoteExp(p); args = a; }
 
-  public ApplyExp (Method m, Expression[] a)
+  public ApplyExp (Method m, Expression... a)
   {
-    func = new QuoteExp(new PrimProcedure(m));
-    args = a;
+    this(new QuoteExp(new PrimProcedure(m)), a);
   }
 
   protected boolean mustCompile () { return false; }
