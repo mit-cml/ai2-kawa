@@ -378,17 +378,17 @@ public class CompileMisc implements Inlineable
   /** If we can inline, return LambdaExp for first arg; otherwise null. */
   private static LambdaExp canInlineCallCC (ApplyExp exp)
   {
-    Expression[] args = exp.getArgs();
-    Expression arg0;
-    if (args.length == 1 && (arg0 = args[0]) instanceof LambdaExp)
-      {
-        LambdaExp lexp = (LambdaExp) arg0;
-        if (lexp.min_args == 1 && lexp.max_args == 1
-            && ! lexp.firstDecl().getCanWrite())
-          {
-            return lexp;
-          }
-      }
+    // Expression[] args = exp.getArgs();
+    // Expression arg0;
+    // if (args.length == 1 && (arg0 = args[0]) instanceof LambdaExp)
+    //   {
+    //     LambdaExp lexp = (LambdaExp) arg0;
+    //     if (lexp.min_args == 1 && lexp.max_args == 1
+    //         && ! lexp.firstDecl().getCanWrite())
+    //       {
+    //         return lexp;
+    //       }
+    //   }
     return null;
   }
 
