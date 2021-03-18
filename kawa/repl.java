@@ -375,7 +375,7 @@ public class repl extends Procedure0or1
             arg = args[iArg];
             if (arg.equals("7"))
               Compilation.defaultClassFileVersion = ClassType.JDK_1_7_VERSION;
-            if (arg.equals("6") || arg.equals("1.6"))
+            else if (arg.equals("6") || arg.equals("1.6"))
               Compilation.defaultClassFileVersion = ClassType.JDK_1_6_VERSION;
             else if (arg.equals("5") || arg.equals("1.5"))
               Compilation.defaultClassFileVersion = ClassType.JDK_1_5_VERSION;
